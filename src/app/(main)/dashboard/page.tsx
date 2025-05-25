@@ -2,8 +2,8 @@
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare } from 'lucide-react';
-import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data';
-import type { BillOfLading } from '@/lib/types';
+import { getClientsFromFirestore, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data'; // Import getClientsFromFirestore
+import type { BillOfLading, Client } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +14,9 @@ import { fr } from 'date-fns/locale';
 import { RecentChatCard } from '@/components/dashboard/recent-chat-card';
 
 
-export default function DashboardPage() {
-  const totalClients = MOCK_CLIENTS.length;
+export default async function DashboardPage() { // Make the component async
+  const clients: Client[] = await getClientsFromFirestore(); // Fetch clients from Firestore
+  const totalClients = clients.length;
   
   const blsByStatus = MOCK_BILLS_OF_LADING.reduce((acc, bl) => {
     acc[bl.status] = (acc[bl.status] || 0) + 1;
@@ -35,7 +36,7 @@ export default function DashboardPage() {
   const overallProfitability = calculateTotalProfitability();
   const isOverallProfit = overallProfitability >= 0;
 
-  const clientsWithOpenBLs = MOCK_CLIENTS.filter(client => 
+  const clientsWithOpenBLs = clients.filter(client => 
     MOCK_BILLS_OF_LADING.some(bl => bl.clientId === client.id && bl.status === 'en cours')
   );
 
@@ -239,3 +240,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
