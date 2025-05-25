@@ -1,9 +1,11 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem } from './types';
+import { format } from 'date-fns';
 
 export const MOCK_USERS: User[] = [
   { id: 'user-1', name: 'Alice Employee', role: 'employee' },
   { id: 'user-2', name: 'Bob Admin', role: 'admin' },
+  { id: 'user-3', name: 'Charlie Collaborator', role: 'employee'},
 ];
 
 export let MOCK_WORK_TYPES: WorkType[] = [
@@ -161,14 +163,28 @@ export let MOCK_EXPENSES: Expense[] = [
   }
 ];
 
-// Functions to update mock data (important for demonstrating reactivity without a real backend)
+// CHAT & TODO MOCK DATA
+export let MOCK_CHAT_MESSAGES: ChatMessage[] = [
+    { id: 'msg-1', senderId: 'user-1', senderName: 'Alice Employee', text: 'Bonjour l\'équipe, n\'oubliez pas la réunion de 14h.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
+    { id: 'msg-2', senderId: 'user-2', senderName: 'Bob Admin', text: 'Bien noté Alice. J\'ai ajouté une tâche pour la préparation du rapport BL-2.', timestamp: new Date(Date.now() - 1000 * 60 * 55).toISOString() },
+    { id: 'msg-3', senderId: 'user-3', senderName: 'Charlie Collaborator', text: 'Je peux m\'occuper de contacter le client Global Imports Inc. pour le BL-3.', timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
+];
+
+export let MOCK_TODO_ITEMS: TodoItem[] = [
+    { id: 'todo-1', text: 'Préparer le rapport financier pour BL-2', assignedToUserId: 'user-1', assignedToUserName: 'Alice Employee', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(), createdByUserId: 'user-2', createdByName: 'Bob Admin' },
+    { id: 'todo-2', text: 'Contacter le client Global Imports Inc. (BL-3)', assignedToUserId: 'user-3', assignedToUserName: 'Charlie Collaborator', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(), createdByUserId: 'user-3', createdByName: 'Charlie Collaborator' },
+    { id: 'todo-3', text: 'Vérifier les documents douaniers pour BL-1', completed: true, createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(), createdByUserId: 'user-2', createdByName: 'Bob Admin' },
+];
+
+
+// CRUD Functions
 export const addClient = (client: Omit<Client, 'id' | 'createdAt' | 'createdByUserId' | 'blIds'>) => {
   const newClient: Client = {
     id: `client-${Date.now()}`,
     ...client,
     blIds: [],
     createdAt: new Date().toISOString(),
-    createdByUserId: MOCK_USERS[0].id, // Alice Employee as default creator
+    createdByUserId: MOCK_USERS[0].id, 
   };
   MOCK_CLIENTS.push(newClient);
 };
@@ -177,7 +193,6 @@ export const updateClient = (updatedClient: Client) => {
 };
 export const deleteClient = (clientId: string) => {
   MOCK_CLIENTS = MOCK_CLIENTS.filter(client => client.id !== clientId);
-  // Also delete associated BLs for this client
   MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId !== clientId);
 };
 
@@ -186,7 +201,7 @@ export const addBL = (bl: Omit<BillOfLading, 'id' | 'createdAt' | 'createdByUser
     id: `bl-${Date.now()}`,
     ...bl,
     createdAt: new Date().toISOString(),
-    createdByUserId: bl.createdByUserId || MOCK_USERS[0].id, // Assign default creator if not provided
+    createdByUserId: bl.createdByUserId || MOCK_USERS[0].id,
   };
   MOCK_BILLS_OF_LADING.push(newBL);
   const client = MOCK_CLIENTS.find(c => c.id === newBL.clientId);
@@ -208,7 +223,7 @@ export const deleteBL = (blId: string) => {
     });
   }
   MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.id !== blId);
-  MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.blId !== blId); // Delete associated expenses
+  MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.blId !== blId); 
 };
 
 export const addExpense = (expense: Expense) => {
@@ -223,7 +238,7 @@ export const addWorkType = (workType: Omit<WorkType, 'id' | 'createdAt' | 'creat
     id: `wt-${Date.now()}`,
     ...workType,
     createdAt: new Date().toISOString(),
-    createdByUserId: MOCK_USERS[0].id, // Alice Employee as default creator
+    createdByUserId: MOCK_USERS[0].id, 
   };
   MOCK_WORK_TYPES.push(newWorkType);
 };
@@ -232,7 +247,47 @@ export const updateWorkType = (updatedWorkType: WorkType) => {
 };
 export const deleteWorkType = (workTypeId: string) => {
   MOCK_WORK_TYPES = MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId);
-  // Potentially handle BLs that used this workType, e.g., set workTypeId to null or a default
-  // For simplicity, we'll just remove it. This might leave some BLs with an invalid workTypeId
-  // in a mock scenario. In a real app, a proper check or cascade delete/set null would occur.
+};
+
+// Chat & Todo CRUD
+// For simplicity, current user is user-2 (Bob Admin) for sending messages/creating todos
+const getCurrentUserId = () => MOCK_USERS[1].id;
+const getCurrentUserName = () => MOCK_USERS[1].name;
+
+export const addChatMessage = (text: string): ChatMessage => {
+  const newMessage: ChatMessage = {
+    id: `msg-${Date.now()}`,
+    senderId: getCurrentUserId(),
+    senderName: getCurrentUserName(),
+    text,
+    timestamp: new Date().toISOString(),
+  };
+  MOCK_CHAT_MESSAGES.push(newMessage);
+  return newMessage;
+};
+
+export const addTodoItem = (text: string, assignedToUserId?: string): TodoItem => {
+  const assignedUser = MOCK_USERS.find(u => u.id === assignedToUserId);
+  const newTodo: TodoItem = {
+    id: `todo-${Date.now()}`,
+    text,
+    assignedToUserId,
+    assignedToUserName: assignedUser?.name,
+    completed: false,
+    createdAt: new Date().toISOString(),
+    createdByUserId: getCurrentUserId(),
+    createdByName: getCurrentUserName(),
+  };
+  MOCK_TODO_ITEMS.push(newTodo);
+  return newTodo;
+};
+
+export const toggleTodoItemCompletion = (todoId: string): void => {
+  MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.map(todo =>
+    todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
+  );
+};
+
+export const deleteTodoItem = (todoId: string): void => {
+  MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.filter(todo => todo.id !== todoId);
 };

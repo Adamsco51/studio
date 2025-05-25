@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase } from 'lucide-react'; // Added Briefcase for Work Types
+import { LayoutDashboard, Users, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare } from 'lucide-react'; // Added Briefcase for Work Types, MessageSquare for Chat
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
@@ -17,8 +17,8 @@ const navItems = [
   { href: '/bls', label: 'Bills of Lading', icon: FileText },
   { href: '/expenses', label: 'Dépenses', icon: DollarSign },
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
+  { href: '/chat', label: 'Messagerie', icon: MessageSquare },
   { href: '/reports', label: 'Rapports', icon: Package },
-  // { href: '/settings', label: 'Paramètres', icon: SettingsIcon }, // Removed settings link
 ];
 
 export function SidebarNav() {
@@ -45,4 +45,3 @@ export function SidebarNav() {
     </SidebarMenu>
   );
 }
-

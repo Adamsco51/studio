@@ -48,3 +48,22 @@ export interface User {
   name: string;
   role: 'employee' | 'admin';
 }
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string; // Denormalized for easier display
+  text: string;
+  timestamp: string; // ISO Date string
+}
+
+export interface TodoItem {
+  id: string;
+  text: string;
+  assignedToUserId?: string;
+  assignedToUserName?: string; // Denormalized
+  completed: boolean;
+  createdAt: string; // ISO Date string
+  createdByUserId: string;
+  createdByName: string; // Denormalized
+}
