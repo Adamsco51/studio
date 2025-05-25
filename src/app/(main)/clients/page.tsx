@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, use } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,9 @@ import type { Client } from '@/lib/types';
 
 type ClientWithStatus = Client & { isActive: boolean };
 
-export default function ClientsPage() {
+export default function ClientsPage({ params: paramsPromise }: { params: Promise<{}> }) {
+  const params = use(paramsPromise); // Resolve the promise here
+
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<ClientWithStatus[]>([]);
 
@@ -50,22 +52,15 @@ export default function ClientsPage() {
           </Link>
         }
       />
-      <Card className="shadow-lg mb-6">
-        <CardHeader>
-          <CardTitle>Filtrer les Clients</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2">
-            <Search className="h-5 w-5 text-muted-foreground" />
-            <Input 
-              placeholder="Rechercher par nom, contact, email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="mb-6 flex items-center gap-2"> {/* Replaced Card with a simple div */}
+        <Search className="h-5 w-5 text-muted-foreground" />
+        <Input 
+          placeholder="Rechercher par nom, contact, email..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="max-w-sm"
+        />
+      </div>
 
       <Card className="shadow-lg">
         <CardHeader>
