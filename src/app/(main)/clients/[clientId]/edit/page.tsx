@@ -1,27 +1,48 @@
 
 "use client";
 
+import React from 'react'; 
 import { PageHeader } from '@/components/shared/page-header';
 import { ClientForm } from '@/components/client/client-form';
-import { MOCK_CLIENTS } from '@/lib/mock-data';
+import { getClientByIdFromFirestore } from '@/lib/mock-data'; // Use Firestore function
 import type { Client } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
-export default function EditClientPage({ params }: { params: { clientId: string } }) {
-  const [client, setClient] = useState<Client | null | undefined>(undefined); // undefined for loading state
-  const router = useRouter();
+export default function EditClientPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
+  const { clientId } = React.use(paramsPromise); 
+  const [client, setClient] = useState<Client | null | undefined>(undefined); 
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const foundClient = MOCK_CLIENTS.find(c => c.id === params.clientId);
-    setClient(foundClient || null);
-  }, [params.clientId]);
+    if (!clientId) {
+      setIsLoading(false);
+      return;
+    }
+    const fetchClient = async () => {
+      setIsLoading(true);
+      try {
+        const foundClient = await getClientByIdFromFirestore(clientId);
+        setClient(foundClient);
+      } catch (error) {
+        console.error("Failed to fetch client for editing:", error);
+        setClient(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchClient();
+  }, [clientId]);
 
-  if (client === undefined) {
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  if (isLoading || client === undefined) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-muted-foreground">Chargement du client...</p>
+      </div>
+    );
   }
 
   if (!client) {

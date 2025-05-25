@@ -1,8 +1,21 @@
 
 import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem } from './types';
-import { format } from 'date-fns';
+import { db } from '@/lib/firebase/config';
+import { 
+  collection, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  getDocs, 
+  getDoc,
+  serverTimestamp,
+  Timestamp,
+  query, 
+  where
+} from "firebase/firestore";
 
-export let MOCK_USERS: User[] = [ // Kept for populating selection dropdowns, e.g. for assigning todos
+export let MOCK_USERS: User[] = [
   { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee' },
   { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin' },
   { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee'},
@@ -17,47 +30,14 @@ export let MOCK_WORK_TYPES: WorkType[] = [
   { id: 'wt-6', name: 'Projet Spécial', description: 'Gestion de projets logistiques complexes.', createdAt: new Date('2023-03-01T15:00:00Z').toISOString(), createdByUserId: 'user-1-mock' },
 ];
 
-export let MOCK_CLIENTS: Client[] = [
-  {
-    id: 'client-1',
-    name: 'Global Imports Inc.',
-    contactPerson: 'John Doe',
-    email: 'john.doe@globalimports.com',
-    phone: '+1-555-1234',
-    address: '123 Import Lane, New York, NY 10001, USA',
-    blIds: ['bl-1', 'bl-3'],
-    createdAt: new Date('2023-05-10T09:30:00Z').toISOString(),
-    createdByUserId: 'user-2-mock',
-  },
-  {
-    id: 'client-2',
-    name: 'Export Solutions Ltd.',
-    contactPerson: 'Jane Smith',
-    email: 'jane.smith@exportsolutions.com',
-    phone: '+44-20-7946-0958',
-    address: '456 Export Road, London, EC1A 1BB, UK',
-    blIds: ['bl-2'],
-    createdAt: new Date('2023-06-15T14:00:00Z').toISOString(),
-    createdByUserId: 'user-1-mock',
-  },
-  {
-    id: 'client-3',
-    name: 'Logistique Express SARL',
-    contactPerson: 'Pierre Durand',
-    email: 'pierre.durand@logexpress.fr',
-    phone: '+33-1-2345-6789',
-    address: '789 Rue de la Logistique, 75001 Paris, France',
-    blIds: ['bl-4'],
-    createdAt: new Date('2023-07-20T16:45:00Z').toISOString(),
-    createdByUserId: 'user-2-mock',
-  }
-];
+// MOCK_CLIENTS is now managed by Firestore
+// export let MOCK_CLIENTS: Client[] = [ ... ]; 
 
 export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
   {
     id: 'bl-1',
     blNumber: 'MEDU824522',
-    clientId: 'client-1',
+    clientId: 'client-1-firestore', // Example, will need to match actual Firestore ID later
     allocatedAmount: 5000,
     workTypeId: 'wt-1',
     description: 'Electronics and computer parts from Shanghai to New York.',
@@ -69,7 +49,7 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
   {
     id: 'bl-2',
     blNumber: 'MAEU123456',
-    clientId: 'client-2',
+    clientId: 'client-2-firestore', // Example
     allocatedAmount: 7500,
     workTypeId: 'wt-3',
     description: 'Apparel and textiles from Bangladesh to London.',
@@ -78,30 +58,7 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
     createdAt: new Date('2023-11-01T14:30:00Z').toISOString(),
     createdByUserId: 'user-1-mock',
   },
-  {
-    id: 'bl-3',
-    blNumber: 'CMAU789012',
-    clientId: 'client-1',
-    allocatedAmount: 3000,
-    workTypeId: 'wt-2',
-    description: 'Automotive spare parts from Germany to New York.',
-    categories: ['Automobile', 'Pièces détachées'],
-    status: 'en cours',
-    createdAt: new Date('2023-11-20T09:15:00Z').toISOString(),
-    createdByUserId: 'user-2-mock',
-  },
-  {
-    id: 'bl-4',
-    blNumber: 'SUDU999000',
-    clientId: 'client-3',
-    allocatedAmount: 12000,
-    workTypeId: 'wt-6',
-    description: 'Machinerie lourde pour chantier de construction.',
-    categories: ['Machinerie', 'Projet Spécial'],
-    status: 'inactif',
-    createdAt: new Date('2023-09-01T09:15:00Z').toISOString(),
-    createdByUserId: 'user-1-mock',
-  }
+  // ... other BLs, ensuring clientId points to Firestore IDs if linked
 ];
 
 export let MOCK_EXPENSES: Expense[] = [
@@ -113,54 +70,7 @@ export let MOCK_EXPENSES: Expense[] = [
     date: new Date('2023-10-20T11:00:00Z').toISOString(),
     employeeId: 'user-1-mock',
   },
-  {
-    id: 'exp-2',
-    blId: 'bl-1',
-    label: 'Port Handling Fees NYC',
-    amount: 800,
-    date: new Date('2023-10-22T15:30:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  },
-  {
-    id: 'exp-3',
-    blId: 'bl-2',
-    label: 'Air Freight',
-    amount: 4000,
-    date: new Date('2023-11-05T10:00:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  },
-  {
-    id: 'exp-4',
-    blId: 'bl-2',
-    label: 'Customs Duty',
-    amount: 1500,
-    date: new Date('2023-11-06T16:45:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  },
-  {
-    id: 'exp-5',
-    blId: 'bl-1',
-    label: 'Unexpected Storage Fee',
-    amount: 2000, 
-    date: new Date('2023-10-25T09:00:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  },
-  {
-    id: 'exp-6',
-    blId: 'bl-3',
-    label: 'Frais de dossier',
-    amount: 150,
-    date: new Date('2023-11-21T09:00:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  },
-  {
-    id: 'exp-7',
-    blId: 'bl-4',
-    label: 'Pré-acheminement',
-    amount: 800,
-    date: new Date('2023-09-05T09:00:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  }
+  // ... other expenses
 ];
 
 export let MOCK_CHAT_MESSAGES: ChatMessage[] = [
@@ -175,39 +85,109 @@ export let MOCK_TODO_ITEMS: TodoItem[] = [
     { id: 'todo-3', text: 'Vérifier les documents douaniers pour BL-1', completed: true, createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(), createdByUserId: 'user-2-mock', createdByName: 'Bob Admin (Mock)' },
 ];
 
+const clientsCollectionRef = collection(db, "clients");
 
-// CRUD Functions
-export const addClient = (client: Client) => { // Accept full Client, ID is set in form
-  MOCK_CLIENTS.push(client);
-};
-export const updateClient = (updatedClient: Client) => {
-  MOCK_CLIENTS = MOCK_CLIENTS.map(client => client.id === updatedClient.id ? { ...client, ...updatedClient } : client);
-};
-export const deleteClient = (clientId: string) => {
-  MOCK_CLIENTS = MOCK_CLIENTS.filter(client => client.id !== clientId);
-  MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId !== clientId);
-};
-
-export const addBL = (bl: BillOfLading) => { // Accept full BL, ID is set in form
-  MOCK_BILLS_OF_LADING.push(bl);
-  const client = MOCK_CLIENTS.find(c => c.id === bl.clientId);
-  if (client && !client.blIds.includes(bl.id)) {
-    client.blIds.push(bl.id);
+// Client CRUD with Firestore
+export const addClientToFirestore = async (clientData: Omit<Client, 'id' | 'createdAt' | 'blIds'> & { createdByUserId: string }) => {
+  try {
+    const docRef = await addDoc(clientsCollectionRef, {
+      ...clientData,
+      blIds: [], // Initialize with empty array
+      createdAt: serverTimestamp() 
+    });
+    return docRef.id;
+  } catch (e) {
+    console.error("Error adding document: ", e);
+    throw e;
   }
+};
+
+export const getClientsFromFirestore = async (): Promise<Client[]> => {
+  try {
+    const data = await getDocs(clientsCollectionRef);
+    return data.docs.map(doc => {
+      const clientData = doc.data();
+      return {
+        ...clientData,
+        id: doc.id,
+        // Convert Firestore Timestamp to ISO string
+        createdAt: clientData.createdAt instanceof Timestamp ? clientData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as Client;
+    });
+  } catch (e) {
+    console.error("Error getting documents: ", e);
+    return [];
+  }
+};
+
+export const getClientByIdFromFirestore = async (clientId: string): Promise<Client | null> => {
+  try {
+    const clientDocRef = doc(db, "clients", clientId);
+    const clientSnap = await getDoc(clientDocRef);
+    if (clientSnap.exists()) {
+      const clientData = clientSnap.data();
+      return {
+        ...clientData,
+        id: clientSnap.id,
+        createdAt: clientData.createdAt instanceof Timestamp ? clientData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as Client;
+    } else {
+      console.log("No such document!");
+      return null;
+    }
+  } catch (e) {
+    console.error("Error getting document: ", e);
+    return null;
+  }
+};
+
+export const updateClientInFirestore = async (clientId: string, updatedData: Partial<Omit<Client, 'id' | 'createdAt' | 'createdByUserId'>>) => {
+  const clientDoc = doc(db, "clients", clientId);
+  try {
+    await updateDoc(clientDoc, updatedData);
+  } catch (e) {
+    console.error("Error updating document: ", e);
+    throw e;
+  }
+};
+
+export const deleteClientFromFirestore = async (clientId: string) => {
+  const clientDoc = doc(db, "clients", clientId);
+  try {
+    // TODO: In a real app, handle deletion of associated BLs and Expenses, or use Firestore Functions for cascading deletes.
+    // For now, just delete the client.
+    await deleteDoc(clientDoc);
+  } catch (e) {
+    console.error("Error deleting document: ", e);
+    throw e;
+  }
+};
+
+
+// --- Legacy Mock Data Functions (to be phased out or adapted for other entities) ---
+
+export const addBL = (bl: BillOfLading) => {
+  MOCK_BILLS_OF_LADING.push(bl);
+  // This logic will need to be adapted if clients are in Firestore
+  // const client = MOCK_CLIENTS.find(c => c.id === bl.clientId);
+  // if (client && !client.blIds.includes(bl.id)) {
+  //   client.blIds.push(bl.id);
+  // }
 };
 export const updateBL = (updatedBL: BillOfLading) => {
   MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.map(bl => bl.id === updatedBL.id ? { ...bl, ...updatedBL } : bl);
 };
 export const deleteBL = (blId: string) => {
-  const blToDelete = MOCK_BILLS_OF_LADING.find(bl => bl.id === blId);
-  if (blToDelete) {
-    MOCK_CLIENTS = MOCK_CLIENTS.map(client => {
-      if (client.id === blToDelete.clientId) {
-        return { ...client, blIds: client.blIds.filter(id => id !== blId) };
-      }
-      return client;
-    });
-  }
+  // This logic will need to be adapted
+  // const blToDelete = MOCK_BILLS_OF_LADING.find(bl => bl.id === blId);
+  // if (blToDelete) {
+  //   MOCK_CLIENTS = MOCK_CLIENTS.map(client => {
+  //     if (client.id === blToDelete.clientId) {
+  //       return { ...client, blIds: client.blIds.filter(id => id !== blId) };
+  //     }
+  //     return client;
+  //   });
+  // }
   MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.id !== blId);
   MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.blId !== blId); 
 };
@@ -219,7 +199,7 @@ export const deleteExpense = (expenseId: string) => {
   MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.id !== expenseId);
 };
 
-export const addWorkType = (workType: WorkType) => { // Accept full WorkType, ID is set in form
+export const addWorkType = (workType: WorkType) => {
   MOCK_WORK_TYPES.push(workType);
 };
 export const updateWorkType = (updatedWorkType: WorkType) => {
@@ -229,7 +209,6 @@ export const deleteWorkType = (workTypeId: string) => {
   MOCK_WORK_TYPES = MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId);
 };
 
-// Chat & Todo CRUD
 export const addChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
   const newMessage: ChatMessage = {
     id: `msg-${Date.now()}`,

@@ -5,10 +5,16 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES, MOCK_USERS, deleteClient } from '@/lib/mock-data';
+import { 
+  MOCK_BILLS_OF_LADING, 
+  MOCK_EXPENSES, 
+  MOCK_USERS, 
+  deleteClientFromFirestore, // Use Firestore function
+  getClientByIdFromFirestore // Use Firestore function
+} from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, User as MockUser } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays } from 'lucide-react';
+import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
@@ -41,14 +47,15 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/contexts/auth-context'; // Import useAuth
+import { useAuth } from '@/contexts/auth-context'; 
 
 export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = React.use(paramsPromise);
-  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
+  const { user, isAdmin } = useAuth(); 
   const [client, setClient] = useState<Client | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
-  const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]);
+  const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]); // Still from mock for now
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const router = useRouter();
@@ -56,26 +63,42 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [showEditRequestDialog, setShowEditRequestDialog] = useState(false);
   const [editRequestReason, setEditRequestReason] = useState('');
   const [deleteClientReason, setDeleteClientReason] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (!clientId) return;
-    const foundClient = MOCK_CLIENTS.find(c => c.id === clientId);
-    setClient(foundClient || null);
-    if (foundClient) {
-      const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === clientId);
-      setClientBLs(bls);
-      if (foundClient.createdByUserId) {
-        const mockCreator = MOCK_USERS.find(u => u.id === foundClient.createdByUserId);
-         if (mockCreator) {
-          setCreatedByUserDisplay(mockCreator.name);
-        } else if (user && user.uid === foundClient.createdByUserId) {
-          setCreatedByUserDisplay(user.displayName || user.email);
-        } else {
-            setCreatedByUserDisplay("Utilisateur Système");
-        }
-      }
+    if (!clientId) {
+      setIsLoading(false);
+      return;
     }
-  }, [clientId, user]); // Add user to dependencies
+    const fetchClientDetails = async () => {
+      setIsLoading(true);
+      try {
+        const foundClient = await getClientByIdFromFirestore(clientId);
+        setClient(foundClient);
+        if (foundClient) {
+          // BLs are still from mock, filter them based on the fetched client's ID
+          const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === foundClient.id);
+          setClientBLs(bls);
+          if (foundClient.createdByUserId) {
+            const mockCreator = MOCK_USERS.find(u => u.id === foundClient.createdByUserId);
+             if (mockCreator) {
+              setCreatedByUserDisplay(mockCreator.name);
+            } else if (user && user.uid === foundClient.createdByUserId) {
+              setCreatedByUserDisplay(user.displayName || user.email);
+            } else {
+                setCreatedByUserDisplay("Utilisateur Système");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch client details:", error);
+        setClient(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchClientDetails();
+  }, [clientId, user]);
 
   const toggleBlExpansion = (blId: string) => {
     setExpandedBls(prev => {
@@ -96,15 +119,23 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     return 'Inconnu';
   };
 
-  const handleDeleteClient = () => {
-    if (!client) return;
-    deleteClient(client.id);
-    toast({
-      title: "Client Supprimé",
-      description: `Le client ${client.name} et ses BLs associés ont été supprimés.`,
-    });
-    router.push('/clients');
-    router.refresh();
+  const handleDeleteClient = async () => {
+    if (!client || !client.id) return;
+    setIsDeleting(true);
+    try {
+      await deleteClientFromFirestore(client.id);
+      toast({
+        title: "Client Supprimé",
+        description: `Le client ${client.name} a été supprimé.`,
+      });
+      router.push('/clients');
+      router.refresh(); // Important to re-fetch on clients list page
+    } catch (error) {
+      console.error("Failed to delete client:", error);
+      toast({ title: "Erreur", description: "Échec de la suppression du client.", variant: "destructive"});
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSubmitEditRequest = () => {
@@ -126,20 +157,40 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
         return;
     }
+    // This is a simulation, no actual backend call for request
     console.log(`Demande de suppression pour Client ${client?.name} par ${user?.displayName}. Raison: ${deleteClientReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
         description: "Votre demande de suppression de client a été envoyée à l'administrateur pour approbation.",
     });
     setDeleteClientReason('');
+    // Close the dialog manually if it's an AlertDialog that doesn't auto-close on action
+    // For simplicity, the AlertDialog will close via its Cancel or Action buttons.
   };
 
 
-  if (!client || !user) { // Ensure client and user are loaded
+  if (isLoading || (!client && !user)) { 
     return (
-      <div className="flex justify-center items-center h-64">Chargement...</div>
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-muted-foreground">Chargement des détails du client...</p>
+      </div>
     );
   }
+
+  if (!client) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-xl text-muted-foreground">Client non trouvé.</p>
+        <Link href="/clients" passHref>
+          <Button variant="link" className="mt-4">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste des clients
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
 
   const calculateBlBalanceAndStatus = (blId: string) => {
     const bl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
@@ -206,6 +257,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteClientReason(''); }}>
+                  {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Trash2 className="mr-2 h-4 w-4" /> Supprimer
                 </Button>
               </AlertDialogTrigger>
@@ -216,7 +268,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                   </AlertDialogTitle>
                   {isAdmin ? (
                     <AlertDialogDescription>
-                      Cette action est irréversible et supprimera le client "{client.name}" ainsi que tous ses connaissements (BLs) et dépenses associés.
+                      Cette action est irréversible et supprimera le client "{client.name}". Les BLs et dépenses associés devront être gérés manuellement ou via des fonctions serveur.
                     </AlertDialogDescription>
                   ) : (
                      <div className="space-y-2 py-2 text-left">
@@ -233,10 +285,15 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                   )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setDeleteClientReason('')}>Annuler</AlertDialogCancel>
-                  <AlertDialogAction onClick={isAdmin ? handleDeleteClient : handleSubmitDeleteClientRequest}>
-                    {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
-                  </AlertDialogAction>
+                  <AlertDialogCancel onClick={() => setDeleteClientReason('')} disabled={isDeleting && isAdmin}>Annuler</AlertDialogCancel>
+                  <Button 
+                    onClick={isAdmin ? handleDeleteClient : handleSubmitDeleteClientRequest} 
+                    disabled={isDeleting && isAdmin}
+                    variant={isAdmin ? "destructive" : "default"}
+                  >
+                    {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {isAdmin ? "Confirmer Suppression" : "Soumettre la Demande"}
+                  </Button>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -294,7 +351,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Connaissements (BLs) Associés</CardTitle>
-              <CardDescription>Liste des BLs gérés pour ce client. Cliquez sur une ligne pour voir les dépenses.</CardDescription>
+              <CardDescription>Liste des BLs gérés pour ce client. Cliquez sur une ligne pour voir les dépenses. (Données BLs encore mockées)</CardDescription>
             </div>
              <Link href={`/bls/add?clientId=${client.id}`} passHref>
                 <Button size="sm">

@@ -18,12 +18,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Client } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { MOCK_USERS, addClient, updateClient } from "@/lib/mock-data";
+import { MOCK_USERS, addClientToFirestore, updateClientInFirestore } from "@/lib/mock-data"; // Updated functions
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Separator } from "@/components/ui/separator";
-import { UserCircle2, CalendarDays } from "lucide-react";
+import { UserCircle2, CalendarDays, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { useState } from "react";
 
 const clientFormSchema = z.object({
   name: z.string().min(2, { message: "Le nom doit contenir au moins 2 caractères." }),
@@ -43,6 +44,7 @@ export function ClientForm({ initialData }: ClientFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientFormSchema),
@@ -55,50 +57,45 @@ export function ClientForm({ initialData }: ClientFormProps) {
     },
   });
 
-  // Get creator's name from MOCK_USERS if initialData exists and has createdByUserId
-  // This part remains for display purposes if the user was created before auth system
-  const createdByMockUserName = initialData?.createdByUserId 
-    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || "Utilisateur Système"
-    : user?.displayName || "Utilisateur Actuel"; // Fallback for new items
+  const createdByMockUserName = initialData?.createdByUserId
+    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || 
+      (user?.uid === initialData.createdByUserId ? user.displayName || user.email : "Utilisateur Système")
+    : user?.displayName || "Utilisateur Actuel";
 
-  function onSubmit(data: ClientFormValues) {
+  async function onSubmit(data: ClientFormValues) {
     if (!user) {
       toast({ title: "Erreur", description: "Vous devez être connecté pour effectuer cette action.", variant: "destructive" });
       return;
     }
+    setIsSubmitting(true);
 
-    const clientData = {
-        name: data.name,
-        contactPerson: data.contactPerson,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-    };
-
-    if (initialData) {
-      const updatedClientData: Client = {
-        ...initialData, 
-        ...clientData,
-        // createdByUserId is not updated on edit
-      };
-      updateClient(updatedClientData);
-    } else {
-      const newClient: Client = {
-        id: `client-${Date.now()}`,
-        ...clientData,
-        blIds: [],
-        createdAt: new Date().toISOString(),
-        createdByUserId: user.uid,
-      };
-      addClient(newClient);
+    try {
+      if (initialData) {
+        await updateClientInFirestore(initialData.id, data);
+      } else {
+        const clientDataForFirestore = {
+          ...data,
+          createdByUserId: user.uid,
+        };
+        await addClientToFirestore(clientDataForFirestore);
+      }
+      
+      toast({
+        title: initialData ? "Client Modifié" : "Client Créé",
+        description: `Le client ${data.name} a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
+      });
+      router.push("/clients");
+      router.refresh(); // Important to re-fetch data on the list page
+    } catch (error) {
+      console.error("Failed to save client:", error);
+      toast({
+        title: "Erreur",
+        description: `Échec de la sauvegarde du client. ${error instanceof Error ? error.message : ''}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    toast({
-      title: initialData ? "Client Modifié" : "Client Créé",
-      description: `Le client ${data.name} a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
-    });
-    router.push("/clients");
-    router.refresh();
   }
 
   return (
@@ -131,7 +128,7 @@ export function ClientForm({ initialData }: ClientFormProps) {
                 <FormItem>
                   <FormLabel>Nom de l'entreprise</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Global Imports Inc." {...field} />
+                    <Input placeholder="Ex: Global Imports Inc." {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -144,7 +141,7 @@ export function ClientForm({ initialData }: ClientFormProps) {
                 <FormItem>
                   <FormLabel>Personne à contacter</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: John Doe" {...field} />
+                    <Input placeholder="Ex: John Doe" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -157,7 +154,7 @@ export function ClientForm({ initialData }: ClientFormProps) {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="Ex: contact@example.com" {...field} />
+                    <Input type="email" placeholder="Ex: contact@example.com" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -170,7 +167,7 @@ export function ClientForm({ initialData }: ClientFormProps) {
                 <FormItem>
                   <FormLabel>Téléphone</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: +1-555-1234" {...field} />
+                    <Input placeholder="Ex: +1-555-1234" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -183,17 +180,20 @@ export function ClientForm({ initialData }: ClientFormProps) {
                 <FormItem>
                   <FormLabel>Adresse</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: 123 Main St, Anytown, USA" {...field} />
+                    <Input placeholder="Ex: 123 Main St, Anytown, USA" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => router.back()}>
+              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
                 Annuler
               </Button>
-              <Button type="submit">{initialData ? "Sauvegarder les Modifications" : "Ajouter le Client"}</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {initialData ? "Sauvegarder" : "Ajouter le Client"}
+              </Button>
             </div>
           </form>
         </Form>

@@ -1,8 +1,7 @@
 
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getAuth } from "firebase/auth";
-// Import getFirestore later when we set up the database
-// import { getFirestore } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore"; // Import Firestore
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -22,6 +21,6 @@ if (!getApps().length) {
 }
 
 const auth = getAuth(app);
-// const db = getFirestore(app); // For Firestore, uncomment and initialize later
+const db = getFirestore(app); // Initialize Firestore
 
-export { app, auth /*, db */ };
+export { app, auth, db }; // Export db

@@ -7,8 +7,8 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING } from '@/lib/mock-data';
-import { PlusCircle, ArrowRight, UserCheck, UserX, Search } from 'lucide-react';
+import { getClientsFromFirestore, MOCK_BILLS_OF_LADING } from '@/lib/mock-data'; // Use Firestore function
+import { PlusCircle, ArrowRight, UserCheck, UserX, Search, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import type { Client } from '@/lib/types';
@@ -16,18 +16,33 @@ import type { Client } from '@/lib/types';
 type ClientWithStatus = Client & { isActive: boolean };
 
 export default function ClientsPage({ params: paramsPromise }: { params: Promise<{}> }) {
-  const params = use(paramsPromise); // Resolve the promise here
+  const params = use(paramsPromise); 
 
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<ClientWithStatus[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const clientsWithStatus = MOCK_CLIENTS.map(client => {
-      const hasActiveBL = MOCK_BILLS_OF_LADING.some(bl => bl.clientId === client.id && bl.status === 'en cours');
-      return { ...client, isActive: hasActiveBL };
-    });
-    setClients(clientsWithStatus);
-  }, []); // Re-run if MOCK_CLIENTS or MOCK_BILLS_OF_LADING change in a real app with global state
+    const fetchClients = async () => {
+      setIsLoading(true);
+      try {
+        const firestoreClients = await getClientsFromFirestore();
+        const clientsWithStatus = firestoreClients.map(client => {
+          // This isActive logic still relies on MOCK_BILLS_OF_LADING.
+          // This will need to be updated when BLs are also in Firestore.
+          const hasActiveBL = MOCK_BILLS_OF_LADING.some(bl => bl.clientId === client.id && bl.status === 'en cours');
+          return { ...client, isActive: hasActiveBL };
+        });
+        setClients(clientsWithStatus);
+      } catch (error) {
+        console.error("Failed to fetch clients:", error);
+        // Handle error (e.g., show a toast)
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchClients();
+  }, []); 
 
   const filteredClients = useMemo(() => {
     if (!searchTerm) return clients;
@@ -52,13 +67,14 @@ export default function ClientsPage({ params: paramsPromise }: { params: Promise
           </Link>
         }
       />
-      <div className="mb-6 flex items-center gap-2"> {/* Replaced Card with a simple div */}
+      <div className="mb-6 flex items-center gap-2">
         <Search className="h-5 w-5 text-muted-foreground" />
         <Input 
           placeholder="Rechercher par nom, contact, email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
+          disabled={isLoading}
         />
       </div>
 
@@ -70,43 +86,50 @@ export default function ClientsPage({ params: paramsPromise }: { params: Promise
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom du Client</TableHead>
-                <TableHead>Personne à Contacter</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Téléphone</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredClients.map((client) => (
-                <TableRow key={client.id}>
-                  <TableCell className="font-medium">{client.name}</TableCell>
-                  <TableCell>{client.contactPerson}</TableCell>
-                  <TableCell>{client.email}</TableCell>
-                  <TableCell>{client.phone}</TableCell>
-                  <TableCell>
-                    <Badge variant={client.isActive ? 'default' : 'secondary'} 
-                           className={client.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
-                      {client.isActive ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
-                      {client.isActive ? 'Actif' : 'Inactif'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/clients/${client.id}`} passHref>
-                      <Button variant="ghost" size="sm">
-                        Voir Détails <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </Link>
-                  </TableCell>
+          {isLoading ? (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-muted-foreground">Chargement des clients...</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nom du Client</TableHead>
+                  <TableHead>Personne à Contacter</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Téléphone</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {filteredClients.length === 0 && (
+              </TableHeader>
+              <TableBody>
+                {filteredClients.map((client) => (
+                  <TableRow key={client.id}>
+                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell>{client.contactPerson}</TableCell>
+                    <TableCell>{client.email}</TableCell>
+                    <TableCell>{client.phone}</TableCell>
+                    <TableCell>
+                      <Badge variant={client.isActive ? 'default' : 'secondary'} 
+                             className={client.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                        {client.isActive ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
+                        {client.isActive ? 'Actif' : 'Inactif'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link href={`/clients/${client.id}`} passHref>
+                        <Button variant="ghost" size="sm">
+                          Voir Détails <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {!isLoading && filteredClients.length === 0 && (
             <p className="text-center text-muted-foreground py-4">
               {searchTerm ? "Aucun client ne correspond à votre recherche." : "Aucun client trouvé."}
             </p>
