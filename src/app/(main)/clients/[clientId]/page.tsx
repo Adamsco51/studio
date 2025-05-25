@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,8 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-export default function ClientDetailPage({ params }: { params: { clientId: string } }) {
+export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
+  const { clientId } = React.use(paramsPromise);
   const [client, setClient] = useState<Client | null>(null);
   const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]);
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
@@ -36,13 +37,13 @@ export default function ClientDetailPage({ params }: { params: { clientId: strin
   const router = useRouter();
 
   useEffect(() => {
-    const foundClient = MOCK_CLIENTS.find(c => c.id === params.clientId);
+    const foundClient = MOCK_CLIENTS.find(c => c.id === clientId);
     setClient(foundClient || null);
     if (foundClient) {
-      const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === params.clientId);
+      const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === clientId);
       setClientBLs(bls);
     }
-  }, [params.clientId]);
+  }, [clientId]);
 
   const toggleBlExpansion = (blId: string) => {
     setExpandedBls(prev => {
@@ -273,5 +274,3 @@ export default function ClientDetailPage({ params }: { params: { clientId: strin
     </>
   );
 }
-
-    
