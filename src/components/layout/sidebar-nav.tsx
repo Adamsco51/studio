@@ -18,7 +18,7 @@ const navItems = [
   { href: '/expenses', label: 'Dépenses', icon: DollarSign },
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
   { href: '/reports', label: 'Rapports', icon: Package },
-  { href: '/settings', label: 'Paramètres', icon: SettingsIcon },
+  // { href: '/settings', label: 'Paramètres', icon: SettingsIcon }, // Removed settings link
 ];
 
 export function SidebarNav() {
@@ -45,3 +45,4 @@ export function SidebarNav() {
     </SidebarMenu>
   );
 }
+
