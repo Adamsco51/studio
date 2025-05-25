@@ -1,3 +1,4 @@
+
 import type { ReactNode } from 'react';
 import {
   SidebarProvider,
@@ -10,10 +11,23 @@ import {
 } from '@/components/ui/sidebar';
 import { SidebarNav } from './sidebar-nav';
 import { Button } from '@/components/ui/button';
-import { LogOut } from 'lucide-react';
+import { LogOut, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MOCK_USERS } from '@/lib/mock-data'; // Simulating logged-in user
+import type { User } from '@/lib/types';
 
 export function AppLayout({ children }: { children: ReactNode }) {
+  // Simulate a logged-in user. In a real app, this would come from auth context.
+  const loggedInUser: User | undefined = MOCK_USERS.find(u => u.role === 'admin') || MOCK_USERS[0];
+
   return (
     <SidebarProvider defaultOpen={true}>
       <Sidebar collapsible="icon" variant="sidebar" side="left">
@@ -29,10 +43,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <SidebarNav />
         </SidebarContent>
         <SidebarFooter className="p-2">
-           <Button variant="ghost" className="w-full justify-start group-data-[collapsible=icon]:justify-center">
-            <LogOut className="h-5 w-5" />
-            <span className="group-data-[collapsible=icon]:hidden ml-2">Déconnexion</span>
-          </Button>
+          {loggedInUser && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="w-full justify-start group-data-[collapsible=icon]:justify-center h-auto py-2 px-2 text-left">
+                  <UserIcon className="h-5 w-5 shrink-0" />
+                  <span className="group-data-[collapsible=icon]:hidden ml-2 flex flex-col">
+                    <span className="font-medium text-sm">{loggedInUser.name}</span>
+                    <span className="text-xs text-muted-foreground capitalize">{loggedInUser.role}</span>
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 mb-1 ml-1" side="top" align="start">
+                <DropdownMenuLabel>Mon Compte</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Déconnexion</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex flex-col">
@@ -41,7 +72,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 {/* Mobile sidebar trigger can be placed here if needed, or keep it simple */}
             </div>
             <div className="flex items-center gap-2">
-                 <span className="text-sm text-muted-foreground hidden md:inline">Bob Admin (Admin)</span>
+                 <span className="text-sm text-muted-foreground hidden md:inline">
+                    {loggedInUser ? `${loggedInUser.name} (${loggedInUser.role})` : 'Utilisateur'}
+                 </span>
                 {/* Placeholder for User Menu/Avatar */}
             </div>
         </header>
