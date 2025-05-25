@@ -12,13 +12,18 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Client } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { addClient, updateClient } from "@/lib/mock-data";
+import { MOCK_USERS, addClient, updateClient } from "@/lib/mock-data";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
+import { Separator } from "@/components/ui/separator";
+import { UserCircle2, CalendarDays } from "lucide-react";
 
 const clientFormSchema = z.object({
   name: z.string().min(2, { message: "Le nom doit contenir au moins 2 caractères." }),
@@ -49,17 +54,20 @@ export function ClientForm({ initialData }: ClientFormProps) {
     },
   });
 
-  function onSubmit(data: ClientFormValues) {
-    const newOrUpdatedClient: Client = {
-        id: initialData?.id || `client-${Date.now()}`,
-        ...data,
-        blIds: initialData?.blIds || [], // Preserve existing blIds if editing
-    };
+  const createdByUserName = initialData?.createdByUserId 
+    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || "Inconnu"
+    : null;
 
+  function onSubmit(data: ClientFormValues) {
     if (initialData) {
-        updateClient(newOrUpdatedClient);
+      const updatedClientData: Client = {
+        ...initialData, // This includes id, createdAt, createdByUserId, blIds
+        ...data, // This includes name, contactPerson, email, phone, address
+      };
+      updateClient(updatedClientData);
     } else {
-        addClient(newOrUpdatedClient);
+      const newClient: Omit<Client, 'id' | 'createdAt' | 'createdByUserId' | 'blIds'> = data;
+      addClient(newClient); // addClient will handle id, createdAt, createdByUserId, and blIds initialization
     }
     
     toast({
@@ -67,7 +75,7 @@ export function ClientForm({ initialData }: ClientFormProps) {
       description: `Le client ${data.name} a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
     });
     router.push("/clients");
-    router.refresh(); // Important to update the client list if data changed
+    router.refresh();
   }
 
   return (
@@ -76,6 +84,21 @@ export function ClientForm({ initialData }: ClientFormProps) {
         <CardTitle>{initialData ? "Modifier le Client" : "Ajouter un Nouveau Client"}</CardTitle>
       </CardHeader>
       <CardContent>
+        {initialData && initialData.createdAt && (
+          <div className="mb-6 space-y-3 p-4 border rounded-md bg-muted/30">
+            <div className="flex items-center text-sm text-muted-foreground">
+                <CalendarDays className="mr-2 h-4 w-4" />
+                <span>Créé le: {format(new Date(initialData.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</span>
+            </div>
+            {createdByUserName && (
+                <div className="flex items-center text-sm text-muted-foreground">
+                    <UserCircle2 className="mr-2 h-4 w-4" />
+                    <span>Créé par: {createdByUserName}</span>
+                </div>
+            )}
+            <Separator />
+          </div>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
@@ -143,7 +166,7 @@ export function ClientForm({ initialData }: ClientFormProps) {
                 </FormItem>
               )}
             />
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end space-x-2 pt-4">
               <Button type="button" variant="outline" onClick={() => router.back()}>
                 Annuler
               </Button>

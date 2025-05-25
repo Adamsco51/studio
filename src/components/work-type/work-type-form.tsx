@@ -12,7 +12,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,7 +19,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import type { WorkType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { MOCK_WORK_TYPES, addWorkType, updateWorkType } from "@/lib/mock-data"; // Import MOCK_WORK_TYPES
+import { MOCK_USERS, MOCK_WORK_TYPES, addWorkType, updateWorkType } from "@/lib/mock-data";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
+import { Separator } from "@/components/ui/separator";
+import { UserCircle2, CalendarDays } from "lucide-react";
+
 
 const workTypeFormSchema = z.object({
   name: z.string().min(3, { message: "Le nom du type de travail doit contenir au moins 3 caractères." }),
@@ -39,22 +43,29 @@ export function WorkTypeForm({ initialData }: WorkTypeFormProps) {
 
   const form = useForm<WorkTypeFormValues>({
     resolver: zodResolver(workTypeFormSchema),
-    defaultValues: initialData || {
+    defaultValues: initialData ? {
+        name: initialData.name,
+        description: initialData.description || "",
+    } : {
       name: "",
       description: "",
     },
   });
 
-  function onSubmit(data: WorkTypeFormValues) {
-    const newOrUpdatedWorkType: WorkType = {
-      id: initialData?.id || `wt-${Date.now()}`,
-      ...data,
-    };
+  const createdByUserName = initialData?.createdByUserId
+    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || "Inconnu"
+    : null;
 
+  function onSubmit(data: WorkTypeFormValues) {
     if (initialData) {
-        updateWorkType(newOrUpdatedWorkType);
+        const updatedWorkTypeData: WorkType = {
+            ...initialData, // This includes id, createdAt, createdByUserId
+            ...data, // name, description
+        };
+        updateWorkType(updatedWorkTypeData);
     } else {
-        addWorkType(newOrUpdatedWorkType);
+        const newWorkType: Omit<WorkType, 'id' | 'createdAt' | 'createdByUserId'> = data;
+        addWorkType(newWorkType); // addWorkType handles id, createdAt, createdByUserId
     }
     
     toast({
@@ -62,7 +73,7 @@ export function WorkTypeForm({ initialData }: WorkTypeFormProps) {
       description: `Le type de travail "${data.name}" a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
     });
     router.push("/work-types");
-    router.refresh(); // Ensure the list updates
+    router.refresh();
   }
 
   return (
@@ -74,6 +85,21 @@ export function WorkTypeForm({ initialData }: WorkTypeFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {initialData && initialData.createdAt && (
+          <div className="mb-6 space-y-3 p-4 border rounded-md bg-muted/30">
+            <div className="flex items-center text-sm text-muted-foreground">
+                <CalendarDays className="mr-2 h-4 w-4" />
+                <span>Créé le: {format(new Date(initialData.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</span>
+            </div>
+            {createdByUserName && (
+                <div className="flex items-center text-sm text-muted-foreground">
+                    <UserCircle2 className="mr-2 h-4 w-4" />
+                    <span>Créé par: {createdByUserName}</span>
+                </div>
+            )}
+            <Separator />
+          </div>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField

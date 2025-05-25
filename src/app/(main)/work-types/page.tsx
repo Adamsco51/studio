@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 
 export default function WorkTypesPage() {
@@ -33,7 +35,9 @@ export default function WorkTypesPage() {
   const router = useRouter();
 
   useEffect(() => {
-    setWorkTypes(MOCK_WORK_TYPES);
+    // Sort by most recent creation date
+    const sortedWorkTypes = MOCK_WORK_TYPES.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setWorkTypes(sortedWorkTypes);
   }, []);
 
   const filteredWorkTypes = useMemo(() => {
@@ -46,12 +50,13 @@ export default function WorkTypesPage() {
 
   const handleDeleteWorkType = (workTypeId: string) => {
     deleteWorkType(workTypeId);
-    setWorkTypes(MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId)); // Update local state
+    const updatedWorkTypes = MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    setWorkTypes(updatedWorkTypes); 
     toast({
       title: "Type de Travail Supprimé",
       description: "Le type de travail a été supprimé avec succès.",
     });
-    router.refresh(); // To reflect changes if other parts of app depend on global MOCK_WORK_TYPES
+    router.refresh(); 
   };
 
 
@@ -89,7 +94,8 @@ export default function WorkTypesPage() {
         <CardHeader>
           <CardTitle>Liste des Types de Travail</CardTitle>
           <CardDescription>
-            Aperçu de tous les types de travail enregistrés.
+            Aperçu de tous les types de travail enregistrés, triés par date de création (plus récents en premier).
+            Nombre de types affichés: {filteredWorkTypes.length}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -98,6 +104,7 @@ export default function WorkTypesPage() {
               <TableRow>
                 <TableHead>Nom</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Date Création</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -106,6 +113,7 @@ export default function WorkTypesPage() {
                 <TableRow key={wt.id}>
                   <TableCell className="font-medium">{wt.name}</TableCell>
                   <TableCell>{wt.description || 'N/A'}</TableCell>
+                  <TableCell>{format(new Date(wt.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
                   <TableCell className="text-right space-x-2">
                     <Link href={`/work-types/${wt.id}/edit`} passHref>
                       <Button variant="outline" size="sm">
@@ -122,7 +130,7 @@ export default function WorkTypesPage() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Cette action est irréversible et supprimera le type de travail.
+                            Cette action est irréversible et supprimera le type de travail "{wt.name}".
                             Les BLs utilisant ce type pourraient être affectés.
                           </AlertDialogDescription>
                         </AlertDialogHeader>

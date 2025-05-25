@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES, MOCK_USERS, deleteClient } from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, User } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
@@ -27,21 +27,28 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { Separator } from '@/components/ui/separator';
 
 export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = React.use(paramsPromise);
   const [client, setClient] = useState<Client | null>(null);
+  const [createdByUser, setCreatedByUser] = useState<User | null>(null);
   const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]);
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
+    if (!clientId) return;
     const foundClient = MOCK_CLIENTS.find(c => c.id === clientId);
     setClient(foundClient || null);
     if (foundClient) {
       const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === clientId);
       setClientBLs(bls);
+      if (foundClient.createdByUserId) {
+        const user = MOCK_USERS.find(u => u.id === foundClient.createdByUserId);
+        setCreatedByUser(user || null);
+      }
     }
   }, [clientId]);
 
@@ -164,6 +171,20 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             <div>
               <h4 className="font-semibold text-sm text-muted-foreground">Adresse</h4>
               <p>{client.address}</p>
+            </div>
+            <Separator className="my-4"/>
+            <div>
+                <h4 className="font-semibold text-sm text-muted-foreground mb-2">Informations de création</h4>
+                <div className="flex items-center text-sm text-muted-foreground mb-1">
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    <span>Créé le: {format(new Date(client.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</span>
+                </div>
+                {createdByUser && (
+                    <div className="flex items-center text-sm text-muted-foreground">
+                        <UserCircle2 className="mr-2 h-4 w-4" />
+                        <span>Créé par: {createdByUser.name}</span>
+                    </div>
+                )}
             </div>
           </CardContent>
         </Card>

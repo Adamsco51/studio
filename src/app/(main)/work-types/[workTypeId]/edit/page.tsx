@@ -1,6 +1,7 @@
 
 "use client";
 
+import React from 'react'; // Import React
 import { PageHeader } from '@/components/shared/page-header';
 import { WorkTypeForm } from '@/components/work-type/work-type-form';
 import { MOCK_WORK_TYPES } from '@/lib/mock-data';
@@ -10,13 +11,15 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-export default function EditWorkTypePage({ params }: { params: { workTypeId: string } }) {
+export default function EditWorkTypePage({ params: paramsPromise }: { params: Promise<{ workTypeId: string }> }) {
+  const { workTypeId } = React.use(paramsPromise); // Resolve params using React.use
   const [workType, setWorkType] = useState<WorkType | null | undefined>(undefined); // undefined for loading state
 
   useEffect(() => {
-    const found = MOCK_WORK_TYPES.find(wt => wt.id === params.workTypeId);
+    if (!workTypeId) return; // Ensure workTypeId is resolved
+    const found = MOCK_WORK_TYPES.find(wt => wt.id === workTypeId);
     setWorkType(found || null);
-  }, [params.workTypeId]);
+  }, [workTypeId]);
 
   if (workType === undefined) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
@@ -38,8 +41,8 @@ export default function EditWorkTypePage({ params }: { params: { workTypeId: str
   return (
     <>
       <PageHeader
-        title={`Modifier: ${workType.name}`}
-        description="Mettez à jour les informations de ce type de travail."
+        title={`Modifier Type de Travail`}
+        description={`Mettez à jour: ${workType.name}`}
          actions={
             <Link href="/work-types" passHref>
               <Button variant="outline">

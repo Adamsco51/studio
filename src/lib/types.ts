@@ -9,12 +9,16 @@ export interface Client {
   phone: string;
   address: string;
   blIds: string[];
+  createdAt: string; // ISO Date string
+  createdByUserId?: string;
 }
 
 export interface WorkType {
   id: string;
   name: string;
   description?: string;
+  createdAt: string; // ISO Date string
+  createdByUserId?: string;
 }
 
 export interface BillOfLading {
