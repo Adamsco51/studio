@@ -93,17 +93,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">{loggedInUser.name}</p>
-                      <p className="text-xs leading-none text-muted-foreground">
+                      <p className="text-xs leading-none text-muted-foreground capitalize">
                         {loggedInUser.role}
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem disabled>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Mon Profil</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <Link href="/settings" passHref legacyBehavior>
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                        <a className="flex items-center w-full"> {/* Ensure anchor tag takes full width for proper styling */}
+                          <Settings className="mr-2 h-4 w-4" />
+                          <span>Mon Profil</span>
+                        </a>
+                    </DropdownMenuItem>
+                  </Link>
+                  <DropdownMenuItem className="cursor-pointer">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Déconnexion</span>
                   </DropdownMenuItem>
