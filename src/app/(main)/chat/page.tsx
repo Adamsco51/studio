@@ -56,7 +56,6 @@ export default function ChatPage() {
     },
   });
 
-  // Sort initial messages and todos on client mount
   useEffect(() => {
     setMessages(MOCK_CHAT_MESSAGES.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
     setTodos(MOCK_TODO_ITEMS.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
@@ -77,8 +76,17 @@ export default function ChatPage() {
   };
 
   const handleToggleTodo = (todoId: string) => {
+    const todoToUpdate = todos.find(t => t.id === todoId);
+    if (!todoToUpdate) return;
+
     toggleTodoItemCompletion(todoId);
-    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, completed: !t.completed } : t));
+    const newCompletedStatus = !todoToUpdate.completed;
+    
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, completed: newCompletedStatus } : t));
+    toast({
+      title: "Tâche mise à jour",
+      description: `"${todoToUpdate.text}" marquée comme ${newCompletedStatus ? 'terminée' : 'non terminée'}.`,
+    });
   };
   
   const handleDeleteTodo = (todoId: string, todoText: string) => {

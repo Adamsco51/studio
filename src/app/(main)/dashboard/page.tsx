@@ -1,7 +1,7 @@
 
 import { PageHeader } from '@/components/shared/page-header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare } from 'lucide-react';
 import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data';
 import type { BillOfLading } from '@/lib/types';
 import Link from 'next/link';
@@ -11,6 +11,7 @@ import type { ChartConfig } from "@/components/ui/chart";
 import ChartsLoader from '@/components/dashboard/charts-loader';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { RecentChatCard } from '@/components/dashboard/recent-chat-card';
 
 
 export default function DashboardPage() {
@@ -140,7 +141,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2"> {/* Adjusted grid for 2 charts side-by-side on lg */}
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2"> 
         <ChartsLoader 
           blStatusChartData={blStatusChartData} 
           blStatusChartConfig={blStatusChartConfig} 
@@ -149,7 +150,7 @@ export default function DashboardPage() {
         />
       </div>
       
-      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2"> {/* New row for other cards */}
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3"> {/* Adjusted for 3 columns to include chat */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -219,6 +220,9 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        
+        <RecentChatCard />
+
       </div>
       
       <Card className="mt-8 shadow-lg">
