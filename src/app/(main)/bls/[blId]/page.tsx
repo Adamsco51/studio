@@ -1,7 +1,7 @@
 
 "use client"; 
 
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,7 +54,8 @@ const getStatusIcon = (status: BLStatus) => {
   return null;
 }
 
-export default function BLDetailPage({ params }: { params: { blId: string } }) {
+export default function BLDetailPage({ params: paramsPromise }: { params: Promise<{ blId: string }> }) {
+  const { blId } = React.use(paramsPromise);
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
@@ -64,18 +65,18 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
   const router = useRouter();
 
   useEffect(() => {
-    const foundBl = MOCK_BILLS_OF_LADING.find(b => b.id === params.blId);
+    const foundBl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
     if (foundBl) {
       setBl(foundBl);
       const foundClient = MOCK_CLIENTS.find(c => c.id === foundBl.clientId);
       setClient(foundClient || null);
       const foundWorkType = MOCK_WORK_TYPES.find(wt => wt.id === foundBl.workTypeId);
       setWorkType(foundWorkType || null);
-      const blExpenses = INITIAL_MOCK_EXPENSES.filter(exp => exp.blId === params.blId);
+      const blExpenses = INITIAL_MOCK_EXPENSES.filter(exp => exp.blId === blId);
       setExpenses(blExpenses);
     }
     setIsMounted(true);
-  }, [params.blId]);
+  }, [blId]);
 
   const { totalExpenses, balance, profitStatus, profit } = useMemo(() => {
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
@@ -344,3 +345,4 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
     </>
   );
 }
+
