@@ -8,13 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_EXPENSES } from '@/lib/mock-data';
-import type { BLStatus } from '@/lib/types';
-import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search } from 'lucide-react';
+import { MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_EXPENSES, MOCK_USERS } from '@/lib/mock-data';
+import type { BLStatus, BillOfLading, Client, User as AppUser } from '@/lib/types';
+import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 
 const getStatusBadgeStyle = (status: BLStatus, type: 'badge' | 'text' | 'icon') => {
   switch (status) {
@@ -42,17 +46,28 @@ const StatusIcon = ({ status }: { status: BLStatus }) => {
 
 export default function BillsOfLadingPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [bls, setBls] = useState(MOCK_BILLS_OF_LADING);
+  const [bls, setBls] = useState<BillOfLading[]>(MOCK_BILLS_OF_LADING);
+  const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
+  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
+
+  const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
+  const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+
 
   useEffect(() => {
-    // In a real app, data would be fetched here. For mock, it's already available.
-    // This effect can be used if MOCK_BILLS_OF_LADING could change globally by other components
-    // and this page needs to reflect that. For simple mock, direct usage is okay.
     setBls(MOCK_BILLS_OF_LADING);
-  }, []); // Re-run if MOCK_BILLS_OF_LADING changes, if it were a state from context or prop
+    setClients(MOCK_CLIENTS);
+    setUsers(MOCK_USERS);
+  }, []); 
 
   const getClientName = (clientId: string) => {
     return MOCK_CLIENTS.find(c => c.id === clientId)?.name || 'N/A';
+  };
+
+  const getUserName = (userId?: string) => {
+    if (!userId) return 'N/A';
+    return MOCK_USERS.find(u => u.id === userId)?.name || 'N/A';
   };
 
   const calculateBlDetails = (blId: string) => {
@@ -66,14 +81,43 @@ export default function BillsOfLadingPage() {
     return { totalExpenses, balance, profitStatus, profit: balance >= 0 };
   };
 
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setSelectedClientId(undefined);
+    setSelectedUserId(undefined);
+    setSelectedDate(undefined);
+  };
+
   const filteredBLs = useMemo(() => {
-    if (!searchTerm) return bls;
-    return bls.filter(bl =>
-      bl.blNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getClientName(bl.clientId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bl.status.toLowerCase().includes(searchTerm.toLowerCase())
+    let tempBLs = bls;
+
+    if (selectedClientId) {
+      tempBLs = tempBLs.filter(bl => bl.clientId === selectedClientId);
+    }
+
+    if (selectedUserId) {
+      tempBLs = tempBLs.filter(bl => bl.createdByUserId === selectedUserId);
+    }
+
+    if (selectedDate) {
+      tempBLs = tempBLs.filter(bl => {
+        const blCreationDate = new Date(bl.createdAt);
+        return blCreationDate.getFullYear() === selectedDate.getFullYear() &&
+               blCreationDate.getMonth() === selectedDate.getMonth() &&
+               blCreationDate.getDate() === selectedDate.getDate();
+      });
+    }
+
+    if (!searchTerm) return tempBLs;
+
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return tempBLs.filter(bl =>
+      bl.blNumber.toLowerCase().includes(lowerSearchTerm) ||
+      getClientName(bl.clientId).toLowerCase().includes(lowerSearchTerm) ||
+      bl.status.toLowerCase().includes(lowerSearchTerm) ||
+      (bl.createdByUserId && getUserName(bl.createdByUserId).toLowerCase().includes(lowerSearchTerm))
     );
-  }, [bls, searchTerm]);
+  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate]);
 
   return (
     <>
@@ -93,14 +137,82 @@ export default function BillsOfLadingPage() {
           <CardTitle>Filtrer les Connaissements</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-2">
-            <Search className="h-5 w-5 text-muted-foreground" />
-            <Input 
-              placeholder="Rechercher par N° BL, client, statut..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
+            <div className="lg:col-span-2 xl:col-span-1">
+              <Label htmlFor="search-term" className="block text-sm font-medium text-muted-foreground mb-1">Recherche générale</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  id="search-term"
+                  placeholder="N° BL, client, statut, utilisateur..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8 w-full" 
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="client-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Client</Label>
+              <Select value={selectedClientId} onValueChange={(value) => setSelectedClientId(value === "all" ? undefined : value)}>
+                <SelectTrigger id="client-filter">
+                  <SelectValue placeholder="Tous les Clients" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les Clients</SelectItem>
+                  {clients.map(client => (
+                    <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="user-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Utilisateur (Créateur)</Label>
+              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)}>
+                <SelectTrigger id="user-filter">
+                  <SelectValue placeholder="Tous les Utilisateurs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les Utilisateurs</SelectItem>
+                  {users.map(user => (
+                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="date-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Date de Création</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date-filter"
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !selectedDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {selectedDate ? format(selectedDate, "PPP", { locale: fr }) : <span>Choisir une date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    initialFocus
+                    locale={fr}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto xl:mt-[22px]"> {/* Adjusted margin for alignment */}
+              <FilterX className="mr-2 h-4 w-4" /> Réinitialiser
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -109,7 +221,7 @@ export default function BillsOfLadingPage() {
         <CardHeader>
           <CardTitle>Liste des Connaissements</CardTitle>
           <CardDescription>
-            Aperçu de tous les BLs enregistrés, avec leur statut financier et opérationnel.
+            Aperçu de tous les BLs enregistrés. Nombre de BLs affichés: {filteredBLs.length}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -118,6 +230,7 @@ export default function BillsOfLadingPage() {
               <TableRow>
                 <TableHead>N° BL</TableHead>
                 <TableHead>Client</TableHead>
+                <TableHead>Créé par</TableHead>
                 <TableHead>Date Création</TableHead>
                 <TableHead>Statut BL</TableHead>
                 <TableHead>Montant Alloué</TableHead>
@@ -134,6 +247,7 @@ export default function BillsOfLadingPage() {
                   <TableRow key={bl.id}>
                     <TableCell className="font-medium">{bl.blNumber}</TableCell>
                     <TableCell>{getClientName(bl.clientId)}</TableCell>
+                    <TableCell>{getUserName(bl.createdByUserId)}</TableCell>
                     <TableCell>{format(new Date(bl.createdAt), 'dd MMM yyyy', { locale: fr })}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn("capitalize flex items-center w-fit", getStatusBadgeStyle(bl.status, 'badge'))}>
@@ -163,7 +277,7 @@ export default function BillsOfLadingPage() {
           </Table>
            {filteredBLs.length === 0 && (
             <p className="text-center text-muted-foreground py-4">
-              {searchTerm ? "Aucun BL ne correspond à votre recherche." : "Aucun BL trouvé."}
+              {searchTerm || selectedClientId || selectedUserId || selectedDate ? "Aucun BL ne correspond à vos filtres." : "Aucun BL trouvé."}
             </p>
           )}
         </CardContent>
