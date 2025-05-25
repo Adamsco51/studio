@@ -25,6 +25,8 @@ import { useToast } from '@/hooks/use-toast';
 const CURRENT_USER_ID = MOCK_USERS[1].id;
 const CURRENT_USER_NAME = MOCK_USERS[1].name;
 
+const NO_ASSIGNEE_VALUE = "__NO_ASSIGNEE__"; // Unique value for "Non assigné"
+
 const chatMessageSchema = z.object({
   text: z.string().min(1, { message: "Le message ne peut pas être vide." }),
 });
@@ -48,7 +50,10 @@ export default function ChatPage() {
 
   const todoForm = useForm<TodoItemFormValues>({
     resolver: zodResolver(todoItemSchema),
-    defaultValues: { text: "", assignedToUserId: "" },
+    defaultValues: { 
+      text: "", 
+      assignedToUserId: undefined, // Use undefined for optional field
+    },
   });
 
   const handleSendMessage = (data: ChatMessageFormValues) => {
@@ -60,7 +65,7 @@ export default function ChatPage() {
   const handleAddTodo = (data: TodoItemFormValues) => {
     const newTodo = addTodoItem(data.text, data.assignedToUserId);
     setTodos(prev => [...prev, newTodo].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-    todoForm.reset();
+    todoForm.reset({ text: "", assignedToUserId: undefined }); // Reset with undefined
     toast({ title: "Tâche ajoutée", description: `"${newTodo.text}" a été ajoutée.` });
   };
 
@@ -153,12 +158,21 @@ export default function ChatPage() {
                   name="assignedToUserId"
                   control={todoForm.control}
                   render={({ field }) => (
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === NO_ASSIGNEE_VALUE ? undefined : value)} 
+                      value={field.value ?? NO_ASSIGNEE_VALUE}
+                    >
                       <SelectTrigger>
+                        {/* The placeholder in SelectValue is shown if Select's value is undefined.
+                            Here, Select's value is managed to be NO_ASSIGNEE_VALUE when field.value is undefined,
+                            so the "Non assigné" SelectItem's content will be displayed in the trigger.
+                            If we strictly wanted the placeholder to show for undefined, Select value would need to be field.value directly.
+                            However, this setup provides an explicit "Non assigné" in the trigger.
+                        */}
                         <SelectValue placeholder="Assigner à (optionnel)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Non assigné</SelectItem>
+                        <SelectItem value={NO_ASSIGNEE_VALUE}>Non assigné</SelectItem>
                         {MOCK_USERS.map((user) => (
                           <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                         ))}
@@ -205,3 +219,4 @@ export default function ChatPage() {
     </>
   );
 }
+
