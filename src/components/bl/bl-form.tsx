@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import type { BillOfLading, Client, BLStatus, WorkType } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { MOCK_BILLS_OF_LADING, MOCK_WORK_TYPES, addBL, updateBL } from "@/lib/mock-data"; // Import MOCK_WORK_TYPES
+import { MOCK_USERS, addBL, updateBL } from "@/lib/mock-data"; // Removed MOCK_WORK_TYPES, MOCK_BILLS_OF_LADING as they are not directly used here for form population other than add/update
 
 const blStatusOptions: { value: BLStatus; label: string }[] = [
   { value: "en cours", label: "En cours" },
@@ -44,7 +44,7 @@ type BLFormValues = z.infer<typeof blFormSchema>;
 interface BLFormProps {
   initialData?: BillOfLading | null;
   clients: Client[];
-  workTypes: WorkType[]; // Add workTypes prop
+  workTypes: WorkType[];
 }
 
 export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
@@ -76,6 +76,8 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
 
   function onSubmit(data: BLFormValues) {
     const processedCategories = data.categories.split(',').map(cat => cat.trim()).filter(cat => cat.length > 0);
+    // Simulate getting the logged-in user's ID. In a real app, this would come from auth context.
+    const currentUserId = MOCK_USERS[0].id; // Alice Employee as default creator/updater for simplicity
 
     const newOrUpdatedBL: BillOfLading = {
         id: initialData?.id || `bl-${Date.now()}`,
@@ -87,6 +89,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
         categories: processedCategories,
         status: data.status,
         createdAt: initialData?.createdAt || new Date().toISOString(),
+        createdByUserId: initialData?.createdByUserId || currentUserId, // Preserve original creator or set new
     };
 
     if (initialData) {

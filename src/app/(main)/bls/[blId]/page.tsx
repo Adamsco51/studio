@@ -17,7 +17,7 @@ import {
 } from '@/lib/mock-data';
 import type { BillOfLading, Expense, Client, User, BLStatus, WorkType } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIcon, Tag, CheckCircle, AlertCircle, Clock, Briefcase } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIcon, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Input } from '@/components/ui/input'; // Kept for potential use, e.g. reason for deletion
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -55,16 +55,18 @@ const getStatusIcon = (status: BLStatus) => {
 }
 
 export default function BLDetailPage({ params: paramsPromise }: { params: Promise<{ blId: string }> }) {
-  const { blId } = React.use(paramsPromise);
+  const { blId } = React.use(paramsPromise); // Use React.use to resolve params
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isMounted, setIsMounted] = useState(false);
+  const [createdByUser, setCreatedByUser] = useState<User | null>(null);
   const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
+    if (!blId) return; // Ensure blId is resolved before proceeding
     const foundBl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
     if (foundBl) {
       setBl(foundBl);
@@ -74,6 +76,10 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       setWorkType(foundWorkType || null);
       const blExpenses = INITIAL_MOCK_EXPENSES.filter(exp => exp.blId === blId);
       setExpenses(blExpenses);
+      if (foundBl.createdByUserId) {
+        const user = MOCK_USERS.find(u => u.id === foundBl.createdByUserId);
+        setCreatedByUser(user || null);
+      }
     }
     setIsMounted(true);
   }, [blId]);
@@ -112,7 +118,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       description: `Le BL N° ${bl.blNumber} a été supprimé.`,
     });
     router.push('/bls');
-    router.refresh(); // Make sure lists elsewhere are updated
+    router.refresh(); 
   };
 
   const getEmployeeName = (employeeId: string) => MOCK_USERS.find(u => u.id === employeeId)?.name || 'Inconnu';
@@ -209,13 +215,19 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                 <p className="font-semibold">{bl.blNumber}</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Date de création</p>
-                <p className="font-semibold">{format(new Date(bl.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</p>
-              </div>
-              <div>
                 <p className="text-sm text-muted-foreground">Montant Alloué</p>
                 <p className="font-semibold text-green-600">{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
               </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Date de création</p>
+                <p className="font-semibold">{format(new Date(bl.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</p>
+              </div>
+              {createdByUser && (
+                 <div>
+                    <p className="text-sm text-muted-foreground flex items-center"><UserCircle2 className="mr-2 h-4 w-4"/>Créé par</p>
+                    <p className="font-semibold">{createdByUser.name}</p>
+                </div>
+              )}
               <div>
                 <p className="text-sm text-muted-foreground">Dépenses Totales</p>
                 <p className="font-semibold text-red-600">{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
@@ -286,8 +298,6 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                   L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
-                              {/* Input for reason can be re-added if admin approval flow is built later */}
-                              {/* <Input type="text" placeholder="Raison de la suppression..." className="my-2"/> */}
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Annuler</AlertDialogCancel>
                                 <AlertDialogAction onClick={() => handleDeleteExpense(exp.id)}>Confirmer</AlertDialogAction>
@@ -345,4 +355,3 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     </>
   );
 }
-

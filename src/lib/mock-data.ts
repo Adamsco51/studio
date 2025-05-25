@@ -51,44 +51,48 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
     blNumber: 'MEDU824522',
     clientId: 'client-1',
     allocatedAmount: 5000,
-    workTypeId: 'wt-1', // Changed from serviceTypes
+    workTypeId: 'wt-1',
     description: 'Electronics and computer parts from Shanghai to New York.',
     categories: ['Électronique', 'Haute Technologie'],
     status: 'terminé',
     createdAt: new Date('2023-10-15T10:00:00Z').toISOString(),
+    createdByUserId: 'user-2', // Bob Admin
   },
   {
     id: 'bl-2',
     blNumber: 'MAEU123456',
     clientId: 'client-2',
     allocatedAmount: 7500,
-    workTypeId: 'wt-3', // Changed from serviceTypes
+    workTypeId: 'wt-3',
     description: 'Apparel and textiles from Bangladesh to London.',
     categories: ['Textile', 'Importation'],
     status: 'en cours',
     createdAt: new Date('2023-11-01T14:30:00Z').toISOString(),
+    createdByUserId: 'user-1', // Alice Employee
   },
   {
     id: 'bl-3',
     blNumber: 'CMAU789012',
     clientId: 'client-1',
     allocatedAmount: 3000,
-    workTypeId: 'wt-2', // Changed from serviceTypes
+    workTypeId: 'wt-2',
     description: 'Automotive spare parts from Germany to New York.',
     categories: ['Automobile', 'Pièces détachées'],
     status: 'en cours',
     createdAt: new Date('2023-11-20T09:15:00Z').toISOString(),
+    createdByUserId: 'user-2', // Bob Admin
   },
   {
     id: 'bl-4',
     blNumber: 'SUDU999000',
-    clientId: 'client-3', // Assigned to client-3
+    clientId: 'client-3',
     allocatedAmount: 12000,
-    workTypeId: 'wt-6', // Changed from serviceTypes
+    workTypeId: 'wt-6',
     description: 'Machinerie lourde pour chantier de construction.',
     categories: ['Machinerie', 'Projet Spécial'],
     status: 'inactif',
     createdAt: new Date('2023-09-01T09:15:00Z').toISOString(),
+    createdByUserId: 'user-1', // Alice Employee
   }
 ];
 
@@ -165,10 +169,14 @@ export const deleteClient = (clientId: string) => {
 };
 
 export const addBL = (bl: BillOfLading) => {
-  MOCK_BILLS_OF_LADING.push(bl);
-  const client = MOCK_CLIENTS.find(c => c.id === bl.clientId);
-  if (client && !client.blIds.includes(bl.id)) {
-    client.blIds.push(bl.id);
+  const blWithCreator = {
+    ...bl,
+    createdByUserId: bl.createdByUserId || MOCK_USERS[0].id, // Assign default creator if not provided
+  };
+  MOCK_BILLS_OF_LADING.push(blWithCreator);
+  const client = MOCK_CLIENTS.find(c => c.id === blWithCreator.clientId);
+  if (client && !client.blIds.includes(blWithCreator.id)) {
+    client.blIds.push(blWithCreator.id);
   }
 };
 export const updateBL = (updatedBL: BillOfLading) => {
@@ -207,4 +215,3 @@ export const deleteWorkType = (workTypeId: string) => {
   // For simplicity, we'll just remove it. This might leave some BLs with an invalid workTypeId
   // in a mock scenario. In a real app, a proper check or cascade delete/set null would occur.
 };
-

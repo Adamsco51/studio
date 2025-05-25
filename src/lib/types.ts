@@ -22,11 +22,12 @@ export interface BillOfLading {
   blNumber: string;
   clientId: string;
   allocatedAmount: number;
-  workTypeId: string; // Changed from serviceTypes
+  workTypeId: string;
   description: string;
   categories: string[]; // Manual categories
   status: BLStatus;
   createdAt: string; // ISO Date string
+  createdByUserId?: string; // Added field for user who created the BL
 }
 
 export interface Expense {
