@@ -1,8 +1,9 @@
+
 "use client";
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FileText, Settings as SettingsIcon, Package, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase } from 'lucide-react'; // Added Briefcase for Work Types
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
@@ -14,8 +15,9 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/bls', label: 'Bills of Lading', icon: FileText },
-  // { href: '/expenses', label: 'Dépenses', icon: DollarSign }, // Expenses are managed under BLs
-  { href: '/reports', label: 'Rapports', icon: Package }, // Placeholder for export/reports
+  { href: '/expenses', label: 'Dépenses', icon: DollarSign },
+  { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
+  { href: '/reports', label: 'Rapports', icon: Package },
   { href: '/settings', label: 'Paramètres', icon: SettingsIcon },
 ];
 

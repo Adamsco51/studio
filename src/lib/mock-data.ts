@@ -1,12 +1,21 @@
 
-import type { Client, BillOfLading, Expense, User, BLStatus } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType } from './types';
 
 export const MOCK_USERS: User[] = [
   { id: 'user-1', name: 'Alice Employee', role: 'employee' },
   { id: 'user-2', name: 'Bob Admin', role: 'admin' },
 ];
 
-export const MOCK_CLIENTS: Client[] = [
+export let MOCK_WORK_TYPES: WorkType[] = [
+  { id: 'wt-1', name: 'Transit Standard', description: 'Service de transit de base.' },
+  { id: 'wt-2', name: 'Transport Routier', description: 'Acheminement par camion.' },
+  { id: 'wt-3', name: 'Logistique d\'Entreposage', description: 'Stockage et gestion de marchandises.' },
+  { id: 'wt-4', name: 'Dédouanement Import', description: 'Formalités douanières pour importation.' },
+  { id: 'wt-5', name: 'Dédouanement Export', description: 'Formalités douanières pour exportation.' },
+  { id: 'wt-6', name: 'Projet Spécial', description: 'Gestion de projets logistiques complexes.' },
+];
+
+export let MOCK_CLIENTS: Client[] = [
   {
     id: 'client-1',
     name: 'Global Imports Inc.',
@@ -32,17 +41,17 @@ export const MOCK_CLIENTS: Client[] = [
     email: 'pierre.durand@logexpress.fr',
     phone: '+33-1-2345-6789',
     address: '789 Rue de la Logistique, 75001 Paris, France',
-    blIds: [],
+    blIds: ['bl-4'], // Client 3 now has bl-4
   }
 ];
 
-export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
+export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
   {
     id: 'bl-1',
     blNumber: 'MEDU824522',
     clientId: 'client-1',
     allocatedAmount: 5000,
-    serviceTypes: ['Transit', 'Transport'],
+    workTypeId: 'wt-1', // Changed from serviceTypes
     description: 'Electronics and computer parts from Shanghai to New York.',
     categories: ['Électronique', 'Haute Technologie'],
     status: 'terminé',
@@ -53,7 +62,7 @@ export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
     blNumber: 'MAEU123456',
     clientId: 'client-2',
     allocatedAmount: 7500,
-    serviceTypes: ['Logistique', 'Customs Clearance'],
+    workTypeId: 'wt-3', // Changed from serviceTypes
     description: 'Apparel and textiles from Bangladesh to London.',
     categories: ['Textile', 'Importation'],
     status: 'en cours',
@@ -64,7 +73,7 @@ export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
     blNumber: 'CMAU789012',
     clientId: 'client-1',
     allocatedAmount: 3000,
-    serviceTypes: ['Transit'],
+    workTypeId: 'wt-2', // Changed from serviceTypes
     description: 'Automotive spare parts from Germany to New York.',
     categories: ['Automobile', 'Pièces détachées'],
     status: 'en cours',
@@ -73,9 +82,9 @@ export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
   {
     id: 'bl-4',
     blNumber: 'SUDU999000',
-    clientId: 'client-3',
+    clientId: 'client-3', // Assigned to client-3
     allocatedAmount: 12000,
-    serviceTypes: ['Transit', 'Logistique', 'Transport'],
+    workTypeId: 'wt-6', // Changed from serviceTypes
     description: 'Machinerie lourde pour chantier de construction.',
     categories: ['Machinerie', 'Projet Spécial'],
     status: 'inactif',
@@ -83,7 +92,7 @@ export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
   }
 ];
 
-export const MOCK_EXPENSES: Expense[] = [
+export let MOCK_EXPENSES: Expense[] = [
   {
     id: 'exp-1',
     blId: 'bl-1',
@@ -118,7 +127,7 @@ export const MOCK_EXPENSES: Expense[] = [
   },
   {
     id: 'exp-5',
-    blId: 'bl-1', 
+    blId: 'bl-1',
     label: 'Unexpected Storage Fee',
     amount: 2000, // This expense made bl-1 a loss
     date: new Date('2023-10-25T09:00:00Z').toISOString(),
@@ -141,3 +150,61 @@ export const MOCK_EXPENSES: Expense[] = [
     employeeId: 'user-1',
   }
 ];
+
+// Functions to update mock data (important for demonstrating reactivity without a real backend)
+export const addClient = (client: Client) => {
+  MOCK_CLIENTS.push(client);
+};
+export const updateClient = (updatedClient: Client) => {
+  MOCK_CLIENTS = MOCK_CLIENTS.map(client => client.id === updatedClient.id ? updatedClient : client);
+};
+export const deleteClient = (clientId: string) => {
+  MOCK_CLIENTS = MOCK_CLIENTS.filter(client => client.id !== clientId);
+  // Also delete associated BLs for this client
+  MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId !== clientId);
+};
+
+export const addBL = (bl: BillOfLading) => {
+  MOCK_BILLS_OF_LADING.push(bl);
+  const client = MOCK_CLIENTS.find(c => c.id === bl.clientId);
+  if (client && !client.blIds.includes(bl.id)) {
+    client.blIds.push(bl.id);
+  }
+};
+export const updateBL = (updatedBL: BillOfLading) => {
+  MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.map(bl => bl.id === updatedBL.id ? updatedBL : bl);
+};
+export const deleteBL = (blId: string) => {
+  const blToDelete = MOCK_BILLS_OF_LADING.find(bl => bl.id === blId);
+  if (blToDelete) {
+    MOCK_CLIENTS = MOCK_CLIENTS.map(client => {
+      if (client.id === blToDelete.clientId) {
+        return { ...client, blIds: client.blIds.filter(id => id !== blId) };
+      }
+      return client;
+    });
+  }
+  MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.id !== blId);
+  MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.blId !== blId); // Delete associated expenses
+};
+
+export const addExpense = (expense: Expense) => {
+  MOCK_EXPENSES.push(expense);
+};
+export const deleteExpense = (expenseId: string) => {
+  MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.id !== expenseId);
+};
+
+export const addWorkType = (workType: WorkType) => {
+  MOCK_WORK_TYPES.push(workType);
+};
+export const updateWorkType = (updatedWorkType: WorkType) => {
+  MOCK_WORK_TYPES = MOCK_WORK_TYPES.map(wt => wt.id === updatedWorkType.id ? updatedWorkType : wt);
+};
+export const deleteWorkType = (workTypeId: string) => {
+  MOCK_WORK_TYPES = MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId);
+  // Potentially handle BLs that used this workType, e.g., set workTypeId to null or a default
+  // For simplicity, we'll just remove it. This might leave some BLs with an invalid workTypeId
+  // in a mock scenario. In a real app, a proper check or cascade delete/set null would occur.
+};
+

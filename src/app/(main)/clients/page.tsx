@@ -1,12 +1,41 @@
+
+"use client";
+
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MOCK_CLIENTS } from '@/lib/mock-data';
-import { PlusCircle, ArrowRight } from 'lucide-react';
+import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING } from '@/lib/mock-data';
+import { PlusCircle, ArrowRight, UserCheck, UserX, Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import type { Client } from '@/lib/types';
+
+type ClientWithStatus = Client & { isActive: boolean };
 
 export default function ClientsPage() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [clients, setClients] = useState<ClientWithStatus[]>([]);
+
+  useEffect(() => {
+    const clientsWithStatus = MOCK_CLIENTS.map(client => {
+      const hasActiveBL = MOCK_BILLS_OF_LADING.some(bl => bl.clientId === client.id && bl.status === 'en cours');
+      return { ...client, isActive: hasActiveBL };
+    });
+    setClients(clientsWithStatus);
+  }, []); // Re-run if MOCK_CLIENTS or MOCK_BILLS_OF_LADING change in a real app with global state
+
+  const filteredClients = useMemo(() => {
+    if (!searchTerm) return clients;
+    return clients.filter(client =>
+      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.email.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [clients, searchTerm]);
+
   return (
     <>
       <PageHeader
@@ -21,6 +50,23 @@ export default function ClientsPage() {
           </Link>
         }
       />
+      <Card className="shadow-lg mb-6">
+        <CardHeader>
+          <CardTitle>Filtrer les Clients</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <Search className="h-5 w-5 text-muted-foreground" />
+            <Input 
+              placeholder="Rechercher par nom, contact, email..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="max-w-sm"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Liste des Clients</CardTitle>
@@ -36,16 +82,24 @@ export default function ClientsPage() {
                 <TableHead>Personne à Contacter</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Téléphone</TableHead>
+                <TableHead>Statut</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {MOCK_CLIENTS.map((client) => (
+              {filteredClients.map((client) => (
                 <TableRow key={client.id}>
                   <TableCell className="font-medium">{client.name}</TableCell>
                   <TableCell>{client.contactPerson}</TableCell>
                   <TableCell>{client.email}</TableCell>
                   <TableCell>{client.phone}</TableCell>
+                  <TableCell>
+                    <Badge variant={client.isActive ? 'default' : 'secondary'} 
+                           className={client.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                      {client.isActive ? <UserCheck className="mr-1 h-3 w-3"/> : <UserX className="mr-1 h-3 w-3"/>}
+                      {client.isActive ? 'Actif' : 'Inactif'}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right">
                     <Link href={`/clients/${client.id}`} passHref>
                       <Button variant="ghost" size="sm">
@@ -57,8 +111,10 @@ export default function ClientsPage() {
               ))}
             </TableBody>
           </Table>
-          {MOCK_CLIENTS.length === 0 && (
-            <p className="text-center text-muted-foreground py-4">Aucun client trouvé.</p>
+          {filteredClients.length === 0 && (
+            <p className="text-center text-muted-foreground py-4">
+              {searchTerm ? "Aucun client ne correspond à votre recherche." : "Aucun client trouvé."}
+            </p>
           )}
         </CardContent>
       </Card>

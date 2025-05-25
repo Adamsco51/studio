@@ -18,19 +18,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { BillOfLading, Client, BLStatus } from "@/lib/types";
+import type { BillOfLading, Client, BLStatus, WorkType } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Checkbox } from "@/components/ui/checkbox";
-
-const serviceTypesOptions = [
-  { id: "transit", label: "Transit" },
-  { id: "transport", label: "Transport" },
-  { id: "logistique", label: "Logistique" },
-  { id: "customs", label: "Dédouanement" },
-  { id: "warehousing", label: "Entreposage" },
-  { id: "other", label: "Autre" },
-];
+import { MOCK_BILLS_OF_LADING, MOCK_WORK_TYPES, addBL, updateBL } from "@/lib/mock-data"; // Import MOCK_WORK_TYPES
 
 const blStatusOptions: { value: BLStatus; label: string }[] = [
   { value: "en cours", label: "En cours" },
@@ -42,10 +33,8 @@ const blFormSchema = z.object({
   blNumber: z.string().min(5, { message: "Le numéro de BL doit contenir au moins 5 caractères." }),
   clientId: z.string({ required_error: "Veuillez sélectionner un client." }),
   allocatedAmount: z.coerce.number().positive({ message: "Le montant alloué doit être positif." }),
-  serviceTypes: z.array(z.string()).refine((value) => value.some((item) => item), {
-    message: "Vous devez sélectionner au moins un type de service.",
-  }),
-  description: z.string().optional(), // Description is now optional
+  workTypeId: z.string({ required_error: "Veuillez sélectionner un type de travail." }),
+  description: z.string().optional(),
   categories: z.string().min(1, { message: "Veuillez entrer au moins une catégorie."}), // Comma-separated string
   status: z.enum(["en cours", "terminé", "inactif"], { required_error: "Veuillez sélectionner un statut." }),
 });
@@ -55,10 +44,10 @@ type BLFormValues = z.infer<typeof blFormSchema>;
 interface BLFormProps {
   initialData?: BillOfLading | null;
   clients: Client[];
-  onSubmitSuccess?: (bl: BillOfLading) => void;
+  workTypes: WorkType[]; // Add workTypes prop
 }
 
-export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
+export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
@@ -70,14 +59,15 @@ export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
     resolver: zodResolver(blFormSchema),
     defaultValues: initialData ? {
         ...initialData,
-        categories: defaultCategories, // Convert array to comma-separated string for form
+        categories: defaultCategories,
         allocatedAmount: initialData.allocatedAmount || 0,
         status: initialData.status || "en cours",
+        workTypeId: initialData.workTypeId || "",
     } : {
       blNumber: "",
       clientId: preselectedClientId || "",
       allocatedAmount: 0,
-      serviceTypes: [],
+      workTypeId: "",
       description: "",
       categories: "",
       status: "en cours",
@@ -85,8 +75,6 @@ export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
   });
 
   function onSubmit(data: BLFormValues) {
-    console.log("BL data submitted:", data);
-    
     const processedCategories = data.categories.split(',').map(cat => cat.trim()).filter(cat => cat.length > 0);
 
     const newOrUpdatedBL: BillOfLading = {
@@ -94,26 +82,17 @@ export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
         blNumber: data.blNumber,
         clientId: data.clientId,
         allocatedAmount: data.allocatedAmount,
-        serviceTypes: data.serviceTypes,
+        workTypeId: data.workTypeId,
         description: data.description || "",
         categories: processedCategories,
         status: data.status,
         createdAt: initialData?.createdAt || new Date().toISOString(),
     };
 
-    // In a real app, you would save this to MOCK_BILLS_OF_LADING or call an API
-    // For now, we'll just log and call onSubmitSuccess if provided
-    // MOCK_BILLS_OF_LADING.push(newOrUpdatedBL); // This should be handled by the parent page or global state
-
-    if (onSubmitSuccess) {
-        onSubmitSuccess(newOrUpdatedBL);
+    if (initialData) {
+        updateBL(newOrUpdatedBL);
     } else {
-      // Basic mock data update simulation if no onSubmitSuccess provided
-      // This part is tricky as forms shouldn't directly manipulate global mock data
-      // Ideally, this logic resides in the page using the form.
-      // For demo purposes, this would need a way to update the global MOCK_BILLS_OF_LADING
-      // For now, we rely on the page to handle the mock data update logic.
-       console.log("Simulating data save for:", newOrUpdatedBL);
+        addBL(newOrUpdatedBL);
     }
 
     toast({
@@ -121,6 +100,7 @@ export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
       description: `Le BL N° ${data.blNumber} a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
     });
     router.push("/bls"); 
+    router.refresh();
   }
 
   return (
@@ -129,7 +109,7 @@ export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
         <CardHeader>
           <CardTitle>{initialData ? "Modifier le Connaissement (BL)" : "Ajouter un Nouveau BL"}</CardTitle>
           <CardDescription>
-            Remplissez les informations ci-dessous. Les catégories manuelles remplacent la suggestion IA.
+            Remplissez les informations ci-dessous.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -164,6 +144,30 @@ export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
                         {clients.map((client) => (
                           <SelectItem key={client.id} value={client.id}>
                             {client.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="workTypeId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type de Travail</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionnez un type de travail" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {workTypes.map((wt) => (
+                          <SelectItem key={wt.id} value={wt.id}>
+                            {wt.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -219,53 +223,6 @@ export function BLForm({ initialData, clients, onSubmitSuccess }: BLFormProps) {
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="serviceTypes"
-                render={() => (
-                  <FormItem>
-                    <div className="mb-4">
-                      <FormLabel className="text-base">Types de Service</FormLabel>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {serviceTypesOptions.map((item) => (
-                      <FormField
-                        key={item.id}
-                        control={form.control}
-                        name="serviceTypes"
-                        render={({ field }) => {
-                          return (
-                            <FormItem
-                              key={item.id}
-                              className="flex flex-row items-start space-x-3 space-y-0"
-                            >
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(item.id)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...(field.value || []), item.id])
-                                      : field.onChange(
-                                          (field.value || []).filter(
-                                            (value) => value !== item.id
-                                          )
-                                        )
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal">
-                                {item.label}
-                              </FormLabel>
-                            </FormItem>
-                          )
-                        }}
-                      />
-                    ))}
-                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

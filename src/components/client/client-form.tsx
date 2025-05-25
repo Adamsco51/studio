@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Client } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import { addClient, updateClient } from "@/lib/mock-data";
 
 const clientFormSchema = z.object({
   name: z.string().min(2, { message: "Le nom doit contenir au moins 2 caractères." }),
@@ -31,10 +32,9 @@ type ClientFormValues = z.infer<typeof clientFormSchema>;
 
 interface ClientFormProps {
   initialData?: Client | null;
-  onSubmitSuccess?: (client: Client) => void; // For real data handling
 }
 
-export function ClientForm({ initialData, onSubmitSuccess }: ClientFormProps) {
+export function ClientForm({ initialData }: ClientFormProps) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -50,18 +50,16 @@ export function ClientForm({ initialData, onSubmitSuccess }: ClientFormProps) {
   });
 
   function onSubmit(data: ClientFormValues) {
-    // In a real app, you'd send this to your backend
-    console.log("Client data submitted:", data);
-    
-    // Simulate API call and success
     const newOrUpdatedClient: Client = {
         id: initialData?.id || `client-${Date.now()}`,
         ...data,
-        blIds: initialData?.blIds || [],
+        blIds: initialData?.blIds || [], // Preserve existing blIds if editing
     };
 
-    if (onSubmitSuccess) {
-        onSubmitSuccess(newOrUpdatedClient);
+    if (initialData) {
+        updateClient(newOrUpdatedClient);
+    } else {
+        addClient(newOrUpdatedClient);
     }
     
     toast({
@@ -69,6 +67,7 @@ export function ClientForm({ initialData, onSubmitSuccess }: ClientFormProps) {
       description: `Le client ${data.name} a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
     });
     router.push("/clients");
+    router.refresh(); // Important to update the client list if data changed
   }
 
   return (

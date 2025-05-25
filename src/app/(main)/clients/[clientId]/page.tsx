@@ -1,17 +1,46 @@
+
+"use client";
+
+import { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data';
+import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES, deleteClient } from '@/lib/mock-data';
+import type { Client, BillOfLading } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign } from 'lucide-react';
+import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
 import Image from 'next/image';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 export default function ClientDetailPage({ params }: { params: { clientId: string } }) {
-  const client = MOCK_CLIENTS.find(c => c.id === params.clientId);
-  const clientBLs = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === params.clientId);
+  const [client, setClient] = useState<Client | null>(null);
+  const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]);
+  const { toast } = useToast();
+  const router = useRouter();
+
+  useEffect(() => {
+    const foundClient = MOCK_CLIENTS.find(c => c.id === params.clientId);
+    setClient(foundClient || null);
+    if (foundClient) {
+      const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === params.clientId);
+      setClientBLs(bls);
+    }
+  }, [params.clientId]);
+
 
   if (!client) {
     return (
@@ -25,6 +54,16 @@ export default function ClientDetailPage({ params }: { params: { clientId: strin
       </div>
     );
   }
+
+  const handleDeleteClient = () => {
+    deleteClient(client.id);
+    toast({
+      title: "Client Supprimé",
+      description: `Le client ${client.name} et ses BLs associés ont été supprimés.`,
+    });
+    router.push('/clients');
+    router.refresh(); // Ensure lists reflect deletion
+  };
 
   const calculateBlBalanceAndStatus = (blId: string) => {
     const bl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
@@ -42,16 +81,39 @@ export default function ClientDetailPage({ params }: { params: { clientId: strin
         title={client.name}
         description={`Détails et historique pour ${client.name}`}
         actions={
-          <>
+          <div className="flex flex-wrap gap-2">
             <Link href="/clients" passHref>
               <Button variant="outline">
                 <ArrowLeft className="mr-2 h-4 w-4" /> Retour
               </Button>
             </Link>
-            <Button variant="outline" disabled> {/* Add edit functionality later */}
-              <Edit className="mr-2 h-4 w-4" /> Modifier (Admin)
-            </Button>
-          </>
+            <Link href={`/clients/${client.id}/edit`} passHref>
+              <Button variant="outline">
+                <Edit className="mr-2 h-4 w-4" /> Modifier
+              </Button>
+            </Link>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">
+                  <Trash2 className="mr-2 h-4 w-4" /> Supprimer
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Êtes-vous sûr de vouloir supprimer ce client ?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Cette action est irréversible et supprimera le client "{client.name}" ainsi que tous ses connaissements (BLs) et dépenses associés.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteClient}>
+                    Confirmer la Suppression
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         }
       />
       <div className="grid gap-6 lg:grid-cols-3">

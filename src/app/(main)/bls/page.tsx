@@ -1,4 +1,7 @@
 
+"use client";
+
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -7,10 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_EXPENSES } from '@/lib/mock-data';
 import type { BLStatus } from '@/lib/types';
-import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 const getStatusBadgeStyle = (status: BLStatus, type: 'badge' | 'text' | 'icon') => {
   switch (status) {
@@ -36,14 +40,23 @@ const StatusIcon = ({ status }: { status: BLStatus }) => {
   return null;
 };
 
-
 export default function BillsOfLadingPage() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [bls, setBls] = useState(MOCK_BILLS_OF_LADING);
+
+  useEffect(() => {
+    // In a real app, data would be fetched here. For mock, it's already available.
+    // This effect can be used if MOCK_BILLS_OF_LADING could change globally by other components
+    // and this page needs to reflect that. For simple mock, direct usage is okay.
+    setBls(MOCK_BILLS_OF_LADING);
+  }, []); // Re-run if MOCK_BILLS_OF_LADING changes, if it were a state from context or prop
+
   const getClientName = (clientId: string) => {
     return MOCK_CLIENTS.find(c => c.id === clientId)?.name || 'N/A';
   };
 
   const calculateBlDetails = (blId: string) => {
-    const bl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
+    const bl = bls.find(b => b.id === blId);
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
     
     const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === blId);
@@ -52,6 +65,15 @@ export default function BillsOfLadingPage() {
     const profitStatus = balance >= 0 ? 'Bénéfice' : 'Perte';
     return { totalExpenses, balance, profitStatus, profit: balance >= 0 };
   };
+
+  const filteredBLs = useMemo(() => {
+    if (!searchTerm) return bls;
+    return bls.filter(bl =>
+      bl.blNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getClientName(bl.clientId).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      bl.status.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [bls, searchTerm]);
 
   return (
     <>
@@ -66,6 +88,23 @@ export default function BillsOfLadingPage() {
           </Link>
         }
       />
+      <Card className="shadow-lg mb-6">
+        <CardHeader>
+          <CardTitle>Filtrer les Connaissements</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <Search className="h-5 w-5 text-muted-foreground" />
+            <Input 
+              placeholder="Rechercher par N° BL, client, statut..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="max-w-sm"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>Liste des Connaissements</CardTitle>
@@ -89,7 +128,7 @@ export default function BillsOfLadingPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {MOCK_BILLS_OF_LADING.map((bl) => {
+              {filteredBLs.map((bl) => {
                 const { totalExpenses, balance, profitStatus, profit } = calculateBlDetails(bl.id);
                 return (
                   <TableRow key={bl.id}>
@@ -122,8 +161,10 @@ export default function BillsOfLadingPage() {
               })}
             </TableBody>
           </Table>
-           {MOCK_BILLS_OF_LADING.length === 0 && (
-            <p className="text-center text-muted-foreground py-4">Aucun BL trouvé.</p>
+           {filteredBLs.length === 0 && (
+            <p className="text-center text-muted-foreground py-4">
+              {searchTerm ? "Aucun BL ne correspond à votre recherche." : "Aucun BL trouvé."}
+            </p>
           )}
         </CardContent>
       </Card>

@@ -11,13 +11,19 @@ export interface Client {
   blIds: string[];
 }
 
+export interface WorkType {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface BillOfLading {
   id: string;
   blNumber: string;
   clientId: string;
   allocatedAmount: number;
-  serviceTypes: string[];
-  description: string; // For context, can still be useful
+  workTypeId: string; // Changed from serviceTypes
+  description: string;
   categories: string[]; // Manual categories
   status: BLStatus;
   createdAt: string; // ISO Date string
@@ -32,7 +38,6 @@ export interface Expense {
   employeeId: string; // Mocked, in a real app this would be a user ID
 }
 
-// For mock user data
 export interface User {
   id: string;
   name: string;

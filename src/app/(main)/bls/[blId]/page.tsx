@@ -5,17 +5,25 @@ import { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_EXPENSES as INITIAL_MOCK_EXPENSES, MOCK_USERS } from '@/lib/mock-data';
-import type { BillOfLading, Expense, Client, User, BLStatus } from '@/lib/types';
+import { 
+    MOCK_BILLS_OF_LADING, 
+    MOCK_CLIENTS, 
+    MOCK_EXPENSES as INITIAL_MOCK_EXPENSES, 
+    MOCK_USERS,
+    MOCK_WORK_TYPES,
+    deleteBL,
+    deleteExpense as deleteGlobalExpense,
+    addExpense as addGlobalExpense
+} from '@/lib/mock-data';
+import type { BillOfLading, Expense, Client, User, BLStatus, WorkType } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIcon, Tag, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIcon, Tag, CheckCircle, AlertCircle, Clock, Briefcase } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ExpenseForm } from '@/components/expense/expense-form';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,13 +35,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Input } from '@/components/ui/input';
+import { Input } from '@/components/ui/input'; // Kept for potential use, e.g. reason for deletion
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 const getStatusBadgeVariant = (status: BLStatus) => {
-  if (status === 'terminé') return 'default'; // Greenish or neutral success
-  if (status === 'en cours') return 'secondary'; // Bluish or yellowish for in progress
-  if (status === 'inactif') return 'outline'; // Grayish for inactive
+  if (status === 'terminé') return 'default';
+  if (status === 'en cours') return 'secondary';
+  if (status === 'inactif') return 'outline';
   return 'default';
 };
 
@@ -47,8 +57,11 @@ const getStatusIcon = (status: BLStatus) => {
 export default function BLDetailPage({ params }: { params: { blId: string } }) {
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
+  const [workType, setWorkType] = useState<WorkType | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isMounted, setIsMounted] = useState(false);
+  const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
     const foundBl = MOCK_BILLS_OF_LADING.find(b => b.id === params.blId);
@@ -56,6 +69,8 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
       setBl(foundBl);
       const foundClient = MOCK_CLIENTS.find(c => c.id === foundBl.clientId);
       setClient(foundClient || null);
+      const foundWorkType = MOCK_WORK_TYPES.find(wt => wt.id === foundBl.workTypeId);
+      setWorkType(foundWorkType || null);
       const blExpenses = INITIAL_MOCK_EXPENSES.filter(exp => exp.blId === params.blId);
       setExpenses(blExpenses);
     }
@@ -75,9 +90,28 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
   }, [bl, expenses]);
 
   const handleExpenseAdded = (newExpense: Expense) => {
+    addGlobalExpense(newExpense); // Update mock data source
     setExpenses(prevExpenses => [...prevExpenses, newExpense]);
-    // In a real app, MOCK_EXPENSES would be updated globally or via API
-    INITIAL_MOCK_EXPENSES.push(newExpense);
+  };
+
+  const handleDeleteExpense = (expenseId: string) => {
+    deleteGlobalExpense(expenseId); // Update mock data source
+    setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
+    toast({
+      title: "Dépense Supprimée",
+      description: "La dépense a été supprimée avec succès.",
+    });
+  };
+  
+  const handleDeleteBL = () => {
+    if (!bl) return;
+    deleteBL(bl.id);
+    toast({
+      title: "BL Supprimé",
+      description: `Le BL N° ${bl.blNumber} a été supprimé.`,
+    });
+    router.push('/bls');
+    router.refresh(); // Make sure lists elsewhere are updated
   };
 
   const getEmployeeName = (employeeId: string) => MOCK_USERS.find(u => u.id === employeeId)?.name || 'Inconnu';
@@ -105,16 +139,39 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
         title={`BL N°: ${bl.blNumber}`}
         description={`Détails du connaissement pour ${client?.name || 'client inconnu'}`}
         actions={
-          <>
+          <div className="flex flex-wrap gap-2">
             <Link href="/bls" passHref>
               <Button variant="outline">
                 <ArrowLeft className="mr-2 h-4 w-4" /> Retour
               </Button>
             </Link>
-            <Button variant="outline" disabled> {/* Admin only */}
-              <Edit className="mr-2 h-4 w-4" /> Modifier
-            </Button>
-          </>
+            <Link href={`/bls/${bl.id}/edit`} passHref>
+              <Button variant="outline">
+                <Edit className="mr-2 h-4 w-4" /> Modifier
+              </Button>
+            </Link>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">
+                  <Trash2 className="mr-2 h-4 w-4" /> Supprimer BL
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Êtes-vous sûr de vouloir supprimer ce BL ?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Cette action est irréversible et supprimera le BL N° {bl.blNumber} ainsi que toutes ses dépenses associées.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteBL}>
+                    Confirmer la Suppression
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         }
       />
 
@@ -168,11 +225,9 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
                   {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
                 </p>
               </div>
-              <div className="md:col-span-2">
-                <p className="text-sm text-muted-foreground">Types de Service</p>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {bl.serviceTypes.map(st => <Badge key={st} variant="secondary">{st}</Badge>)}
-                </div>
+              <div>
+                <p className="text-sm text-muted-foreground flex items-center"><Briefcase className="mr-2 h-4 w-4"/>Type de Travail</p>
+                <p className="font-semibold">{workType?.name || 'N/A'}</p>
               </div>
                <div className="md:col-span-2">
                 <p className="text-sm text-muted-foreground flex items-center"><Tag className="mr-2 h-4 w-4"/>Catégories Manuelles</p>
@@ -206,7 +261,7 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
                       <TableHead>Date</TableHead>
                       <TableHead>Employé</TableHead>
                       <TableHead className="text-right">Montant</TableHead>
-                      <TableHead className="text-right">Actions</TableHead> {/* Admin only */}
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -225,15 +280,16 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Demande de Suppression</AlertDialogTitle>
+                                <AlertDialogTitle>Supprimer cette dépense ?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Veuillez fournir une raison pour la suppression de cette dépense. Cette action nécessite l'approbation d'un administrateur.
+                                  L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
-                              <Input type="text" placeholder="Raison de la suppression..." className="my-2"/>
+                              {/* Input for reason can be re-added if admin approval flow is built later */}
+                              {/* <Input type="text" placeholder="Raison de la suppression..." className="my-2"/> */}
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                <AlertDialogAction>Soumettre la Demande</AlertDialogAction>
+                                <AlertDialogAction onClick={() => handleDeleteExpense(exp.id)}>Confirmer</AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
