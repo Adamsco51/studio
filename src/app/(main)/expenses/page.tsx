@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { MOCK_EXPENSES, MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_USERS, deleteExpense as deleteGlobalExpense } from '@/lib/mock-data';
 import type { Expense, BillOfLading, Client, User } from '@/lib/types';
-import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIcon, CalendarIcon, FilterX } from 'lucide-react';
+import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIcon, CalendarIcon, FilterX, Eye, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -249,7 +249,7 @@ export default function ExpensesPage() {
                   <TableCell className="font-medium">{exp.label}</TableCell>
                   <TableCell>{format(new Date(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
                   <TableCell>
-                    {exp.blNumber ? (
+                    {exp.blNumber && exp.blId ? (
                       <Link href={`/bls/${exp.blId}`} className="text-primary hover:underline flex items-center gap-1">
                         <FileText className="h-4 w-4" /> {exp.blNumber}
                       </Link>
@@ -261,25 +261,37 @@ export default function ExpensesPage() {
                   </TableCell>
                   <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
                   <TableCell className="text-right">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer cette dépense ?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteExpense(exp.id)}>Confirmer</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <div className="flex items-center justify-end space-x-1">
+                      {exp.blId && (
+                        <Link href={`/bls/${exp.blId}`} passHref>
+                          <Button variant="ghost" size="sm" title="Voir BL">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      )}
+                      <Button variant="ghost" size="sm" title="Modifier Dépense" disabled> {/* Edit expense form not yet implemented */}
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" title="Supprimer Dépense">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Supprimer cette dépense ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteExpense(exp.id)}>Confirmer</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -295,5 +307,3 @@ export default function ExpensesPage() {
     </>
   );
 }
-
-    
