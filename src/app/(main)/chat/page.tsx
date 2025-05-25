@@ -39,8 +39,8 @@ const todoItemSchema = z.object({
 type TodoItemFormValues = z.infer<typeof todoItemSchema>;
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_CHAT_MESSAGES);
-  const [todos, setTodos] = useState<TodoItem[]>(MOCK_TODO_ITEMS);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const { toast } = useToast();
 
   const chatForm = useForm<ChatMessageFormValues>({
@@ -55,6 +55,13 @@ export default function ChatPage() {
       assignedToUserId: undefined, // Use undefined for optional field
     },
   });
+
+  // Sort initial messages and todos on client mount
+  useEffect(() => {
+    setMessages(MOCK_CHAT_MESSAGES.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
+    setTodos(MOCK_TODO_ITEMS.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+  }, []);
+
 
   const handleSendMessage = (data: ChatMessageFormValues) => {
     const newMessage = addChatMessage(data.text);
@@ -85,13 +92,6 @@ export default function ChatPage() {
     if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
     return (names[0][0] + names[names.length - 1][0]).toUpperCase();
   }
-
-  // Sort initial messages and todos
-  useEffect(() => {
-    setMessages(MOCK_CHAT_MESSAGES.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
-    setTodos(MOCK_TODO_ITEMS.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-  }, []);
-
 
   return (
     <>
