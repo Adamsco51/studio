@@ -23,11 +23,31 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
+
+// Simulate the currently logged-in user
+// To test admin flow, set currentUser to MOCK_USERS[1] (Bob Admin)
+// To test non-admin flow, set currentUser to MOCK_USERS[0] (Alice Employee)
+const currentUser = MOCK_USERS.find(u => u.id === 'user-1')!; // Alice Employee (non-admin)
+// const currentUser = MOCK_USERS.find(u => u.id === 'user-2')!; // Bob Admin
+const isAdmin = currentUser.role === 'admin';
 
 export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = React.use(paramsPromise);
@@ -37,6 +57,10 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const router = useRouter();
+
+  const [showEditRequestDialog, setShowEditRequestDialog] = useState(false);
+  const [editRequestReason, setEditRequestReason] = useState('');
+  const [deleteClientReason, setDeleteClientReason] = useState('');
 
   useEffect(() => {
     if (!clientId) return;
@@ -69,6 +93,46 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     return user?.name || 'Inconnu';
   };
 
+  const handleDeleteClient = () => {
+    if (!client) return;
+    deleteClient(client.id);
+    toast({
+      title: "Client Supprimé",
+      description: `Le client ${client.name} et ses BLs associés ont été supprimés.`,
+    });
+    router.push('/clients');
+    router.refresh();
+  };
+
+  const handleSubmitEditRequest = () => {
+    if (!editRequestReason.trim()) {
+      toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
+      return;
+    }
+    console.log(`Demande de modification pour Client ${client?.name} par ${currentUser.name}. Raison: ${editRequestReason}`);
+    toast({
+      title: "Demande Envoyée (Simulation)",
+      description: "Votre demande de modification du client a été envoyée à l'administrateur pour approbation.",
+    });
+    setEditRequestReason('');
+    setShowEditRequestDialog(false);
+  };
+
+  const handleSubmitDeleteClientRequest = () => {
+    if (!deleteClientReason.trim()) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
+        return;
+    }
+    console.log(`Demande de suppression pour Client ${client?.name} par ${currentUser.name}. Raison: ${deleteClientReason}`);
+    toast({
+        title: "Demande Envoyée (Simulation)",
+        description: "Votre demande de suppression de client a été envoyée à l'administrateur pour approbation.",
+    });
+    setDeleteClientReason('');
+    // AlertDialog will close itself on action
+  };
+
+
   if (!client) {
     return (
       <div className="text-center py-10">
@@ -81,16 +145,6 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       </div>
     );
   }
-
-  const handleDeleteClient = () => {
-    deleteClient(client.id);
-    toast({
-      title: "Client Supprimé",
-      description: `Le client ${client.name} et ses BLs associés ont été supprimés.`,
-    });
-    router.push('/clients');
-    router.refresh();
-  };
 
   const calculateBlBalanceAndStatus = (blId: string) => {
     const bl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
@@ -113,28 +167,80 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                 <ArrowLeft className="mr-2 h-4 w-4" /> Retour
               </Button>
             </Link>
-            <Link href={`/clients/${client.id}/edit`} passHref>
-              <Button variant="outline">
-                <Edit className="mr-2 h-4 w-4" /> Modifier
-              </Button>
-            </Link>
+
+            {isAdmin ? (
+              <Link href={`/clients/${client.id}/edit`} passHref>
+                <Button variant="outline">
+                  <Edit className="mr-2 h-4 w-4" /> Modifier
+                </Button>
+              </Link>
+            ) : (
+              <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" onClick={() => setEditRequestReason('')}>
+                    <Edit className="mr-2 h-4 w-4" /> Modifier
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Demande de Modification du Client</DialogTitle>
+                    <DialogDescription>
+                      Veuillez expliquer pourquoi vous souhaitez modifier ce client. Votre demande sera examinée par un administrateur.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 py-2">
+                    <Label htmlFor="editReasonClient">Raison de la demande :</Label>
+                    <Textarea
+                      id="editReasonClient"
+                      placeholder="Ex: Correction de l'adresse email, mise à jour du contact..."
+                      value={editRequestReason}
+                      onChange={(e) => setEditRequestReason(e.target.value)}
+                      className="min-h-[100px]"
+                    />
+                  </div>
+                  <DialogFooter>
+                     <DialogClose asChild>
+                       <Button type="button" variant="outline">Annuler</Button>
+                    </DialogClose>
+                    <Button type="button" onClick={handleSubmitEditRequest}>Soumettre la Demande</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive">
+                <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteClientReason(''); }}>
                   <Trash2 className="mr-2 h-4 w-4" /> Supprimer
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Êtes-vous sûr de vouloir supprimer ce client ?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Cette action est irréversible et supprimera le client "{client.name}" ainsi que tous ses connaissements (BLs) et dépenses associés.
-                  </AlertDialogDescription>
+                  <AlertDialogTitle>
+                     {isAdmin ? "Êtes-vous sûr de vouloir supprimer ce client ?" : "Demande de Suppression de Client"}
+                  </AlertDialogTitle>
+                  {isAdmin ? (
+                    <AlertDialogDescription>
+                      Cette action est irréversible et supprimera le client "{client.name}" ainsi que tous ses connaissements (BLs) et dépenses associés.
+                    </AlertDialogDescription>
+                  ) : (
+                     <div className="space-y-2 py-2 text-left">
+                      <Label htmlFor="deleteClientReason">Raison de la demande de suppression :</Label>
+                      <Textarea
+                        id="deleteClientReason"
+                        placeholder="Expliquez pourquoi vous souhaitez supprimer ce client..."
+                        value={deleteClientReason}
+                        onChange={(e) => setDeleteClientReason(e.target.value)}
+                        className="min-h-[100px]"
+                      />
+                       <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+                    </div>
+                  )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Annuler</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteClient}>
-                    Confirmer la Suppression
+                  <AlertDialogCancel onClick={() => setDeleteClientReason('')}>Annuler</AlertDialogCancel>
+                  <AlertDialogAction onClick={isAdmin ? handleDeleteClient : handleSubmitDeleteClientRequest}>
+                    {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -295,3 +401,5 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     </>
   );
 }
+
+    

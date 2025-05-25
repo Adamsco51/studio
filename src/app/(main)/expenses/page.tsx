@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { MOCK_EXPENSES, MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_USERS, deleteExpense as deleteGlobalExpense } from '@/lib/mock-data';
 import type { Expense, BillOfLading, Client, User } from '@/lib/types';
-import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIcon, CalendarIcon, FilterX, Eye, Edit } from 'lucide-react';
+import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit } from 'lucide-react'; // Renamed User to UserIconLucide to avoid conflict
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -25,12 +25,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Label } from '@/components/ui/label'; // Added Label
+import { Textarea } from '@/components/ui/textarea'; // Added Textarea
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+
+// Simulate the currently logged-in user
+const currentUser = MOCK_USERS.find(u => u.id === 'user-1')!; // Alice Employee (non-admin)
+// const currentUser = MOCK_USERS.find(u => u.id === 'user-2')!; // Bob Admin
+const isAdmin = currentUser.role === 'admin';
+
 
 interface ExpenseWithDetails extends Expense {
   blNumber?: string;
@@ -50,6 +58,10 @@ export default function ExpensesPage() {
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
+  const [deletingExpense, setDeletingExpense] = useState<ExpenseWithDetails | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+
+
   useEffect(() => {
     setAllBls(MOCK_BILLS_OF_LADING);
     setAllClients(MOCK_CLIENTS);
@@ -64,9 +76,9 @@ export default function ExpensesPage() {
         clientName: client?.name,
         employeeName: employee?.name,
       };
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort by most recent
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
     setExpenses(detailedExpenses);
-  }, []); // Re-run if global MOCK data changes in a real app
+  }, []); 
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -109,9 +121,8 @@ export default function ExpensesPage() {
     );
   }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate]);
 
-  const handleDeleteExpense = (expenseId: string) => {
+  const handleDeleteExpenseDirectly = (expenseId: string) => {
     deleteGlobalExpense(expenseId);
-    // Re-calculate detailed expenses after deletion to reflect changes
     const updatedDetailedExpenses = MOCK_EXPENSES.map(exp => {
         const bl = MOCK_BILLS_OF_LADING.find(b => b.id === exp.blId);
         const client = bl ? MOCK_CLIENTS.find(c => c.id === bl.clientId) : undefined;
@@ -128,7 +139,20 @@ export default function ExpensesPage() {
       title: "Dépense Supprimée",
       description: "La dépense a été supprimée avec succès.",
     });
-    // router.refresh(); // Not strictly needed if local state updates correctly
+  };
+
+  const handleSubmitDeleteRequest = () => {
+    if (!deletingExpense || !deleteReason.trim()) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression de la dépense.", variant: "destructive" });
+        return;
+    }
+    console.log(`Demande de suppression pour la dépense "${deletingExpense.label}" (BL ${deletingExpense.blNumber}) par ${currentUser.name}. Raison: ${deleteReason}`);
+    toast({
+        title: "Demande Envoyée (Simulation)",
+        description: `Votre demande de suppression pour la dépense "${deletingExpense.label}" a été envoyée.`,
+    });
+    setDeleteReason('');
+    setDeletingExpense(null);
   };
 
   return (
@@ -256,8 +280,8 @@ export default function ExpensesPage() {
                     ) : 'N/A'}
                   </TableCell>
                   <TableCell>{exp.clientName || 'N/A'}</TableCell>
-                  <TableCell className="flex items-center gap-1 pt-4"> {/* Adjusted padding for alignment */}
-                    <UserIcon className="h-4 w-4 text-muted-foreground" /> {exp.employeeName || 'N/A'}
+                  <TableCell className="flex items-center gap-1 pt-4"> 
+                    <UserIconLucide className="h-4 w-4 text-muted-foreground" /> {exp.employeeName || 'N/A'}
                   </TableCell>
                   <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
                   <TableCell className="text-right">
@@ -269,25 +293,53 @@ export default function ExpensesPage() {
                           </Button>
                         </Link>
                       )}
-                      <Button variant="ghost" size="sm" title="Modifier Dépense" disabled> {/* Edit expense form not yet implemented */}
+                      <Button variant="ghost" size="sm" title="Modifier Dépense" disabled> 
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <AlertDialog>
+                      <AlertDialog open={deletingExpense?.id === exp.id} onOpenChange={(isOpen) => {
+                          if(!isOpen) setDeletingExpense(null);
+                          setDeleteReason('');
+                      }}>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" title="Supprimer Dépense">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-muted-foreground hover:text-destructive" 
+                            title="Supprimer Dépense"
+                            onClick={() => {setDeletingExpense(exp); setDeleteReason('');}}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Supprimer cette dépense ?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
-                            </AlertDialogDescription>
+                            <AlertDialogTitle>
+                                {isAdmin ? "Supprimer cette dépense ?" : `Demande de Suppression: ${exp.label}`}
+                            </AlertDialogTitle>
+                            {isAdmin ? (
+                                <AlertDialogDescription>
+                                L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                                </AlertDialogDescription>
+                            ) : (
+                                <div className="space-y-2 py-2 text-left">
+                                    <p className="text-sm text-muted-foreground">Montant : {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                                    <Label htmlFor={`deleteExpenseReason-${exp.id}`}>Raison de la demande :</Label>
+                                    <Textarea
+                                        id={`deleteExpenseReason-${exp.id}`}
+                                        placeholder="Expliquez pourquoi vous souhaitez supprimer cette dépense..."
+                                        value={deleteReason}
+                                        onChange={(e) => setDeleteReason(e.target.value)}
+                                        className="min-h-[100px]"
+                                    />
+                                    <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+                                </div>
+                            )}
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteExpense(exp.id)}>Confirmer</AlertDialogAction>
+                            <AlertDialogCancel onClick={() => {setDeletingExpense(null); setDeleteReason('');}}>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={isAdmin ? () => handleDeleteExpenseDirectly(exp.id) : handleSubmitDeleteRequest}>
+                              {isAdmin ? "Confirmer" : "Soumettre la Demande"}
+                            </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -307,3 +359,5 @@ export default function ExpensesPage() {
     </>
   );
 }
+
+    
