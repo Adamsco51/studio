@@ -1,13 +1,15 @@
 
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, FileText, DollarSign, Activity, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma } from 'lucide-react';
+import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, PieChart as PieChartIcon } from 'lucide-react';
 import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data';
-import type { BillOfLading, Client } from '@/lib/types';
+import type { BillOfLading } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import type { ChartConfig } from "@/components/ui/chart";
+import ChartsLoader from '@/components/dashboard/charts-loader';
+
 
 export default function DashboardPage() {
   const totalClients = MOCK_CLIENTS.length;
@@ -65,6 +67,31 @@ export default function DashboardPage() {
 
   const { totalBls, profitableBls, lossMakingBls } = blProfitabilityStats();
 
+  const blStatusChartData = [
+    { status: 'en cours', count: blsByStatus['en cours'] || 0, fill: 'var(--color-en_cours)' },
+    { status: 'terminé', count: blsByStatus['terminé'] || 0, fill: 'var(--color-terminé)' },
+    { status: 'inactif', count: blsByStatus['inactif'] || 0, fill: 'var(--color-inactif)' },
+  ].filter(d => d.count > 0);
+
+  const blStatusChartConfig = {
+    'en cours': {
+      label: 'En Cours',
+      color: 'hsl(var(--chart-1))', 
+    },
+    terminé: {
+      label: 'Terminés',
+      color: 'hsl(var(--chart-2))', 
+    },
+    inactif: {
+      label: 'Inactifs',
+      color: 'hsl(var(--chart-3))', 
+    },
+    count: { 
+      label: 'Nombre de BLs',
+    }
+  } satisfies ChartConfig;
+
+
   return (
     <>
       <PageHeader title="Tableau de Bord" description="Vue d'ensemble de vos opérations et performances." />
@@ -77,13 +104,12 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-              {/* <p className="text-xs text-muted-foreground mt-1">+20.1% from last month</p> */}
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2">
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -133,7 +159,7 @@ export default function DashboardPage() {
           <CardContent>
             {clientsWithOpenBLs.length > 0 ? (
               <ul className="space-y-2">
-                {clientsWithOpenBLs.slice(0, 5).map(client => ( // Show top 5
+                {clientsWithOpenBLs.slice(0, 5).map(client => ( 
                   <li key={client.id} className="flex justify-between items-center p-2 bg-secondary/30 rounded-md text-sm">
                     <span>{client.name}</span>
                     <Link href={`/clients/${client.id}`} passHref>
@@ -153,6 +179,12 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        
+        <ChartsLoader 
+          blStatusChartData={blStatusChartData} 
+          blStatusChartConfig={blStatusChartConfig} 
+        />
+
       </div>
       
       <Card className="mt-8 shadow-lg">
