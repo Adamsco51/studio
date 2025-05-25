@@ -1,7 +1,7 @@
 
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, PieChart as PieChartIcon } from 'lucide-react';
+import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity } from 'lucide-react';
 import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data';
 import type { BillOfLading } from '@/lib/types';
 import Link from 'next/link';
@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { ChartConfig } from "@/components/ui/chart";
 import ChartsLoader from '@/components/dashboard/charts-loader';
+import { format, parseISO } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 
 export default function DashboardPage() {
@@ -67,6 +69,7 @@ export default function DashboardPage() {
 
   const { totalBls, profitableBls, lossMakingBls } = blProfitabilityStats();
 
+  // Data for BL Status Pie Chart
   const blStatusChartData = [
     { status: 'en cours', count: blsByStatus['en cours'] || 0, fill: 'var(--color-en_cours)' },
     { status: 'terminé', count: blsByStatus['terminé'] || 0, fill: 'var(--color-terminé)' },
@@ -91,6 +94,34 @@ export default function DashboardPage() {
     }
   } satisfies ChartConfig;
 
+  // Data for Monthly Expenses Line Chart
+  const expensesByMonthAggregated: Record<string, number> = {};
+  MOCK_EXPENSES.forEach(expense => {
+    const monthKey = format(parseISO(expense.date), 'yyyy-MM'); // Key for sorting
+    expensesByMonthAggregated[monthKey] = (expensesByMonthAggregated[monthKey] || 0) + expense.amount;
+  });
+
+  const sortedMonthKeys = Object.keys(expensesByMonthAggregated).sort();
+
+  const monthlyExpensesChartData = sortedMonthKeys.map(monthKey => {
+    const [year, monthNum] = monthKey.split('-');
+    const dateForLabel = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+    return {
+      month: format(dateForLabel, 'MMM yy', { locale: fr }), // Short month format for X-axis
+      totalExpenses: expensesByMonthAggregated[monthKey],
+    };
+  });
+  
+  const monthlyExpensesChartConfig = {
+    totalExpenses: {
+      label: "Dépenses Totales",
+      color: "hsl(var(--chart-4))", // Using a different chart color variable
+    },
+    month: {
+      label: "Mois", // Not directly used by line chart data, but good for consistency
+    }
+  } satisfies ChartConfig;
+
 
   return (
     <>
@@ -109,7 +140,16 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2"> {/* Adjusted grid for 2 charts side-by-side on lg */}
+        <ChartsLoader 
+          blStatusChartData={blStatusChartData} 
+          blStatusChartConfig={blStatusChartConfig} 
+          monthlyExpensesChartData={monthlyExpensesChartData}
+          monthlyExpensesChartConfig={monthlyExpensesChartConfig}
+        />
+      </div>
+      
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2"> {/* New row for other cards */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -179,12 +219,6 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
-        
-        <ChartsLoader 
-          blStatusChartData={blStatusChartData} 
-          blStatusChartConfig={blStatusChartConfig} 
-        />
-
       </div>
       
       <Card className="mt-8 shadow-lg">
