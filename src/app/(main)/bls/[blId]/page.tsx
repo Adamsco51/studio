@@ -35,7 +35,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -54,8 +66,16 @@ const getStatusIcon = (status: BLStatus) => {
   return null;
 }
 
+// Simulate the currently logged-in user
+// To test admin flow, set currentUser to MOCK_USERS[1] (Bob Admin)
+// To test non-admin flow, set currentUser to MOCK_USERS[0] (Alice Employee)
+const currentUser = MOCK_USERS.find(u => u.id === 'user-1')!; // Alice Employee (non-admin)
+// const currentUser = MOCK_USERS.find(u => u.id === 'user-2')!; // Bob Admin
+const isAdmin = currentUser.role === 'admin';
+
+
 export default function BLDetailPage({ params: paramsPromise }: { params: Promise<{ blId: string }> }) {
-  const { blId } = React.use(paramsPromise); // Use React.use to resolve params
+  const { blId } = React.use(paramsPromise); 
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
@@ -65,8 +85,16 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   const { toast } = useToast();
   const router = useRouter();
 
+  // State for request modals (non-admin)
+  const [showEditRequestDialog, setShowEditRequestDialog] = useState(false);
+  const [editRequestReason, setEditRequestReason] = useState('');
+  const [deleteBlReason, setDeleteBlReason] = useState('');
+  const [deleteExpenseReason, setDeleteExpenseReason] = useState('');
+  const [requestingDeleteExpense, setRequestingDeleteExpense] = useState<Expense | null>(null);
+
+
   useEffect(() => {
-    if (!blId) return; // Ensure blId is resolved before proceeding
+    if (!blId) return; 
     const foundBl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
     if (foundBl) {
       setBl(foundBl);
@@ -97,12 +125,12 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   }, [bl, expenses]);
 
   const handleExpenseAdded = (newExpense: Expense) => {
-    addGlobalExpense(newExpense); // Update mock data source
+    addGlobalExpense(newExpense); 
     setExpenses(prevExpenses => [...prevExpenses, newExpense]);
   };
 
   const handleDeleteExpense = (expenseId: string) => {
-    deleteGlobalExpense(expenseId); // Update mock data source
+    deleteGlobalExpense(expenseId); 
     setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
     toast({
       title: "Dépense Supprimée",
@@ -120,6 +148,51 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     router.push('/bls');
     router.refresh(); 
   };
+
+  const handleSubmitEditRequest = () => {
+    if (!editRequestReason.trim()) {
+      toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
+      return;
+    }
+    console.log(`Demande de modification pour BL ${bl?.blNumber} par ${currentUser.name}. Raison: ${editRequestReason}`);
+    toast({
+      title: "Demande Envoyée (Simulation)",
+      description: "Votre demande de modification a été envoyée à l'administrateur pour approbation.",
+    });
+    setEditRequestReason('');
+    setShowEditRequestDialog(false);
+  };
+
+  const handleSubmitDeleteBlRequest = () => {
+    if (!deleteBlReason.trim()) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
+        return;
+    }
+    console.log(`Demande de suppression pour BL ${bl?.blNumber} par ${currentUser.name}. Raison: ${deleteBlReason}`);
+    toast({
+        title: "Demande Envoyée (Simulation)",
+        description: "Votre demande de suppression de BL a été envoyée à l'administrateur pour approbation.",
+    });
+    setDeleteBlReason('');
+    // AlertDialog will close itself on action
+  };
+
+  const handleSubmitDeleteExpenseRequest = () => {
+    if (!requestingDeleteExpense) return;
+    if (!deleteExpenseReason.trim()) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression de la dépense.", variant: "destructive" });
+        return;
+    }
+    console.log(`Demande de suppression pour la dépense "${requestingDeleteExpense.label}" (BL ${bl?.blNumber}) par ${currentUser.name}. Raison: ${deleteExpenseReason}`);
+    toast({
+        title: "Demande Envoyée (Simulation)",
+        description: `Votre demande de suppression pour la dépense "${requestingDeleteExpense.label}" a été envoyée.`,
+    });
+    setDeleteExpenseReason('');
+    setRequestingDeleteExpense(null);
+     // AlertDialog will close itself on action
+  };
+
 
   const getEmployeeName = (employeeId: string) => MOCK_USERS.find(u => u.id === employeeId)?.name || 'Inconnu';
 
@@ -152,28 +225,80 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                 <ArrowLeft className="mr-2 h-4 w-4" /> Retour
               </Button>
             </Link>
-            <Link href={`/bls/${bl.id}/edit`} passHref>
-              <Button variant="outline">
-                <Edit className="mr-2 h-4 w-4" /> Modifier
-              </Button>
-            </Link>
+
+            {isAdmin ? (
+              <Link href={`/bls/${bl.id}/edit`} passHref>
+                <Button variant="outline">
+                  <Edit className="mr-2 h-4 w-4" /> Modifier
+                </Button>
+              </Link>
+            ) : (
+              <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" onClick={() => setEditRequestReason('')}>
+                    <Edit className="mr-2 h-4 w-4" /> Modifier
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Demande de Modification du BL</DialogTitle>
+                    <DialogDescription>
+                      Veuillez expliquer pourquoi vous souhaitez modifier ce BL. Votre demande sera examinée par un administrateur.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 py-2">
+                    <Label htmlFor="editReasonBl">Raison de la demande :</Label>
+                    <Textarea
+                      id="editReasonBl"
+                      placeholder="Ex: Correction du montant alloué, mise à jour de la description..."
+                      value={editRequestReason}
+                      onChange={(e) => setEditRequestReason(e.target.value)}
+                      className="min-h-[100px]"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                       <Button type="button" variant="outline">Annuler</Button>
+                    </DialogClose>
+                    <Button type="button" onClick={handleSubmitEditRequest}>Soumettre la Demande</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive">
+                <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteBlReason(''); }}>
                   <Trash2 className="mr-2 h-4 w-4" /> Supprimer BL
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Êtes-vous sûr de vouloir supprimer ce BL ?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Cette action est irréversible et supprimera le BL N° {bl.blNumber} ainsi que toutes ses dépenses associées.
-                  </AlertDialogDescription>
+                  <AlertDialogTitle>
+                    {isAdmin ? "Êtes-vous sûr de vouloir supprimer ce BL ?" : "Demande de Suppression de BL"}
+                  </AlertDialogTitle>
+                  {isAdmin ? (
+                    <AlertDialogDescription>
+                      Cette action est irréversible et supprimera le BL N° {bl.blNumber} ainsi que toutes ses dépenses associées.
+                    </AlertDialogDescription>
+                  ) : (
+                    <div className="space-y-2 py-2 text-left">
+                      <Label htmlFor="deleteBlReason">Raison de la demande de suppression :</Label>
+                      <Textarea
+                        id="deleteBlReason"
+                        placeholder="Expliquez pourquoi vous souhaitez supprimer ce BL..."
+                        value={deleteBlReason}
+                        onChange={(e) => setDeleteBlReason(e.target.value)}
+                        className="min-h-[100px]"
+                      />
+                       <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+                    </div>
+                  )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Annuler</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteBL}>
-                    Confirmer la Suppression
+                  <AlertDialogCancel onClick={() => setDeleteBlReason('')}>Annuler</AlertDialogCancel>
+                  <AlertDialogAction onClick={isAdmin ? handleDeleteBL : handleSubmitDeleteBlRequest}>
+                    {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -285,22 +410,57 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                         <TableCell>{getEmployeeName(exp.employeeId)}</TableCell>
                         <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
                         <TableCell className="text-right">
-                          <AlertDialog>
+                           <AlertDialog open={requestingDeleteExpense?.id === exp.id || undefined} onOpenChange={(open) => {
+                                if (!open) {
+                                    setRequestingDeleteExpense(null);
+                                    setDeleteExpenseReason('');
+                                }
+                            }}>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                    if (!isAdmin) {
+                                        setRequestingDeleteExpense(exp);
+                                        setDeleteExpenseReason('');
+                                    }
+                                    // For admin, the AlertDialog opens via its own trigger logic after this click
+                                }}
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Supprimer cette dépense ?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
-                                </AlertDialogDescription>
+                                <AlertDialogTitle>
+                                  {isAdmin ? "Supprimer cette dépense ?" : `Demande de Suppression: ${exp.label}`}
+                                </AlertDialogTitle>
+                                {isAdmin ? (
+                                  <AlertDialogDescription>
+                                    L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                                  </AlertDialogDescription>
+                                ) : (
+                                    <div className="space-y-2 py-2 text-left">
+                                        <p className="text-sm text-muted-foreground">Montant : {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                                        <Label htmlFor={`deleteExpenseReason-${exp.id}`}>Raison de la demande :</Label>
+                                        <Textarea
+                                            id={`deleteExpenseReason-${exp.id}`}
+                                            placeholder="Expliquez pourquoi vous souhaitez supprimer cette dépense..."
+                                            value={deleteExpenseReason}
+                                            onChange={(e) => setDeleteExpenseReason(e.target.value)}
+                                            className="min-h-[100px]"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+                                    </div>
+                                )}
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteExpense(exp.id)}>Confirmer</AlertDialogAction>
+                                <AlertDialogCancel onClick={() => { setRequestingDeleteExpense(null); setDeleteExpenseReason('');}}>Annuler</AlertDialogCancel>
+                                <AlertDialogAction onClick={isAdmin ? () => handleDeleteExpense(exp.id) : handleSubmitDeleteExpenseRequest}>
+                                  {isAdmin ? "Confirmer" : "Soumettre la Demande"}
+                                </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
@@ -355,3 +515,6 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     </>
   );
 }
+
+
+    
