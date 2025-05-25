@@ -99,14 +99,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <Link href="/settings" passHref legacyBehavior>
-                    <DropdownMenuItem asChild className="cursor-pointer">
-                        <a className="flex items-center w-full"> {/* Ensure anchor tag takes full width for proper styling */}
-                          <Settings className="mr-2 h-4 w-4" />
-                          <span>Mon Profil</span>
-                        </a>
-                    </DropdownMenuItem>
-                  </Link>
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href="/settings">
+                      <Settings className="h-4 w-4" /> {/* mr-2 is handled by DropdownMenuItem's default gap */}
+                      <span>Mon Profil</span>
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Déconnexion</span>
