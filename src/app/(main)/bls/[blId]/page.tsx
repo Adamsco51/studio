@@ -9,15 +9,15 @@ import {
     MOCK_BILLS_OF_LADING, 
     MOCK_CLIENTS, 
     MOCK_EXPENSES as INITIAL_MOCK_EXPENSES, 
-    MOCK_USERS,
+    MOCK_USERS, // Keep for mapping createdByUserId from MOCK_DATA to names
     MOCK_WORK_TYPES,
     deleteBL,
     deleteExpense as deleteGlobalExpense,
     addExpense as addGlobalExpense
 } from '@/lib/mock-data';
-import type { BillOfLading, Expense, Client, User, BLStatus, WorkType } from '@/lib/types';
+import type { BillOfLading, Expense, Client, User as MockUser, BLStatus, WorkType } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIcon, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2 } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIconLucide, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -51,6 +51,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/auth-context'; // Import useAuth
 
 const getStatusBadgeVariant = (status: BLStatus) => {
   if (status === 'terminé') return 'default';
@@ -66,26 +67,18 @@ const getStatusIcon = (status: BLStatus) => {
   return null;
 }
 
-// Simulate the currently logged-in user
-// To test admin flow, set currentUser to MOCK_USERS[1] (Bob Admin)
-// To test non-admin flow, set currentUser to MOCK_USERS[0] (Alice Employee)
-const currentUser = MOCK_USERS.find(u => u.id === 'user-1')!; // Alice Employee (non-admin)
-// const currentUser = MOCK_USERS.find(u => u.id === 'user-2')!; // Bob Admin
-const isAdmin = currentUser.role === 'admin';
-
-
 export default function BLDetailPage({ params: paramsPromise }: { params: Promise<{ blId: string }> }) {
   const { blId } = React.use(paramsPromise); 
+  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isMounted, setIsMounted] = useState(false);
-  const [createdByUser, setCreatedByUser] = useState<User | null>(null);
+  const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null); // For display name
   const { toast } = useToast();
   const router = useRouter();
 
-  // State for request modals (non-admin)
   const [showEditRequestDialog, setShowEditRequestDialog] = useState(false);
   const [editRequestReason, setEditRequestReason] = useState('');
   const [deleteBlReason, setDeleteBlReason] = useState('');
@@ -105,12 +98,19 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       const blExpenses = INITIAL_MOCK_EXPENSES.filter(exp => exp.blId === blId);
       setExpenses(blExpenses);
       if (foundBl.createdByUserId) {
-        const user = MOCK_USERS.find(u => u.id === foundBl.createdByUserId);
-        setCreatedByUser(user || null);
+        // Try to find in MOCK_USERS first (for older data), then fallback to current auth user's display name if IDs match
+        const mockCreator = MOCK_USERS.find(u => u.id === foundBl.createdByUserId);
+        if (mockCreator) {
+          setCreatedByUserDisplay(mockCreator.name);
+        } else if (user && user.uid === foundBl.createdByUserId) {
+          setCreatedByUserDisplay(user.displayName || user.email);
+        } else {
+            setCreatedByUserDisplay("Utilisateur Système"); // Fallback
+        }
       }
     }
     setIsMounted(true);
-  }, [blId]);
+  }, [blId, user]); // Add user to dependencies
 
   const { totalExpenses, balance, profitStatus, profit } = useMemo(() => {
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
@@ -154,7 +154,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
       return;
     }
-    console.log(`Demande de modification pour BL ${bl?.blNumber} par ${currentUser.name}. Raison: ${editRequestReason}`);
+    console.log(`Demande de modification pour BL ${bl?.blNumber} par ${user?.displayName}. Raison: ${editRequestReason}`);
     toast({
       title: "Demande Envoyée (Simulation)",
       description: "Votre demande de modification a été envoyée à l'administrateur pour approbation.",
@@ -168,13 +168,12 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour BL ${bl?.blNumber} par ${currentUser.name}. Raison: ${deleteBlReason}`);
+    console.log(`Demande de suppression pour BL ${bl?.blNumber} par ${user?.displayName}. Raison: ${deleteBlReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
         description: "Votre demande de suppression de BL a été envoyée à l'administrateur pour approbation.",
     });
     setDeleteBlReason('');
-    // AlertDialog will close itself on action
   };
 
   const handleSubmitDeleteExpenseRequest = () => {
@@ -183,20 +182,25 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression de la dépense.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour la dépense "${requestingDeleteExpense.label}" (BL ${bl?.blNumber}) par ${currentUser.name}. Raison: ${deleteExpenseReason}`);
+    console.log(`Demande de suppression pour la dépense "${requestingDeleteExpense.label}" (BL ${bl?.blNumber}) par ${user?.displayName}. Raison: ${deleteExpenseReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
         description: `Votre demande de suppression pour la dépense "${requestingDeleteExpense.label}" a été envoyée.`,
     });
     setDeleteExpenseReason('');
     setRequestingDeleteExpense(null);
-     // AlertDialog will close itself on action
+  };
+
+  // Function to get employee name (can try MOCK_USERS or use current user's display name if it's them)
+  const getEmployeeName = (employeeId: string) => {
+    const mockEmployee = MOCK_USERS.find(u => u.id === employeeId);
+    if (mockEmployee) return mockEmployee.name;
+    if (user && user.uid === employeeId) return user.displayName || user.email;
+    return 'Inconnu';
   };
 
 
-  const getEmployeeName = (employeeId: string) => MOCK_USERS.find(u => u.id === employeeId)?.name || 'Inconnu';
-
-  if (!isMounted) {
+  if (!isMounted || !user) { // Ensure user is loaded as well for isAdmin check
     return <div className="flex justify-center items-center h-64"><ArrowLeft className="animate-spin h-8 w-8 text-primary" /> Chargement...</div>;
   }
   
@@ -347,10 +351,10 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                 <p className="text-sm text-muted-foreground">Date de création</p>
                 <p className="font-semibold">{format(new Date(bl.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</p>
               </div>
-              {createdByUser && (
+              {createdByUserDisplay && (
                  <div>
                     <p className="text-sm text-muted-foreground flex items-center"><UserCircle2 className="mr-2 h-4 w-4"/>Créé par</p>
-                    <p className="font-semibold">{createdByUser.name}</p>
+                    <p className="font-semibold">{createdByUserDisplay}</p>
                 </div>
               )}
               <div>
@@ -426,7 +430,6 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                         setRequestingDeleteExpense(exp);
                                         setDeleteExpenseReason('');
                                     }
-                                    // For admin, the AlertDialog opens via its own trigger logic after this click
                                 }}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -515,6 +518,3 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     </>
   );
 }
-
-
-    

@@ -12,7 +12,6 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +23,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Separator } from "@/components/ui/separator";
 import { UserCircle2, CalendarDays } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
 
 const clientFormSchema = z.object({
   name: z.string().min(2, { message: "Le nom doit contenir au moins 2 caractères." }),
@@ -42,6 +42,7 @@ interface ClientFormProps {
 export function ClientForm({ initialData }: ClientFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientFormSchema),
@@ -54,20 +55,42 @@ export function ClientForm({ initialData }: ClientFormProps) {
     },
   });
 
-  const createdByUserName = initialData?.createdByUserId 
-    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || "Inconnu"
-    : null;
+  // Get creator's name from MOCK_USERS if initialData exists and has createdByUserId
+  // This part remains for display purposes if the user was created before auth system
+  const createdByMockUserName = initialData?.createdByUserId 
+    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || "Utilisateur Système"
+    : user?.displayName || "Utilisateur Actuel"; // Fallback for new items
 
   function onSubmit(data: ClientFormValues) {
+    if (!user) {
+      toast({ title: "Erreur", description: "Vous devez être connecté pour effectuer cette action.", variant: "destructive" });
+      return;
+    }
+
+    const clientData = {
+        name: data.name,
+        contactPerson: data.contactPerson,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+    };
+
     if (initialData) {
       const updatedClientData: Client = {
-        ...initialData, // This includes id, createdAt, createdByUserId, blIds
-        ...data, // This includes name, contactPerson, email, phone, address
+        ...initialData, 
+        ...clientData,
+        // createdByUserId is not updated on edit
       };
       updateClient(updatedClientData);
     } else {
-      const newClient: Omit<Client, 'id' | 'createdAt' | 'createdByUserId' | 'blIds'> = data;
-      addClient(newClient); // addClient will handle id, createdAt, createdByUserId, and blIds initialization
+      const newClient: Client = {
+        id: `client-${Date.now()}`,
+        ...clientData,
+        blIds: [],
+        createdAt: new Date().toISOString(),
+        createdByUserId: user.uid,
+      };
+      addClient(newClient);
     }
     
     toast({
@@ -90,10 +113,10 @@ export function ClientForm({ initialData }: ClientFormProps) {
                 <CalendarDays className="mr-2 h-4 w-4" />
                 <span>Créé le: {format(new Date(initialData.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</span>
             </div>
-            {createdByUserName && (
+            {createdByMockUserName && (
                 <div className="flex items-center text-sm text-muted-foreground">
                     <UserCircle2 className="mr-2 h-4 w-4" />
-                    <span>Créé par: {createdByUserName}</span>
+                    <span>Créé par: {createdByMockUserName}</span>
                 </div>
             )}
             <Separator />

@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MOCK_WORK_TYPES, MOCK_USERS, deleteWorkType } from '@/lib/mock-data';
+import { MOCK_WORK_TYPES, deleteWorkType } from '@/lib/mock-data';
 import type { WorkType } from '@/lib/types';
 import { PlusCircle, ArrowRight, Edit, Trash2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -38,14 +38,10 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-
-// Simulate the currently logged-in user
-const currentUser = MOCK_USERS.find(u => u.id === 'user-1')!; // Alice Employee (non-admin)
-// const currentUser = MOCK_USERS.find(u => u.id === 'user-2')!; // Bob Admin
-const isAdmin = currentUser.role === 'admin';
-
+import { useAuth } from '@/contexts/auth-context'; // Import useAuth
 
 export default function WorkTypesPage() {
+  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -70,7 +66,7 @@ export default function WorkTypesPage() {
     );
   }, [workTypes, searchTerm]);
 
-  const handleDeleteWorkType = (workTypeId: string) => {
+  const handleDeleteWorkTypeDirectly = (workTypeId: string) => {
     deleteWorkType(workTypeId);
     const updatedWorkTypes = MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     setWorkTypes(updatedWorkTypes); 
@@ -86,7 +82,7 @@ export default function WorkTypesPage() {
       toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
       return;
     }
-    console.log(`Demande de modification pour Type de Travail ${editingWorkType.name} par ${currentUser.name}. Raison: ${editReason}`);
+    console.log(`Demande de modification pour Type de Travail ${editingWorkType.name} par ${user?.displayName}. Raison: ${editReason}`);
     toast({
       title: "Demande Envoyée (Simulation)",
       description: `Votre demande de modification pour "${editingWorkType.name}" a été envoyée.`,
@@ -100,7 +96,7 @@ export default function WorkTypesPage() {
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour Type de Travail ${deletingWorkType.name} par ${currentUser.name}. Raison: ${deleteReason}`);
+    console.log(`Demande de suppression pour Type de Travail ${deletingWorkType.name} par ${user?.displayName}. Raison: ${deleteReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
         description: `Votre demande de suppression pour "${deletingWorkType.name}" a été envoyée.`,
@@ -109,6 +105,9 @@ export default function WorkTypesPage() {
     setDeletingWorkType(null);
   };
 
+  if (!user) { // Ensure user is loaded
+    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  }
 
   return (
     <>
@@ -227,7 +226,7 @@ export default function WorkTypesPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel onClick={() => {setDeletingWorkType(null); setDeleteReason('');}}>Annuler</AlertDialogCancel>
-                          <AlertDialogAction onClick={isAdmin ? () => handleDeleteWorkType(wt.id) : handleSubmitDeleteRequest}>
+                          <AlertDialogAction onClick={isAdmin ? () => handleDeleteWorkTypeDirectly(wt.id) : handleSubmitDeleteRequest}>
                             {isAdmin ? "Confirmer" : "Soumettre"}
                           </AlertDialogAction>
                         </AlertDialogFooter>
@@ -248,5 +247,3 @@ export default function WorkTypesPage() {
     </>
   );
 }
-
-    

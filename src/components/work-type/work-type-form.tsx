@@ -19,12 +19,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import type { WorkType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { MOCK_USERS, MOCK_WORK_TYPES, addWorkType, updateWorkType } from "@/lib/mock-data";
+import { MOCK_USERS, addWorkType, updateWorkType } from "@/lib/mock-data";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Separator } from "@/components/ui/separator";
 import { UserCircle2, CalendarDays } from "lucide-react";
-
+import { useAuth } from "@/contexts/auth-context";
 
 const workTypeFormSchema = z.object({
   name: z.string().min(3, { message: "Le nom du type de travail doit contenir au moins 3 caractères." }),
@@ -40,6 +40,7 @@ interface WorkTypeFormProps {
 export function WorkTypeForm({ initialData }: WorkTypeFormProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const form = useForm<WorkTypeFormValues>({
     resolver: zodResolver(workTypeFormSchema),
@@ -52,20 +53,36 @@ export function WorkTypeForm({ initialData }: WorkTypeFormProps) {
     },
   });
 
-  const createdByUserName = initialData?.createdByUserId
-    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || "Inconnu"
-    : null;
+  const createdByMockUserName = initialData?.createdByUserId
+    ? MOCK_USERS.find(u => u.id === initialData.createdByUserId)?.name || "Utilisateur Système"
+    : user?.displayName || "Utilisateur Actuel";
 
   function onSubmit(data: WorkTypeFormValues) {
+    if (!user) {
+      toast({ title: "Erreur", description: "Vous devez être connecté pour effectuer cette action.", variant: "destructive" });
+      return;
+    }
+
+    const workTypeData = {
+        name: data.name,
+        description: data.description || "",
+    };
+
     if (initialData) {
         const updatedWorkTypeData: WorkType = {
-            ...initialData, // This includes id, createdAt, createdByUserId
-            ...data, // name, description
+            ...initialData, 
+            ...workTypeData,
+            // createdByUserId is not updated on edit
         };
         updateWorkType(updatedWorkTypeData);
     } else {
-        const newWorkType: Omit<WorkType, 'id' | 'createdAt' | 'createdByUserId'> = data;
-        addWorkType(newWorkType); // addWorkType handles id, createdAt, createdByUserId
+        const newWorkType: WorkType = {
+            id: `wt-${Date.now()}`,
+            ...workTypeData,
+            createdAt: new Date().toISOString(),
+            createdByUserId: user.uid, 
+        };
+        addWorkType(newWorkType);
     }
     
     toast({
@@ -91,10 +108,10 @@ export function WorkTypeForm({ initialData }: WorkTypeFormProps) {
                 <CalendarDays className="mr-2 h-4 w-4" />
                 <span>Créé le: {format(new Date(initialData.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</span>
             </div>
-            {createdByUserName && (
+            {createdByMockUserName && (
                 <div className="flex items-center text-sm text-muted-foreground">
                     <UserCircle2 className="mr-2 h-4 w-4" />
-                    <span>Créé par: {createdByUserName}</span>
+                    <span>Créé par: {createdByMockUserName}</span>
                 </div>
             )}
             <Separator />

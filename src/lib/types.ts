@@ -40,14 +40,25 @@ export interface Expense {
   label: string;
   amount: number;
   date: string; // ISO Date string
-  employeeId: string; // Mocked, in a real app this would be a user ID
+  employeeId: string; // Will be replaced by authenticated user's UID
 }
 
+// This User type is for the mock data and general app use for displaying names/roles if needed
 export interface User {
   id: string;
   name: string;
   role: 'employee' | 'admin';
 }
+
+// This type represents the authenticated user from Firebase
+export interface AuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  // You might add a 'role' here if you fetch it from Firestore alongside auth state
+  // role?: 'admin' | 'employee'; 
+}
+
 
 export interface ChatMessage {
   id: string;

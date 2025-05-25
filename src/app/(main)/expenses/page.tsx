@@ -7,10 +7,9 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { MOCK_EXPENSES, MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_USERS, deleteExpense as deleteGlobalExpense } from '@/lib/mock-data';
-import type { Expense, BillOfLading, Client, User } from '@/lib/types';
-import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit } from 'lucide-react'; // Renamed User to UserIconLucide to avoid conflict
+import type { Expense, BillOfLading, Client } from '@/lib/types'; // Removed User import
+import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -25,28 +24,24 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Label } from '@/components/ui/label'; // Added Label
-import { Textarea } from '@/components/ui/textarea'; // Added Textarea
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-
-// Simulate the currently logged-in user
-const currentUser = MOCK_USERS.find(u => u.id === 'user-1')!; // Alice Employee (non-admin)
-// const currentUser = MOCK_USERS.find(u => u.id === 'user-2')!; // Bob Admin
-const isAdmin = currentUser.role === 'admin';
-
+import { useAuth } from '@/contexts/auth-context'; // Import useAuth
 
 interface ExpenseWithDetails extends Expense {
   blNumber?: string;
   clientName?: string;
-  employeeName?: string;
+  employeeName?: string; // Still used for display if old data has mock user ID
 }
 
 export default function ExpensesPage() {
+  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
   const [expenses, setExpenses] = useState<ExpenseWithDetails[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -61,7 +56,6 @@ export default function ExpensesPage() {
   const [deletingExpense, setDeletingExpense] = useState<ExpenseWithDetails | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
 
-
   useEffect(() => {
     setAllBls(MOCK_BILLS_OF_LADING);
     setAllClients(MOCK_CLIENTS);
@@ -69,16 +63,25 @@ export default function ExpensesPage() {
     const detailedExpenses = MOCK_EXPENSES.map(exp => {
       const bl = MOCK_BILLS_OF_LADING.find(b => b.id === exp.blId);
       const client = bl ? MOCK_CLIENTS.find(c => c.id === bl.clientId) : undefined;
-      const employee = MOCK_USERS.find(u => u.id === exp.employeeId);
+      // Try to get name from MOCK_USERS if employeeId is a mock ID, 
+      // otherwise, if current user is the employee, use their display name.
+      let empName = 'Inconnu';
+      const mockEmployee = MOCK_USERS.find(u => u.id === exp.employeeId);
+      if (mockEmployee) {
+        empName = mockEmployee.name;
+      } else if (user && user.uid === exp.employeeId) {
+        empName = user.displayName || user.email || 'Utilisateur';
+      }
+
       return {
         ...exp,
         blNumber: bl?.blNumber,
         clientName: client?.name,
-        employeeName: employee?.name,
+        employeeName: empName,
       };
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
     setExpenses(detailedExpenses);
-  }, []); 
+  }, [user]); // Add user to dependency array to re-evaluate employeeName
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -126,12 +129,16 @@ export default function ExpensesPage() {
     const updatedDetailedExpenses = MOCK_EXPENSES.map(exp => {
         const bl = MOCK_BILLS_OF_LADING.find(b => b.id === exp.blId);
         const client = bl ? MOCK_CLIENTS.find(c => c.id === bl.clientId) : undefined;
-        const employee = MOCK_USERS.find(u => u.id === exp.employeeId);
+        let empName = 'Inconnu';
+        const mockEmployee = MOCK_USERS.find(u => u.id === exp.employeeId);
+        if (mockEmployee) empName = mockEmployee.name;
+        else if (user && user.uid === exp.employeeId) empName = user.displayName || user.email || 'Utilisateur';
+
         return {
           ...exp,
           blNumber: bl?.blNumber,
           clientName: client?.name,
-          employeeName: employee?.name,
+          employeeName: empName,
         };
       }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setExpenses(updatedDetailedExpenses);
@@ -146,7 +153,7 @@ export default function ExpensesPage() {
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression de la dépense.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour la dépense "${deletingExpense.label}" (BL ${deletingExpense.blNumber}) par ${currentUser.name}. Raison: ${deleteReason}`);
+    console.log(`Demande de suppression pour la dépense "${deletingExpense.label}" (BL ${deletingExpense.blNumber}) par ${user?.displayName}. Raison: ${deleteReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
         description: `Votre demande de suppression pour la dépense "${deletingExpense.label}" a été envoyée.`,
@@ -154,6 +161,10 @@ export default function ExpensesPage() {
     setDeleteReason('');
     setDeletingExpense(null);
   };
+
+  if (!user) { // Ensure user is loaded
+    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  }
 
   return (
     <>
@@ -359,5 +370,3 @@ export default function ExpensesPage() {
     </>
   );
 }
-
-    

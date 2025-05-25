@@ -2,19 +2,19 @@
 import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem } from './types';
 import { format } from 'date-fns';
 
-export const MOCK_USERS: User[] = [
-  { id: 'user-1', name: 'Alice Employee', role: 'employee' },
-  { id: 'user-2', name: 'Bob Admin', role: 'admin' },
-  { id: 'user-3', name: 'Charlie Collaborator', role: 'employee'},
+export let MOCK_USERS: User[] = [ // Kept for populating selection dropdowns, e.g. for assigning todos
+  { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee' },
+  { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin' },
+  { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee'},
 ];
 
 export let MOCK_WORK_TYPES: WorkType[] = [
-  { id: 'wt-1', name: 'Transit Standard', description: 'Service de transit de base.', createdAt: new Date('2023-01-01T10:00:00Z').toISOString(), createdByUserId: 'user-2' },
-  { id: 'wt-2', name: 'Transport Routier', description: 'Acheminement par camion.', createdAt: new Date('2023-01-05T11:00:00Z').toISOString(), createdByUserId: 'user-1' },
-  { id: 'wt-3', name: 'Logistique d\'Entreposage', description: 'Stockage et gestion de marchandises.', createdAt: new Date('2023-01-10T12:00:00Z').toISOString(), createdByUserId: 'user-2' },
-  { id: 'wt-4', name: 'Dédouanement Import', description: 'Formalités douanières pour importation.', createdAt: new Date('2023-02-01T13:00:00Z').toISOString(), createdByUserId: 'user-1' },
-  { id: 'wt-5', name: 'Dédouanement Export', description: 'Formalités douanières pour exportation.', createdAt: new Date('2023-02-05T14:00:00Z').toISOString(), createdByUserId: 'user-2' },
-  { id: 'wt-6', name: 'Projet Spécial', description: 'Gestion de projets logistiques complexes.', createdAt: new Date('2023-03-01T15:00:00Z').toISOString(), createdByUserId: 'user-1' },
+  { id: 'wt-1', name: 'Transit Standard', description: 'Service de transit de base.', createdAt: new Date('2023-01-01T10:00:00Z').toISOString(), createdByUserId: 'user-2-mock' },
+  { id: 'wt-2', name: 'Transport Routier', description: 'Acheminement par camion.', createdAt: new Date('2023-01-05T11:00:00Z').toISOString(), createdByUserId: 'user-1-mock' },
+  { id: 'wt-3', name: 'Logistique d\'Entreposage', description: 'Stockage et gestion de marchandises.', createdAt: new Date('2023-01-10T12:00:00Z').toISOString(), createdByUserId: 'user-2-mock' },
+  { id: 'wt-4', name: 'Dédouanement Import', description: 'Formalités douanières pour importation.', createdAt: new Date('2023-02-01T13:00:00Z').toISOString(), createdByUserId: 'user-1-mock' },
+  { id: 'wt-5', name: 'Dédouanement Export', description: 'Formalités douanières pour exportation.', createdAt: new Date('2023-02-05T14:00:00Z').toISOString(), createdByUserId: 'user-2-mock' },
+  { id: 'wt-6', name: 'Projet Spécial', description: 'Gestion de projets logistiques complexes.', createdAt: new Date('2023-03-01T15:00:00Z').toISOString(), createdByUserId: 'user-1-mock' },
 ];
 
 export let MOCK_CLIENTS: Client[] = [
@@ -27,7 +27,7 @@ export let MOCK_CLIENTS: Client[] = [
     address: '123 Import Lane, New York, NY 10001, USA',
     blIds: ['bl-1', 'bl-3'],
     createdAt: new Date('2023-05-10T09:30:00Z').toISOString(),
-    createdByUserId: 'user-2',
+    createdByUserId: 'user-2-mock',
   },
   {
     id: 'client-2',
@@ -38,7 +38,7 @@ export let MOCK_CLIENTS: Client[] = [
     address: '456 Export Road, London, EC1A 1BB, UK',
     blIds: ['bl-2'],
     createdAt: new Date('2023-06-15T14:00:00Z').toISOString(),
-    createdByUserId: 'user-1',
+    createdByUserId: 'user-1-mock',
   },
   {
     id: 'client-3',
@@ -49,7 +49,7 @@ export let MOCK_CLIENTS: Client[] = [
     address: '789 Rue de la Logistique, 75001 Paris, France',
     blIds: ['bl-4'],
     createdAt: new Date('2023-07-20T16:45:00Z').toISOString(),
-    createdByUserId: 'user-2',
+    createdByUserId: 'user-2-mock',
   }
 ];
 
@@ -64,7 +64,7 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
     categories: ['Électronique', 'Haute Technologie'],
     status: 'terminé',
     createdAt: new Date('2023-10-15T10:00:00Z').toISOString(),
-    createdByUserId: 'user-2', // Bob Admin
+    createdByUserId: 'user-2-mock',
   },
   {
     id: 'bl-2',
@@ -76,7 +76,7 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
     categories: ['Textile', 'Importation'],
     status: 'en cours',
     createdAt: new Date('2023-11-01T14:30:00Z').toISOString(),
-    createdByUserId: 'user-1', // Alice Employee
+    createdByUserId: 'user-1-mock',
   },
   {
     id: 'bl-3',
@@ -88,7 +88,7 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
     categories: ['Automobile', 'Pièces détachées'],
     status: 'en cours',
     createdAt: new Date('2023-11-20T09:15:00Z').toISOString(),
-    createdByUserId: 'user-2', // Bob Admin
+    createdByUserId: 'user-2-mock',
   },
   {
     id: 'bl-4',
@@ -100,7 +100,7 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
     categories: ['Machinerie', 'Projet Spécial'],
     status: 'inactif',
     createdAt: new Date('2023-09-01T09:15:00Z').toISOString(),
-    createdByUserId: 'user-1', // Alice Employee
+    createdByUserId: 'user-1-mock',
   }
 ];
 
@@ -111,7 +111,7 @@ export let MOCK_EXPENSES: Expense[] = [
     label: 'Ocean Freight Charges',
     amount: 2500,
     date: new Date('2023-10-20T11:00:00Z').toISOString(),
-    employeeId: 'user-1',
+    employeeId: 'user-1-mock',
   },
   {
     id: 'exp-2',
@@ -119,7 +119,7 @@ export let MOCK_EXPENSES: Expense[] = [
     label: 'Port Handling Fees NYC',
     amount: 800,
     date: new Date('2023-10-22T15:30:00Z').toISOString(),
-    employeeId: 'user-1',
+    employeeId: 'user-1-mock',
   },
   {
     id: 'exp-3',
@@ -127,7 +127,7 @@ export let MOCK_EXPENSES: Expense[] = [
     label: 'Air Freight',
     amount: 4000,
     date: new Date('2023-11-05T10:00:00Z').toISOString(),
-    employeeId: 'user-1',
+    employeeId: 'user-1-mock',
   },
   {
     id: 'exp-4',
@@ -135,15 +135,15 @@ export let MOCK_EXPENSES: Expense[] = [
     label: 'Customs Duty',
     amount: 1500,
     date: new Date('2023-11-06T16:45:00Z').toISOString(),
-    employeeId: 'user-1',
+    employeeId: 'user-1-mock',
   },
   {
     id: 'exp-5',
     blId: 'bl-1',
     label: 'Unexpected Storage Fee',
-    amount: 2000, // This expense made bl-1 a loss
+    amount: 2000, 
     date: new Date('2023-10-25T09:00:00Z').toISOString(),
-    employeeId: 'user-1',
+    employeeId: 'user-1-mock',
   },
   {
     id: 'exp-6',
@@ -151,7 +151,7 @@ export let MOCK_EXPENSES: Expense[] = [
     label: 'Frais de dossier',
     amount: 150,
     date: new Date('2023-11-21T09:00:00Z').toISOString(),
-    employeeId: 'user-1',
+    employeeId: 'user-1-mock',
   },
   {
     id: 'exp-7',
@@ -159,34 +159,26 @@ export let MOCK_EXPENSES: Expense[] = [
     label: 'Pré-acheminement',
     amount: 800,
     date: new Date('2023-09-05T09:00:00Z').toISOString(),
-    employeeId: 'user-1',
+    employeeId: 'user-1-mock',
   }
 ];
 
-// CHAT & TODO MOCK DATA
 export let MOCK_CHAT_MESSAGES: ChatMessage[] = [
-    { id: 'msg-1', senderId: 'user-1', senderName: 'Alice Employee', text: 'Bonjour l\'équipe, n\'oubliez pas la réunion de 14h.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
-    { id: 'msg-2', senderId: 'user-2', senderName: 'Bob Admin', text: 'Bien noté Alice. J\'ai ajouté une tâche pour la préparation du rapport BL-2.', timestamp: new Date(Date.now() - 1000 * 60 * 55).toISOString() },
-    { id: 'msg-3', senderId: 'user-3', senderName: 'Charlie Collaborator', text: 'Je peux m\'occuper de contacter le client Global Imports Inc. pour le BL-3.', timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
+    { id: 'msg-1', senderId: 'user-1-mock', senderName: 'Alice Employee (Mock)', text: 'Bonjour l\'équipe, n\'oubliez pas la réunion de 14h.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
+    { id: 'msg-2', senderId: 'user-2-mock', senderName: 'Bob Admin (Mock)', text: 'Bien noté Alice. J\'ai ajouté une tâche pour la préparation du rapport BL-2.', timestamp: new Date(Date.now() - 1000 * 60 * 55).toISOString() },
+    { id: 'msg-3', senderId: 'user-3-mock', senderName: 'Charlie Collaborator (Mock)', text: 'Je peux m\'occuper de contacter le client Global Imports Inc. pour le BL-3.', timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
 ];
 
 export let MOCK_TODO_ITEMS: TodoItem[] = [
-    { id: 'todo-1', text: 'Préparer le rapport financier pour BL-2', assignedToUserId: 'user-1', assignedToUserName: 'Alice Employee', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(), createdByUserId: 'user-2', createdByName: 'Bob Admin' },
-    { id: 'todo-2', text: 'Contacter le client Global Imports Inc. (BL-3)', assignedToUserId: 'user-3', assignedToUserName: 'Charlie Collaborator', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(), createdByUserId: 'user-3', createdByName: 'Charlie Collaborator' },
-    { id: 'todo-3', text: 'Vérifier les documents douaniers pour BL-1', completed: true, createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(), createdByUserId: 'user-2', createdByName: 'Bob Admin' },
+    { id: 'todo-1', text: 'Préparer le rapport financier pour BL-2', assignedToUserId: 'user-1-mock', assignedToUserName: 'Alice Employee (Mock)', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(), createdByUserId: 'user-2-mock', createdByName: 'Bob Admin (Mock)' },
+    { id: 'todo-2', text: 'Contacter le client Global Imports Inc. (BL-3)', assignedToUserId: 'user-3-mock', assignedToUserName: 'Charlie Collaborator (Mock)', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(), createdByUserId: 'user-3-mock', createdByName: 'Charlie Collaborator (Mock)' },
+    { id: 'todo-3', text: 'Vérifier les documents douaniers pour BL-1', completed: true, createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(), createdByUserId: 'user-2-mock', createdByName: 'Bob Admin (Mock)' },
 ];
 
 
 // CRUD Functions
-export const addClient = (client: Omit<Client, 'id' | 'createdAt' | 'createdByUserId' | 'blIds'>) => {
-  const newClient: Client = {
-    id: `client-${Date.now()}`,
-    ...client,
-    blIds: [],
-    createdAt: new Date().toISOString(),
-    createdByUserId: MOCK_USERS[0].id, 
-  };
-  MOCK_CLIENTS.push(newClient);
+export const addClient = (client: Client) => { // Accept full Client, ID is set in form
+  MOCK_CLIENTS.push(client);
 };
 export const updateClient = (updatedClient: Client) => {
   MOCK_CLIENTS = MOCK_CLIENTS.map(client => client.id === updatedClient.id ? { ...client, ...updatedClient } : client);
@@ -196,17 +188,11 @@ export const deleteClient = (clientId: string) => {
   MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId !== clientId);
 };
 
-export const addBL = (bl: Omit<BillOfLading, 'id' | 'createdAt' | 'createdByUserId'>) => {
-  const newBL: BillOfLading = {
-    id: `bl-${Date.now()}`,
-    ...bl,
-    createdAt: new Date().toISOString(),
-    createdByUserId: bl.createdByUserId || MOCK_USERS[0].id,
-  };
-  MOCK_BILLS_OF_LADING.push(newBL);
-  const client = MOCK_CLIENTS.find(c => c.id === newBL.clientId);
-  if (client && !client.blIds.includes(newBL.id)) {
-    client.blIds.push(newBL.id);
+export const addBL = (bl: BillOfLading) => { // Accept full BL, ID is set in form
+  MOCK_BILLS_OF_LADING.push(bl);
+  const client = MOCK_CLIENTS.find(c => c.id === bl.clientId);
+  if (client && !client.blIds.includes(bl.id)) {
+    client.blIds.push(bl.id);
   }
 };
 export const updateBL = (updatedBL: BillOfLading) => {
@@ -233,14 +219,8 @@ export const deleteExpense = (expenseId: string) => {
   MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.id !== expenseId);
 };
 
-export const addWorkType = (workType: Omit<WorkType, 'id' | 'createdAt' | 'createdByUserId'>) => {
-  const newWorkType: WorkType = {
-    id: `wt-${Date.now()}`,
-    ...workType,
-    createdAt: new Date().toISOString(),
-    createdByUserId: MOCK_USERS[0].id, 
-  };
-  MOCK_WORK_TYPES.push(newWorkType);
+export const addWorkType = (workType: WorkType) => { // Accept full WorkType, ID is set in form
+  MOCK_WORK_TYPES.push(workType);
 };
 export const updateWorkType = (updatedWorkType: WorkType) => {
   MOCK_WORK_TYPES = MOCK_WORK_TYPES.map(wt => wt.id === updatedWorkType.id ? { ...wt, ...updatedWorkType } : wt);
@@ -250,15 +230,11 @@ export const deleteWorkType = (workTypeId: string) => {
 };
 
 // Chat & Todo CRUD
-// For simplicity, current user is user-2 (Bob Admin) for sending messages/creating todos
-const getCurrentUserId = () => MOCK_USERS[1].id;
-const getCurrentUserName = () => MOCK_USERS[1].name;
-
-export const addChatMessage = (text: string): ChatMessage => {
+export const addChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
   const newMessage: ChatMessage = {
     id: `msg-${Date.now()}`,
-    senderId: getCurrentUserId(),
-    senderName: getCurrentUserName(),
+    senderId,
+    senderName,
     text,
     timestamp: new Date().toISOString(),
   };
@@ -266,17 +242,22 @@ export const addChatMessage = (text: string): ChatMessage => {
   return newMessage;
 };
 
-export const addTodoItem = (text: string, assignedToUserId?: string): TodoItem => {
-  const assignedUser = MOCK_USERS.find(u => u.id === assignedToUserId);
+export const addTodoItem = (
+    text: string, 
+    createdByUserId: string, 
+    createdByName: string, 
+    assignedToUserId?: string, 
+    assignedToUserName?: string
+): TodoItem => {
   const newTodo: TodoItem = {
     id: `todo-${Date.now()}`,
     text,
     assignedToUserId,
-    assignedToUserName: assignedUser?.name,
+    assignedToUserName,
     completed: false,
     createdAt: new Date().toISOString(),
-    createdByUserId: getCurrentUserId(),
-    createdByName: getCurrentUserName(),
+    createdByUserId,
+    createdByName,
   };
   MOCK_TODO_ITEMS.push(newTodo);
   return newTodo;

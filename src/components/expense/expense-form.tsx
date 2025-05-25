@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,14 +14,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea"; // If needed for 'Libellé' if it can be long
 import { useToast } from "@/hooks/use-toast";
 import type { Expense } from "@/lib/types";
+import { useAuth } from "@/contexts/auth-context"; // Import useAuth
 
 const expenseFormSchema = z.object({
   label: z.string().min(3, { message: "Le libellé doit contenir au moins 3 caractères." }),
   amount: z.coerce.number().positive({ message: "Le montant doit être positif." }),
-  // Date will be auto-set or use a date picker
 });
 
 type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
@@ -32,6 +32,8 @@ interface ExpenseFormProps {
 
 export function ExpenseForm({ blId, onExpenseAdded }: ExpenseFormProps) {
   const { toast } = useToast();
+  const { user } = useAuth(); // Get authenticated user
+
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseFormSchema),
     defaultValues: {
@@ -41,12 +43,17 @@ export function ExpenseForm({ blId, onExpenseAdded }: ExpenseFormProps) {
   });
 
   function onSubmit(data: ExpenseFormValues) {
+    if (!user) {
+      toast({ title: "Erreur", description: "Vous devez être connecté pour ajouter une dépense.", variant: "destructive" });
+      return;
+    }
+
     const newExpense: Expense = {
       id: `exp-${Date.now()}`,
       blId: blId,
       ...data,
       date: new Date().toISOString(),
-      employeeId: "user-1", // Mocked employee ID
+      employeeId: user.uid, // Use authenticated user's UID
     };
     onExpenseAdded(newExpense);
     toast({

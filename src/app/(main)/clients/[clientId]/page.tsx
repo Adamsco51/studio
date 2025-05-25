@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES, MOCK_USERS, deleteClient } from '@/lib/mock-data';
-import type { Client, BillOfLading, Expense, User } from '@/lib/types';
+import type { Client, BillOfLading, Expense, User as MockUser } from '@/lib/types';
 import Link from 'next/link';
 import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -41,18 +41,13 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
-
-// Simulate the currently logged-in user
-// To test admin flow, set currentUser to MOCK_USERS[1] (Bob Admin)
-// To test non-admin flow, set currentUser to MOCK_USERS[0] (Alice Employee)
-const currentUser = MOCK_USERS.find(u => u.id === 'user-1')!; // Alice Employee (non-admin)
-// const currentUser = MOCK_USERS.find(u => u.id === 'user-2')!; // Bob Admin
-const isAdmin = currentUser.role === 'admin';
+import { useAuth } from '@/contexts/auth-context'; // Import useAuth
 
 export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = React.use(paramsPromise);
+  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
   const [client, setClient] = useState<Client | null>(null);
-  const [createdByUser, setCreatedByUser] = useState<User | null>(null);
+  const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
   const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]);
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
@@ -70,11 +65,17 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === clientId);
       setClientBLs(bls);
       if (foundClient.createdByUserId) {
-        const user = MOCK_USERS.find(u => u.id === foundClient.createdByUserId);
-        setCreatedByUser(user || null);
+        const mockCreator = MOCK_USERS.find(u => u.id === foundClient.createdByUserId);
+         if (mockCreator) {
+          setCreatedByUserDisplay(mockCreator.name);
+        } else if (user && user.uid === foundClient.createdByUserId) {
+          setCreatedByUserDisplay(user.displayName || user.email);
+        } else {
+            setCreatedByUserDisplay("Utilisateur Système");
+        }
       }
     }
-  }, [clientId]);
+  }, [clientId, user]); // Add user to dependencies
 
   const toggleBlExpansion = (blId: string) => {
     setExpandedBls(prev => {
@@ -89,8 +90,10 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   };
 
   const getEmployeeName = (employeeId: string): string => {
-    const user = MOCK_USERS.find(u => u.id === employeeId);
-    return user?.name || 'Inconnu';
+    const mockEmployee = MOCK_USERS.find(u => u.id === employeeId);
+    if (mockEmployee) return mockEmployee.name;
+    if (user && user.uid === employeeId) return user.displayName || user.email || 'Employé Actuel';
+    return 'Inconnu';
   };
 
   const handleDeleteClient = () => {
@@ -109,7 +112,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
       return;
     }
-    console.log(`Demande de modification pour Client ${client?.name} par ${currentUser.name}. Raison: ${editRequestReason}`);
+    console.log(`Demande de modification pour Client ${client?.name} par ${user?.displayName}. Raison: ${editRequestReason}`);
     toast({
       title: "Demande Envoyée (Simulation)",
       description: "Votre demande de modification du client a été envoyée à l'administrateur pour approbation.",
@@ -123,26 +126,18 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour Client ${client?.name} par ${currentUser.name}. Raison: ${deleteClientReason}`);
+    console.log(`Demande de suppression pour Client ${client?.name} par ${user?.displayName}. Raison: ${deleteClientReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
         description: "Votre demande de suppression de client a été envoyée à l'administrateur pour approbation.",
     });
     setDeleteClientReason('');
-    // AlertDialog will close itself on action
   };
 
 
-  if (!client) {
+  if (!client || !user) { // Ensure client and user are loaded
     return (
-      <div className="text-center py-10">
-        <p className="text-xl text-muted-foreground">Client non trouvé.</p>
-        <Link href="/clients" passHref>
-          <Button variant="link" className="mt-4">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste des clients
-          </Button>
-        </Link>
-      </div>
+      <div className="flex justify-center items-center h-64">Chargement...</div>
     );
   }
 
@@ -285,10 +280,10 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                     <CalendarDays className="mr-2 h-4 w-4" />
                     <span>Créé le: {format(new Date(client.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</span>
                 </div>
-                {createdByUser && (
+                {createdByUserDisplay && (
                     <div className="flex items-center text-sm text-muted-foreground">
                         <UserCircle2 className="mr-2 h-4 w-4" />
-                        <span>Créé par: {createdByUser.name}</span>
+                        <span>Créé par: {createdByUserDisplay}</span>
                     </div>
                 )}
             </div>
@@ -401,5 +396,3 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     </>
   );
 }
-
-    

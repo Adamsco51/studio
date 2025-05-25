@@ -21,7 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import type { BillOfLading, Client, BLStatus, WorkType } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { MOCK_USERS, addBL, updateBL } from "@/lib/mock-data"; // Removed MOCK_WORK_TYPES, MOCK_BILLS_OF_LADING as they are not directly used here for form population other than add/update
+import { addBL, updateBL } from "@/lib/mock-data"; // Removed MOCK_USERS
+import { useAuth } from "@/contexts/auth-context";
+
 
 const blStatusOptions: { value: BLStatus; label: string }[] = [
   { value: "en cours", label: "En cours" },
@@ -52,6 +54,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
   const searchParams = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
   const { toast } = useToast();
+  const { user } = useAuth(); // Get the authenticated user
 
   const defaultCategories = initialData?.categories ? initialData.categories.join(", ") : "";
 
@@ -75,12 +78,14 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
   });
 
   function onSubmit(data: BLFormValues) {
-    const processedCategories = data.categories.split(',').map(cat => cat.trim()).filter(cat => cat.length > 0);
-    // Simulate getting the logged-in user's ID. In a real app, this would come from auth context.
-    const currentUserId = MOCK_USERS[0].id; // Alice Employee as default creator/updater for simplicity
+    if (!user) {
+      toast({ title: "Erreur", description: "Vous devez être connecté pour effectuer cette action.", variant: "destructive" });
+      return;
+    }
 
-    const newOrUpdatedBL: BillOfLading = {
-        id: initialData?.id || `bl-${Date.now()}`,
+    const processedCategories = data.categories.split(',').map(cat => cat.trim()).filter(cat => cat.length > 0);
+    
+    const newOrUpdatedBLData = {
         blNumber: data.blNumber,
         clientId: data.clientId,
         allocatedAmount: data.allocatedAmount,
@@ -88,14 +93,23 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
         description: data.description || "",
         categories: processedCategories,
         status: data.status,
-        createdAt: initialData?.createdAt || new Date().toISOString(),
-        createdByUserId: initialData?.createdByUserId || currentUserId, // Preserve original creator or set new
     };
 
     if (initialData) {
-        updateBL(newOrUpdatedBL);
+        const updatedBL: BillOfLading = {
+            ...initialData,
+            ...newOrUpdatedBLData,
+            // createdByUserId is not updated on edit
+        };
+        updateBL(updatedBL);
     } else {
-        addBL(newOrUpdatedBL);
+        const newBL: BillOfLading = {
+            id: `bl-${Date.now()}`,
+            ...newOrUpdatedBLData,
+            createdAt: new Date().toISOString(),
+            createdByUserId: user.uid, 
+        };
+        addBL(newBL);
     }
 
     toast({

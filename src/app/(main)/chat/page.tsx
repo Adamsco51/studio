@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { MOCK_CHAT_MESSAGES, MOCK_TODO_ITEMS, MOCK_USERS, addChatMessage, addTodoItem, toggleTodoItemCompletion, deleteTodoItem } from '@/lib/mock-data';
-import type { ChatMessage, TodoItem, User } from '@/lib/types';
+import type { ChatMessage, TodoItem, User as MockUser } from '@/lib/types'; // Renamed User to MockUser
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,12 +20,9 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Send, ListChecks, PlusCircle, Trash2, UserCircle, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/auth-context'; // Import useAuth
 
-// Mock current user (Bob Admin)
-const CURRENT_USER_ID = MOCK_USERS[1].id;
-const CURRENT_USER_NAME = MOCK_USERS[1].name;
-
-const NO_ASSIGNEE_VALUE = "__NO_ASSIGNEE__"; // Unique value for "Non assigné"
+const NO_ASSIGNEE_VALUE = "__NO_ASSIGNEE__";
 
 const chatMessageSchema = z.object({
   text: z.string().min(1, { message: "Le message ne peut pas être vide." }),
@@ -39,6 +36,7 @@ const todoItemSchema = z.object({
 type TodoItemFormValues = z.infer<typeof todoItemSchema>;
 
 export default function ChatPage() {
+  const { user } = useAuth(); // Get authenticated user
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const { toast } = useToast();
@@ -52,26 +50,43 @@ export default function ChatPage() {
     resolver: zodResolver(todoItemSchema),
     defaultValues: { 
       text: "", 
-      assignedToUserId: undefined, // Use undefined for optional field
+      assignedToUserId: undefined,
     },
   });
 
   useEffect(() => {
+    // Initialize with empty arrays and let useEffect populate from mock data
+    // This helps prevent hydration errors with Date.now() in mock data
+    setMessages([]);
+    setTodos([]);
+
+    // Populate after mount
     setMessages(MOCK_CHAT_MESSAGES.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
     setTodos(MOCK_TODO_ITEMS.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
   }, []);
 
 
   const handleSendMessage = (data: ChatMessageFormValues) => {
-    const newMessage = addChatMessage(data.text);
+    if (!user) {
+        toast({title: "Erreur", description: "Vous devez être connecté.", variant: "destructive"});
+        return;
+    }
+    // Use user.uid and user.displayName for the new message
+    const newMessage = addChatMessage(data.text, user.uid, user.displayName || user.email || "Utilisateur");
     setMessages(prev => [...prev, newMessage].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
     chatForm.reset();
   };
 
   const handleAddTodo = (data: TodoItemFormValues) => {
-    const newTodo = addTodoItem(data.text, data.assignedToUserId);
+     if (!user) {
+        toast({title: "Erreur", description: "Vous devez être connecté.", variant: "destructive"});
+        return;
+    }
+    // Use user.uid and user.displayName for createdBy fields
+    const assignedUser = MOCK_USERS.find(u => u.id === data.assignedToUserId); // MOCK_USERS still used for assignee selection
+    const newTodo = addTodoItem(data.text, user.uid, user.displayName || user.email || "Utilisateur", data.assignedToUserId, assignedUser?.name);
     setTodos(prev => [...prev, newTodo].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-    todoForm.reset({ text: "", assignedToUserId: undefined }); // Reset with undefined
+    todoForm.reset({ text: "", assignedToUserId: undefined });
     toast({ title: "Tâche ajoutée", description: `"${newTodo.text}" a été ajoutée.` });
   };
 
@@ -101,6 +116,11 @@ export default function ChatPage() {
     return (names[0][0] + names[names.length - 1][0]).toUpperCase();
   }
 
+  if (!user) {
+    return <div className="flex justify-center items-center h-64">Chargement de l'utilisateur...</div>;
+  }
+  const CURRENT_USER_ID = user.uid; // Use real user ID
+
   return (
     <>
       <PageHeader
@@ -108,7 +128,6 @@ export default function ChatPage() {
         description="Collaborez avec votre équipe, discutez et gérez les tâches."
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chat Section */}
         <Card className="lg:col-span-2 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><MessageCircle className="h-6 w-6 text-primary" /> Fil de Discussion</CardTitle>
@@ -150,7 +169,6 @@ export default function ChatPage() {
            {chatForm.formState.errors.text && <p className="text-xs text-destructive px-6 pb-2">{chatForm.formState.errors.text.message}</p>}
         </Card>
 
-        {/* To-Do List Section */}
         <Card className="lg:col-span-1 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-accent" /> Liste de Tâches</CardTitle>
@@ -171,18 +189,12 @@ export default function ChatPage() {
                       value={field.value ?? NO_ASSIGNEE_VALUE}
                     >
                       <SelectTrigger>
-                        {/* The placeholder in SelectValue is shown if Select's value is undefined.
-                            Here, Select's value is managed to be NO_ASSIGNEE_VALUE when field.value is undefined,
-                            so the "Non assigné" SelectItem's content will be displayed in the trigger.
-                            If we strictly wanted the placeholder to show for undefined, Select value would need to be field.value directly.
-                            However, this setup provides an explicit "Non assigné" in the trigger.
-                        */}
                         <SelectValue placeholder="Assigner à (optionnel)" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_ASSIGNEE_VALUE}>Non assigné</SelectItem>
-                        {MOCK_USERS.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                        {MOCK_USERS.map((mockUser) => ( // Still use MOCK_USERS for assignee selection list
+                          <SelectItem key={mockUser.id} value={mockUser.id}>{mockUser.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -227,4 +239,3 @@ export default function ChatPage() {
     </>
   );
 }
-
