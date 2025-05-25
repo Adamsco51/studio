@@ -1,7 +1,7 @@
 
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Users, FileText, DollarSign, Activity, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks } from 'lucide-react';
+import { Users, FileText, DollarSign, Activity, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma } from 'lucide-react';
 import { MOCK_CLIENTS, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data';
 import type { BillOfLading, Client } from '@/lib/types';
 import Link from 'next/link';
@@ -43,6 +43,28 @@ export default function DashboardPage() {
     { title: 'BLs Inactifs', value: blsByStatus['inactif'] || 0, icon: AlertCircle, color: 'text-gray-500' },
   ];
 
+  const blProfitabilityStats = () => {
+    let profitableBls = 0;
+    let lossMakingBls = 0;
+    MOCK_BILLS_OF_LADING.forEach(bl => {
+      const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === bl.id);
+      const totalExpensesForBl = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
+      const balance = bl.allocatedAmount - totalExpensesForBl;
+      if (balance >= 0) {
+        profitableBls++;
+      } else {
+        lossMakingBls++;
+      }
+    });
+    return {
+      totalBls: MOCK_BILLS_OF_LADING.length,
+      profitableBls,
+      lossMakingBls,
+    };
+  };
+
+  const { totalBls, profitableBls, lossMakingBls } = blProfitabilityStats();
+
   return (
     <>
       <PageHeader title="Tableau de Bord" description="Vue d'ensemble de vos opérations et performances." />
@@ -66,31 +88,31 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="h-6 w-6 text-primary" />
-              Statut des Connaissements
+              Analyse de Rentabilité des BLs
             </CardTitle>
-            <CardDescription>Répartition des BLs par leur statut actuel.</CardDescription>
+            <CardDescription>Rentabilité des connaissements enregistrés.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-md">
               <div className="flex items-center">
-                <Clock className="h-5 w-5 mr-2 text-blue-500" />
-                <span>BLs en Cours</span>
+                <Sigma className="h-5 w-5 mr-2 text-muted-foreground" />
+                <span>Total des Connaissements</span>
               </div>
-              <Badge variant="secondary" className="bg-blue-100 text-blue-700">{blsByStatus['en cours'] || 0}</Badge>
+              <Badge variant="secondary" className="bg-gray-100 text-gray-700">{totalBls}</Badge>
             </div>
             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-md">
               <div className="flex items-center">
-                <CheckCircle className="h-5 w-5 mr-2 text-green-600" />
-                <span>BLs Terminés</span>
+                <ThumbsUp className="h-5 w-5 mr-2 text-green-600" />
+                <span>BLs Gagnants (Bénéfice)</span>
               </div>
-              <Badge variant="secondary" className="bg-green-100 text-green-700">{blsByStatus['terminé'] || 0}</Badge>
+              <Badge variant="secondary" className="bg-green-100 text-green-700">{profitableBls}</Badge>
             </div>
             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-md">
               <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 mr-2 text-gray-500" />
-                <span>BLs Inactifs</span>
+                <ThumbsDown className="h-5 w-5 mr-2 text-red-500" />
+                <span>BLs Perdants (Perte)</span>
               </div>
-              <Badge variant="secondary" className="bg-gray-100 text-gray-700">{blsByStatus['inactif'] || 0}</Badge>
+              <Badge variant="secondary" className="bg-red-100 text-red-700">{lossMakingBls}</Badge>
             </div>
              <div className="pt-2">
                 <Link href="/bls" passHref>
