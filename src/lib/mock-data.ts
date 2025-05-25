@@ -1,4 +1,5 @@
-import type { Client, BillOfLading, Expense, User } from './types';
+
+import type { Client, BillOfLading, Expense, User, BLStatus } from './types';
 
 export const MOCK_USERS: User[] = [
   { id: 'user-1', name: 'Alice Employee', role: 'employee' },
@@ -24,6 +25,15 @@ export const MOCK_CLIENTS: Client[] = [
     address: '456 Export Road, London, EC1A 1BB, UK',
     blIds: ['bl-2'],
   },
+  {
+    id: 'client-3',
+    name: 'Logistique Express SARL',
+    contactPerson: 'Pierre Durand',
+    email: 'pierre.durand@logexpress.fr',
+    phone: '+33-1-2345-6789',
+    address: '789 Rue de la Logistique, 75001 Paris, France',
+    blIds: [],
+  }
 ];
 
 export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
@@ -34,8 +44,8 @@ export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
     allocatedAmount: 5000,
     serviceTypes: ['Transit', 'Transport'],
     description: 'Electronics and computer parts from Shanghai to New York.',
-    aiSuggestedCategories: ['Electronics', 'Computer Components'],
-    aiSuggestedSubCategories: ['High-Value Goods', 'Fragile Items'],
+    categories: ['Électronique', 'Haute Technologie'],
+    status: 'terminé',
     createdAt: new Date('2023-10-15T10:00:00Z').toISOString(),
   },
   {
@@ -45,6 +55,8 @@ export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
     allocatedAmount: 7500,
     serviceTypes: ['Logistique', 'Customs Clearance'],
     description: 'Apparel and textiles from Bangladesh to London.',
+    categories: ['Textile', 'Importation'],
+    status: 'en cours',
     createdAt: new Date('2023-11-01T14:30:00Z').toISOString(),
   },
   {
@@ -54,8 +66,21 @@ export const MOCK_BILLS_OF_LADING: BillOfLading[] = [
     allocatedAmount: 3000,
     serviceTypes: ['Transit'],
     description: 'Automotive spare parts from Germany to New York.',
+    categories: ['Automobile', 'Pièces détachées'],
+    status: 'en cours',
     createdAt: new Date('2023-11-20T09:15:00Z').toISOString(),
   },
+  {
+    id: 'bl-4',
+    blNumber: 'SUDU999000',
+    clientId: 'client-3',
+    allocatedAmount: 12000,
+    serviceTypes: ['Transit', 'Logistique', 'Transport'],
+    description: 'Machinerie lourde pour chantier de construction.',
+    categories: ['Machinerie', 'Projet Spécial'],
+    status: 'inactif',
+    createdAt: new Date('2023-09-01T09:15:00Z').toISOString(),
+  }
 ];
 
 export const MOCK_EXPENSES: Expense[] = [
@@ -93,10 +118,26 @@ export const MOCK_EXPENSES: Expense[] = [
   },
   {
     id: 'exp-5',
-    blId: 'bl-1', // This expense will cause bl-1 to be at a loss
+    blId: 'bl-1', 
     label: 'Unexpected Storage Fee',
-    amount: 2000,
+    amount: 2000, // This expense made bl-1 a loss
     date: new Date('2023-10-25T09:00:00Z').toISOString(),
+    employeeId: 'user-1',
+  },
+  {
+    id: 'exp-6',
+    blId: 'bl-3',
+    label: 'Frais de dossier',
+    amount: 150,
+    date: new Date('2023-11-21T09:00:00Z').toISOString(),
+    employeeId: 'user-1',
+  },
+  {
+    id: 'exp-7',
+    blId: 'bl-4',
+    label: 'Pré-acheminement',
+    amount: 800,
+    date: new Date('2023-09-05T09:00:00Z').toISOString(),
     employeeId: 'user-1',
   }
 ];

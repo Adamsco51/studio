@@ -1,3 +1,6 @@
+
+export type BLStatus = 'en cours' | 'terminé' | 'inactif';
+
 export interface Client {
   id: string;
   name: string;
@@ -14,9 +17,9 @@ export interface BillOfLading {
   clientId: string;
   allocatedAmount: number;
   serviceTypes: string[];
-  description: string; // For AI categorization
-  aiSuggestedCategories?: string[];
-  aiSuggestedSubCategories?: string[];
+  description: string; // For context, can still be useful
+  categories: string[]; // Manual categories
+  status: BLStatus;
   createdAt: string; // ISO Date string
 }
 
@@ -27,11 +30,6 @@ export interface Expense {
   amount: number;
   date: string; // ISO Date string
   employeeId: string; // Mocked, in a real app this would be a user ID
-}
-
-// For AI categorization form
-export interface AICategorizationFormData {
-  description: string;
 }
 
 // For mock user data

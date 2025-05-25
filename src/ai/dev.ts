@@ -1,4 +1,6 @@
+
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/categorize-bill-of-lading.ts';
+// Removed: import '@/ai/flows/categorize-bill-of-lading.ts';
+// Add other flow imports here if needed in the future

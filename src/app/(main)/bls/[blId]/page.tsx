@@ -1,13 +1,14 @@
-"use client"; // Top-level client component due to useState for expenses
+
+"use client"; 
 
 import { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_EXPENSES as INITIAL_MOCK_EXPENSES, MOCK_USERS } from '@/lib/mock-data';
-import type { BillOfLading, Expense, Client, User } from '@/lib/types';
+import type { BillOfLading, Expense, Client, User, BLStatus } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIcon } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIcon, Tag, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -27,6 +28,21 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+
+const getStatusBadgeVariant = (status: BLStatus) => {
+  if (status === 'terminé') return 'default'; // Greenish or neutral success
+  if (status === 'en cours') return 'secondary'; // Bluish or yellowish for in progress
+  if (status === 'inactif') return 'outline'; // Grayish for inactive
+  return 'default';
+};
+
+const getStatusIcon = (status: BLStatus) => {
+  if (status === 'terminé') return <CheckCircle className="mr-1 h-4 w-4 text-green-500" />;
+  if (status === 'en cours') return <Clock className="mr-1 h-4 w-4 text-blue-500" />;
+  if (status === 'inactif') return <AlertCircle className="mr-1 h-4 w-4 text-gray-500" />;
+  return null;
+}
 
 export default function BLDetailPage({ params }: { params: { blId: string } }) {
   const [bl, setBl] = useState<BillOfLading | null>(null);
@@ -46,26 +62,27 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
     setIsMounted(true);
   }, [params.blId]);
 
-  const { totalExpenses, balance, status, profit } = useMemo(() => {
-    if (!bl) return { totalExpenses: 0, balance: 0, status: 'N/A', profit: false };
+  const { totalExpenses, balance, profitStatus, profit } = useMemo(() => {
+    if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
     const currentTotalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     const currentBalance = bl.allocatedAmount - currentTotalExpenses;
     return {
       totalExpenses: currentTotalExpenses,
       balance: currentBalance,
-      status: currentBalance >= 0 ? 'Bénéfice' : 'Perte',
+      profitStatus: currentBalance >= 0 ? 'Bénéfice' : 'Perte',
       profit: currentBalance >= 0,
     };
   }, [bl, expenses]);
 
   const handleExpenseAdded = (newExpense: Expense) => {
     setExpenses(prevExpenses => [...prevExpenses, newExpense]);
+    // In a real app, MOCK_EXPENSES would be updated globally or via API
+    INITIAL_MOCK_EXPENSES.push(newExpense);
   };
 
   const getEmployeeName = (employeeId: string) => MOCK_USERS.find(u => u.id === employeeId)?.name || 'Inconnu';
 
   if (!isMounted) {
-    // To avoid hydration mismatch for dynamic data
     return <div className="flex justify-center items-center h-64"><ArrowLeft className="animate-spin h-8 w-8 text-primary" /> Chargement...</div>;
   }
   
@@ -107,9 +124,20 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>Informations du BL</span>
-                <Badge variant={profit ? 'default' : 'destructive'} className={`${profit ? 'bg-green-500' : 'bg-red-500'} text-white`}>
-                  {status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={getStatusBadgeVariant(bl.status)} className={cn(
+                    "capitalize",
+                    bl.status === 'terminé' && 'bg-green-100 text-green-700 border-green-300',
+                    bl.status === 'en cours' && 'bg-blue-100 text-blue-700 border-blue-300',
+                    bl.status === 'inactif' && 'bg-gray-100 text-gray-700 border-gray-300'
+                  )}>
+                    {getStatusIcon(bl.status)}
+                    {bl.status}
+                  </Badge>
+                  <Badge variant={profit ? 'default' : 'destructive'} className={`${profit ? 'bg-green-500' : 'bg-red-500'} text-white`}>
+                    {profitStatus}
+                  </Badge>
+                </div>
               </CardTitle>
                {client && (
                 <CardDescription>
@@ -146,17 +174,20 @@ export default function BLDetailPage({ params }: { params: { blId: string } }) {
                   {bl.serviceTypes.map(st => <Badge key={st} variant="secondary">{st}</Badge>)}
                 </div>
               </div>
-              <div className="md:col-span-2">
-                <p className="text-sm text-muted-foreground">Description (pour IA)</p>
-                <p className="font-medium bg-secondary/30 p-2 rounded-md text-sm">{bl.description}</p>
-              </div>
-              {(bl.aiSuggestedCategories && bl.aiSuggestedCategories.length > 0) && (
-                 <div className="md:col-span-2">
-                    <p className="text-sm text-muted-foreground">Catégories suggérées par IA</p>
+               <div className="md:col-span-2">
+                <p className="text-sm text-muted-foreground flex items-center"><Tag className="mr-2 h-4 w-4"/>Catégories Manuelles</p>
+                {bl.categories && bl.categories.length > 0 ? (
                     <div className="flex flex-wrap gap-2 mt-1">
-                        {bl.aiSuggestedCategories.map((cat, idx) => <Badge key={`ai-cat-${idx}`} variant="outline">{cat}</Badge>)}
-                        {bl.aiSuggestedSubCategories?.map((subcat, idx) => <Badge key={`ai-subcat-${idx}`} variant="outline" className="opacity-70">{subcat}</Badge>)}
+                        {bl.categories.map((cat, idx) => <Badge key={`manual-cat-${idx}`} variant="outline">{cat}</Badge>)}
                     </div>
+                ) : (
+                    <p className="text-sm text-muted-foreground italic">Aucune catégorie manuelle définie.</p>
+                )}
+              </div>
+              {bl.description && (
+                 <div className="md:col-span-2">
+                    <p className="text-sm text-muted-foreground">Description</p>
+                    <p className="font-medium bg-secondary/30 p-2 rounded-md text-sm">{bl.description}</p>
                 </div>
               )}
             </CardContent>
