@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, use } from 'react'; // Added React
+import React, { useState, useEffect, useMemo, use, useCallback } from 'react'; 
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -16,10 +16,10 @@ import {
     addApprovalRequestToFirestore,
     getPinIssuedRequestForEntity,
     completeApprovalRequestWithPin,
-    getExpenseByIdFromFirestore // Added
+    getExpenseByIdFromFirestore 
 } from '@/lib/mock-data';
 import type { Expense, BillOfLading, Client, ApprovalRequest } from '@/lib/types';
-import { PlusCircle, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon as CalendarIconLucide, FilterX, Eye, Edit, Loader2, KeyRound } from 'lucide-react'; // Renamed CalendarIcon
+import { PlusCircle, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon as CalendarIconLucide, FilterX, Eye, Edit, Loader2, KeyRound, DollarSign } from 'lucide-react'; 
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -31,7 +31,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger as it's used with asChild
+} from "@/components/ui/alert-dialog"; 
 import {
   Dialog,
   DialogContent,
@@ -39,7 +39,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger, // Keep DialogTrigger
+  DialogTrigger, 
   DialogClose,
 } from "@/components/ui/dialog";
 import { ExpenseForm } from '@/components/expense/expense-form';
@@ -78,7 +78,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   const [expenseTargetedForAction, setExpenseTargetedForAction] = useState<ExpenseWithDetails | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
   const [showAddExpenseDialog, setShowAddExpenseDialog] = useState(false);
-  const [showEditExpenseDialog, setShowEditExpenseDialog] = useState(false); // For Edit
+  const [showEditExpenseDialog, setShowEditExpenseDialog] = useState(false); 
   const [showReasonDialog, setShowReasonDialog] = useState(false);
 
   const [showPinDialog, setShowPinDialog] = useState(false);
@@ -87,43 +87,44 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
 
 
-  useEffect(() => {
-    const fetchData = async () => {
-        setIsLoading(true);
-        try {
-            const [fetchedExpenses, fetchedBls, fetchedClients] = await Promise.all([
-                getExpensesFromFirestore(),
-                getBLsFromFirestore(),
-                getClientsFromFirestore()
-            ]);
-            setAllBls(fetchedBls);
-            setAllClients(fetchedClients);
+  const fetchData = useCallback(async () => {
+    if (!user) {
+        setIsLoading(false);
+        return;
+    }
+    setIsLoading(true);
+    try {
+        const [fetchedExpenses, fetchedBls, fetchedClients] = await Promise.all([
+            getExpensesFromFirestore(),
+            getBLsFromFirestore(),
+            getClientsFromFirestore()
+        ]);
+        setAllBls(fetchedBls);
+        setAllClients(fetchedClients);
 
-            const detailedExpenses = fetchedExpenses.map(exp => {
-                const bl = fetchedBls.find(b => b.id === exp.blId);
-                const client = bl ? fetchedClients.find(c => c.id === bl.clientId) : undefined;
-                return {
-                    ...exp,
-                    blNumber: bl?.blNumber,
-                    clientName: client?.name,
-                    employeeName: getEmployeeNameFromMock(exp.employeeId),
-                };
-            }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            setExpenses(detailedExpenses);
+        const detailedExpenses = fetchedExpenses.map(exp => {
+            const bl = fetchedBls.find(b => b.id === exp.blId);
+            const client = bl ? fetchedClients.find(c => c.id === bl.clientId) : undefined;
+            return {
+                ...exp,
+                blNumber: bl?.blNumber,
+                clientName: client?.name,
+                employeeName: getEmployeeNameFromMock(exp.employeeId),
+            };
+        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setExpenses(detailedExpenses);
 
-        } catch (error) {
-            console.error("Failed to fetch data for expenses page:", error);
-            toast({title: "Erreur de chargement", description: "Impossible de charger les données de base.", variant: "destructive"});
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    if (user) {
-        fetchData();
-    } else if (!user && !isLoading) {
+    } catch (error) {
+        console.error("Failed to fetch data for expenses page:", error);
+        toast({title: "Erreur de chargement", description: "Impossible de charger les données de base.", variant: "destructive"});
+    } finally {
         setIsLoading(false);
     }
-  }, [user, toast]); // Removed isLoading from dependencies
+  }, [user, toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]); 
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -194,30 +195,20 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
 
   const handleEditExpenseAction = async (expense: ExpenseWithDetails) => {
     if (!user) return;
-    setExpenseTargetedForAction(expense); // Set the expense to be edited
+    setExpenseTargetedForAction(expense); 
     setPinActionType('edit');
 
     if (isAdmin) {
-      setShowEditExpenseDialog(true); // Open edit dialog directly for admin
+      setShowEditExpenseDialog(true); 
     } else {
-      // For non-admin, check for PIN or open request dialog (not implemented yet for edit on this page)
-      // For now, non-admins won't be able to edit from this page directly, they'd need a PIN or approval.
-      // We can add the PIN check for edit later if needed, similar to delete.
-      // For simplicity in this step, let's assume edit for non-admin on this page requires prior PIN/approval.
-      // Or, we can open the edit dialog and then the ExpenseForm internally can handle it if no `initialData.id`
-      // No, for edit action, we *must* have an existing PIN if non-admin, or request it.
-      // Let's simulate the request process or PIN check if not admin for edit.
        setIsProcessingAction(true);
        try {
         const pinRequest = await getPinIssuedRequestForEntity('expense', expense.id, 'edit');
         if (pinRequest) {
           setActivePinRequest(pinRequest);
-          setShowPinDialog(true); // This will open the PIN dialog for edit
+          setShowPinDialog(true); 
         } else {
-          // If no PIN, non-admin cannot edit directly from this page without a request flow.
-          // We'd typically open a "request edit" dialog here.
-          // For now, let's just show a toast. This part of the approval flow (requesting edit for expense) is not fully built.
-          toast({title: "Action Requise", description: "Veuillez demander une approbation ou utiliser un PIN pour modifier cette dépense.", variant: "default"});
+          toast({title: "Action Requise", description: "Veuillez demander une approbation avec PIN à un administrateur pour modifier cette dépense.", variant: "default", duration: 5000});
           setExpenseTargetedForAction(null);
         }
        } catch (error) {
@@ -255,15 +246,14 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseTargetedForAction!.id));
         toast({ title: "Dépense Supprimée", description: `La dépense "${expenseTargetedForAction.label}" a été supprimée via PIN.` });
       } else if (pinActionType === 'edit') {
-        // If PIN is for edit, complete the approval request and open the edit dialog
         await completeApprovalRequestWithPin(activePinRequest.id);
         toast({ title: "PIN Validé", description: "Vous pouvez maintenant modifier la dépense." });
-        setShowEditExpenseDialog(true); // expenseTargetedForAction is already set
+        setShowEditExpenseDialog(true); 
       }
       setShowPinDialog(false);
       setPinEntry('');
       setActivePinRequest(null);
-      if (pinActionType === 'delete') setExpenseTargetedForAction(null); // Reset only if deleted
+      if (pinActionType === 'delete') setExpenseTargetedForAction(null); 
     } catch (error) {
         console.error(`Erreur lors de l'action ${pinActionType} avec PIN:`, error);
         toast({ title: "Erreur", description: `Échec de l'action ${pinActionType} avec PIN.`, variant: "destructive" });
@@ -283,12 +273,12 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         title: "Dépense Supprimée",
         description: "La dépense a été supprimée avec succès.",
       });
-      setExpenseTargetedForAction(null);
-      setShowReasonDialog(false);
     } catch (error) {
         console.error("Failed to delete expense:", error);
         toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
     } finally {
+        setExpenseTargetedForAction(null);
+        setShowReasonDialog(false);
         setIsProcessingAction(false);
     }
   };
@@ -313,13 +303,13 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
             title: "Demande Enregistrée",
             description: `Votre demande de suppression pour la dépense "${expenseTargetedForAction.label}" a été enregistrée.`,
         });
-        setDeleteReason('');
-        setExpenseTargetedForAction(null);
-        setShowReasonDialog(false);
     } catch (error) {
         console.error("Failed to submit delete expense request:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
     } finally {
+        setDeleteReason('');
+        setExpenseTargetedForAction(null);
+        setShowReasonDialog(false);
         setIsProcessingAction(false);
     }
   };
@@ -334,10 +324,10 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         employeeName: getEmployeeNameFromMock(savedExpense.employeeId),
     };
 
-    if (expenses.find(exp => exp.id === savedExpense.id)) { // It's an update
+    if (expenses.find(exp => exp.id === savedExpense.id)) { 
         setExpenses(prevExpenses => prevExpenses.map(exp => exp.id === savedExpense.id ? detailedSavedExpense : exp)
         .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    } else { // It's an addition
+    } else { 
         setExpenses(prevExpenses => [detailedSavedExpense, ...prevExpenses]
         .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     }
@@ -472,7 +462,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
           <CardTitle>Liste des Dépenses</CardTitle>
           <CardDescription>
             Aperçu de toutes les dépenses enregistrées, triées par date (plus récentes en premier).
-            Nombre de dépenses affichées: {isLoading ? "Chargement..." : filteredExpenses.length}
+            Affichage: {isLoading ? "..." : filteredExpenses.length} dépense(s).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -480,6 +470,21 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
             <div className="flex justify-center items-center py-10">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="ml-2 text-muted-foreground">Chargement des données...</p>
+            </div>
+         ) : filteredExpenses.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+                <DollarSign className="mx-auto h-12 w-12 opacity-50" />
+                <p className="mt-2">
+                {searchTerm || selectedBlId || selectedClientId || selectedDate 
+                    ? "Aucune dépense ne correspond à vos filtres." 
+                    : "Aucune dépense n'a été trouvée. Commencez par en ajouter une !"
+                }
+                </p>
+                 {(!searchTerm && !selectedBlId && !selectedClientId && !selectedDate) && (
+                    <Button asChild className="mt-4" onClick={() => setShowAddExpenseDialog(true)}>
+                        <span><PlusCircle className="mr-2 h-4 w-4" />Ajouter une Dépense</span>
+                    </Button>
+                )}
             </div>
          ) : (
           <Table>
@@ -520,8 +525,9 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                           </Button>
                         </Link>
                       )}
-                      <Button variant="ghost" size="sm" title="Modifier Dépense" onClick={() => handleEditExpenseAction(exp)} disabled={isProcessingAction && expenseTargetedForAction?.id === exp.id && pinActionType === 'edit'}>
-                        {(isProcessingAction && expenseTargetedForAction?.id === exp.id && pinActionType === 'edit') ? <Loader2 className="h-4 w-4 animate-spin"/> : <Edit className="h-4 w-4" />}
+                      <Button variant="ghost" size="sm" title="Modifier Dépense" onClick={() => handleEditExpenseAction(exp)} 
+                        disabled={isProcessingAction && pinActionType === 'edit' && expenseTargetedForAction?.id === exp.id}>
+                        {(isProcessingAction && pinActionType === 'edit' && expenseTargetedForAction?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin"/> : <Edit className="h-4 w-4" />}
                       </Button>
                       <Button
                         variant="ghost"
@@ -529,9 +535,9 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                         className="text-muted-foreground hover:text-destructive"
                         title="Supprimer Dépense"
                         onClick={() => handleDeleteExpenseAction(exp)}
-                        disabled={isProcessingAction && expenseTargetedForAction?.id === exp.id && pinActionType === 'delete'}
+                        disabled={isProcessingAction && pinActionType === 'delete' && expenseTargetedForAction?.id === exp.id}
                       >
-                        {(isProcessingAction && expenseTargetedForAction?.id === exp.id && pinActionType === 'delete') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        {(isProcessingAction && pinActionType === 'delete' && expenseTargetedForAction?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </Button>
                     </div>
                   </TableCell>
@@ -540,17 +546,15 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
             </TableBody>
           </Table>
          )}
-           {!isLoading && filteredExpenses.length === 0 && (
-            <p className="text-center text-muted-foreground py-4">
-              {searchTerm || selectedBlId || selectedClientId || selectedDate ? "Aucune dépense ne correspond à vos filtres." : "Aucune dépense trouvée."}
-            </p>
-          )}
         </CardContent>
       </Card>
 
       {/* Edit Expense Dialog */}
       <Dialog open={showEditExpenseDialog} onOpenChange={(open) => {
-        if (!open) setExpenseTargetedForAction(null); // Clear target when dialog closes
+        if (!open) {
+            setExpenseTargetedForAction(null);
+            if (pinActionType === 'edit') setActivePinRequest(null); // Reset pin request if it was for this edit
+        }
         setShowEditExpenseDialog(open);
       }}>
         <DialogContent className="sm:max-w-[480px]">
@@ -564,7 +568,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
             <ExpenseForm
               initialData={expenseTargetedForAction}
               onExpenseAddedOrUpdated={handleExpenseAddedOrUpdatedFromDialog}
-              availableBls={allBls} // Pass allBls for context if BL needs to be shown (though usually not changed in edit)
+              availableBls={allBls} 
               setDialogOpen={setShowEditExpenseDialog}
             />
           )}
@@ -577,6 +581,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
           if(!isOpen) {
             setExpenseTargetedForAction(null);
             setDeleteReason('');
+            if (pinActionType === 'delete') setActivePinRequest(null);
           }
           setShowReasonDialog(isOpen);
       }}>
@@ -606,7 +611,9 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {setExpenseTargetedForAction(null); setDeleteReason(''); setShowReasonDialog(false);}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
+            <DialogClose asChild>
+                <Button variant="outline" disabled={isProcessingAction} onClick={() => {setExpenseTargetedForAction(null); setDeleteReason(''); setShowReasonDialog(false); if (pinActionType === 'delete') setActivePinRequest(null);}}>Annuler</Button>
+            </DialogClose>
             <Button
                 onClick={isAdmin ? handleDeleteExpenseDirectly : handleSubmitDeleteRequest}
                 variant={isAdmin ? "destructive" : "default"}
@@ -624,7 +631,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         if (!isOpen) {
           setPinEntry('');
           setActivePinRequest(null);
-          setExpenseTargetedForAction(null); // Reset target on PIN dialog close
+          setExpenseTargetedForAction(null); 
           setPinActionType(null);
         }
         setShowPinDialog(isOpen);
@@ -654,7 +661,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
           </div>
           <DialogFooter>
             <DialogClose asChild>
-                <Button variant="outline" disabled={isProcessingAction}>Annuler</Button>
+                <Button variant="outline" disabled={isProcessingAction} onClick={() => {setExpenseTargetedForAction(null); setPinEntry(''); setActivePinRequest(null); setPinActionType(null); }}>Annuler</Button>
             </DialogClose>
             <Button onClick={handlePinSubmit} disabled={isProcessingAction || pinEntry.length !== 6}>
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

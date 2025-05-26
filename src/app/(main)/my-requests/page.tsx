@@ -68,13 +68,12 @@ export default function MyRequestsPage() {
       router.push('/login');
     }
     if (!authLoading && user && isAdmin) {
-      // Admins should use the main approvals page
       router.push('/admin/approvals');
     }
   }, [authLoading, user, isAdmin, router]);
 
   const fetchRequests = useCallback(async () => {
-    if (user && !isAdmin) { // Only fetch if user is logged in and not an admin
+    if (user && !isAdmin) { 
       setIsLoading(true);
       try {
         const fetchedRequests = await getApprovalRequestsByUserIdFromFirestore(user.uid);
@@ -86,24 +85,23 @@ export default function MyRequestsPage() {
         setIsLoading(false);
       }
     } else if (!user && !authLoading) {
-        setIsLoading(false); // Not logged in, no requests to load
+        setIsLoading(false); 
     }
-  }, [user, isAdmin, toast]); // toast is stable
+  }, [user, isAdmin, toast]); 
 
   useEffect(() => {
     fetchRequests();
   }, [fetchRequests]); 
 
   const getEntityLink = (request: ApprovalRequest) => {
-    // Basic link to entity page, not specific edit/action page for this view
     switch (request.entityType) {
       case 'bl':
         return `/bls/${request.entityId}`;
       case 'client':
         return `/clients/${request.entityId}`;
-      case 'workType': // Work types don't have a detail page, link to list or edit? For now, no link.
+      case 'workType': 
         return `/work-types`; 
-      case 'expense': // Expenses are viewed within BLs, no direct link here for simplicity
+      case 'expense': 
          if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
@@ -126,8 +124,8 @@ export default function MyRequestsPage() {
     );
   }
 
-  if (!user || isAdmin) { // If not logged in or is an admin, this page shouldn't be shown
-    return null; // Redirects handle the actual navigation
+  if (!user || isAdmin) { 
+    return null; 
   }
 
   return (
@@ -184,7 +182,7 @@ export default function MyRequestsPage() {
                       </TableCell>
                       <TableCell>{getActionText(req.actionType)}</TableCell>
                       <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
-                      <TableCell>{req.createdAt ? format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                      <TableCell>{req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
                            {req.status === 'pending' && <Clock className="mr-1 h-3 w-3" />}
@@ -217,5 +215,3 @@ export default function MyRequestsPage() {
     </>
   );
 }
-
-    

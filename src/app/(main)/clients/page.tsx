@@ -1,27 +1,35 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Added React
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; 
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getClientsFromFirestore, getBLsFromFirestore } from '@/lib/mock-data'; 
-import { PlusCircle, ArrowRight, UserCheck, UserX, Search, Loader2 } from 'lucide-react';
+import { PlusCircle, ArrowRight, UserCheck, UserX, Search, Loader2, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import type { Client, BillOfLading } from '@/lib/types'; 
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/auth-context';
 
 type ClientWithStatus = Client & { isActive: boolean };
 
 export default function ClientsPage() { 
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<ClientWithStatus[]>([]);
   const [allBls, setAllBls] = useState<BillOfLading[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
+    if (!user) {
+        setIsLoading(false);
+        return;
+    }
     setIsLoading(true);
     try {
       const [firestoreClients, firestoreBls] = await Promise.all([
@@ -38,11 +46,11 @@ export default function ClientsPage() {
       setClients(clientsWithStatus);
     } catch (error) {
       console.error("Failed to fetch clients or BLs:", error);
-      // Handle error (e.g., show a toast)
+      toast({ title: "Erreur", description: "Impossible de charger les clients ou les BLs.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  }, []); 
+  }, [user, toast]); 
 
   useEffect(() => {
     fetchData();
@@ -86,7 +94,7 @@ export default function ClientsPage() {
         <CardHeader>
           <CardTitle>Liste des Clients</CardTitle>
           <CardDescription>
-            Voici la liste de tous les clients enregistrés dans le système.
+            Voici la liste de tous les clients enregistrés dans le système. Affichage: {isLoading ? "..." : filteredClients.length} client(s).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -94,6 +102,21 @@ export default function ClientsPage() {
             <div className="flex justify-center items-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2 text-muted-foreground">Chargement des clients...</p>
+            </div>
+          ) : filteredClients.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+                <Users className="mx-auto h-12 w-12 opacity-50" />
+                <p className="mt-2">
+                {searchTerm 
+                    ? "Aucun client ne correspond à votre recherche." 
+                    : "Aucun client n'a été trouvé. Commencez par en ajouter un !"
+                }
+                </p>
+                {!searchTerm && (
+                    <Button asChild className="mt-4">
+                        <Link href="/clients/add"><PlusCircle className="mr-2 h-4 w-4" />Ajouter un Client</Link>
+                    </Button>
+                )}
             </div>
           ) : (
             <Table>
@@ -133,15 +156,8 @@ export default function ClientsPage() {
               </TableBody>
             </Table>
           )}
-          {!isLoading && filteredClients.length === 0 && (
-            <p className="text-center text-muted-foreground py-4">
-              {searchTerm ? "Aucun client ne correspond à votre recherche." : "Aucun client trouvé."}
-            </p>
-          )}
         </CardContent>
       </Card>
     </>
   );
 }
-
-    

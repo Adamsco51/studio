@@ -214,7 +214,7 @@ export default function AdminUsersPage() {
               </div>
             </div>
             <DialogFooter>
-              <DialogClose asChild><Button variant="outline" disabled={isUpdatingRole}>Annuler</Button></DialogClose>
+              <DialogClose asChild><Button variant="outline" disabled={isUpdatingRole} onClick={() => setEditingUser(null)}>Annuler</Button></DialogClose>
               <Button 
                 onClick={handleUpdateUserInfo} 
                 disabled={
@@ -234,5 +234,3 @@ export default function AdminUsersPage() {
     </>
   );
 }
-
-    

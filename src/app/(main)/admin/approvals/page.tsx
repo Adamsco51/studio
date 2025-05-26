@@ -18,7 +18,7 @@ import {
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { format, addHours } from 'date-fns';
+import { format, addHours, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Loader2, CheckCircle, XCircle, HelpCircle, ShieldQuestion, KeyRound } from 'lucide-react';
 import {
@@ -111,7 +111,7 @@ export default function AdminApprovalsPage() {
         setIsLoading(false);
       }
     }
-  }, [isAdmin, toast]); // toast is stable, isAdmin is a dependency
+  }, [isAdmin, toast]);
 
   useEffect(() => {
     fetchRequests();
@@ -121,8 +121,8 @@ export default function AdminApprovalsPage() {
     setSelectedRequest(request);
     setActionToConfirm(action);
     setAdminNotes(request.adminNotes || '');
-    setIssuePin(false); // Reset issuePin state
-    setManualPin('');   // Reset manualPin state
+    setIssuePin(false); 
+    setManualPin('');   
   };
 
   const handleProcessRequest = async () => {
@@ -131,12 +131,12 @@ export default function AdminApprovalsPage() {
     setIsProcessingAction(true);
     let newStatus: ApprovalRequestStatus = actionToConfirm === 'approve' ? 'approved' : 'rejected';
     let pinCodeToSave: string | undefined = undefined;
-    let pinExpiryToSave: Date | undefined = undefined;
+    let pinExpiryToSave: string | undefined = undefined; // Store as ISO string
 
     if (actionToConfirm === 'approve' && issuePin) {
         newStatus = 'pin_issued';
-        pinCodeToSave = manualPin || Math.floor(100000 + Math.random() * 900000).toString(); // Use manual or generate
-        pinExpiryToSave = addHours(new Date(), 24); // PIN expires in 24 hours
+        pinCodeToSave = manualPin || Math.floor(100000 + Math.random() * 900000).toString(); 
+        pinExpiryToSave = addHours(new Date(), 24).toISOString(); 
     }
     
     try {
@@ -146,7 +146,7 @@ export default function AdminApprovalsPage() {
         adminNotes, 
         user.uid,
         pinCodeToSave,
-        pinExpiryToSave ? pinExpiryToSave.toISOString() : undefined
+        pinExpiryToSave 
       );
       
       let toastMessage = `La demande a été ${getStatusText(newStatus)}.`;
@@ -155,7 +155,7 @@ export default function AdminApprovalsPage() {
       }
       toast({ title: "Demande Traitée", description: toastMessage });
 
-      if (newStatus === 'approved' && selectedRequest.actionType === 'delete' && !issuePin) { // Only auto-delete if not issuing PIN
+      if (newStatus === 'approved' && selectedRequest.actionType === 'delete' && !issuePin) { 
         try {
           let entityDeleted = false;
           if (selectedRequest.entityType === 'bl') {
@@ -183,15 +183,15 @@ export default function AdminApprovalsPage() {
       }
       
       fetchRequests(); 
+    } catch (error) {
+      console.error("Failed to process request:", error);
+      toast({ title: "Erreur", description: "Échec du traitement de la demande.", variant: "destructive" });
+    } finally {
       setSelectedRequest(null);
       setActionToConfirm(null);
       setAdminNotes('');
       setIssuePin(false);
       setManualPin('');
-    } catch (error) {
-      console.error("Failed to process request:", error);
-      toast({ title: "Erreur", description: "Échec du traitement de la demande.", variant: "destructive" });
-    } finally {
       setIsProcessingAction(false);
     }
   };
@@ -208,7 +208,7 @@ export default function AdminApprovalsPage() {
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
-            return `/bls/${blMatch[1]}`; // This links to the BL detail page, not the expense itself
+            return `/bls/${blMatch[1]}`; 
           }
         }
         return null; 
@@ -285,7 +285,7 @@ export default function AdminApprovalsPage() {
                       </TableCell>
                       <TableCell>{getActionText(req.actionType)}</TableCell>
                       <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
-                      <TableCell>{req.createdAt ? format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                      <TableCell>{req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
                            {req.status === 'pending' && <HelpCircle className="mr-1 h-3 w-3" />}
@@ -312,7 +312,7 @@ export default function AdminApprovalsPage() {
                         )}
                         {req.status !== 'pending' && req.adminNotes && (
                            <p className="text-xs text-muted-foreground italic text-left" title={`Notes Admin: ${req.adminNotes}${req.processedByUserId ? ` (par ${req.processedByUserId.substring(0,6)}...)` : ''}`}>
-                             Traité {req.processedAt ? format(new Date(req.processedAt), 'dd/MM/yy HH:mm', {locale: fr}) : ''}
+                             Traité {req.processedAt ? format(parseISO(req.processedAt), 'dd/MM/yy HH:mm', {locale: fr}) : ''}
                            </p>
                         )}
                       </TableCell>
@@ -346,7 +346,7 @@ export default function AdminApprovalsPage() {
           </DialogHeader>
           
           <div className="py-2 space-y-4">
-            {actionToConfirm === 'approve' && selectedRequest?.actionType === 'edit' && ( // Only show PIN option for edit approvals for now
+            {actionToConfirm === 'approve' && (selectedRequest?.actionType === 'edit' || selectedRequest?.actionType === 'delete' ) && ( 
               <div className="flex items-center space-x-2">
                 <Checkbox 
                   id="issuePin" 
@@ -403,5 +403,3 @@ export default function AdminApprovalsPage() {
     </>
   );
 }
-
-    

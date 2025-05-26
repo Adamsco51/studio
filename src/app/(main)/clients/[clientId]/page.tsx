@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState, useMemo, use } from 'react';
+import React, { useEffect, useState, useMemo, use, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,7 @@ import {
 } from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays, Loader2, KeyRound } from 'lucide-react';
+import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays, Loader2, KeyRound, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
@@ -84,60 +84,61 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
 
 
-  useEffect(() => {
+  const fetchClientDetails = useCallback(async () => {
     if (!clientId || !user) { 
       setIsLoading(false);
       setIsLoadingBls(false);
       return;
     }
-    const fetchClientDetails = async () => {
-      setIsLoading(true);
-      setIsLoadingBls(true);
-      try {
-        const foundClient = await getClientByIdFromFirestore(clientId);
-        setClient(foundClient);
-        if (foundClient) {
-          const bls = await getBLsByClientIdFromFirestore(foundClient.id);
-          
-          const blsWithFullDetails = await Promise.all(bls.map(async (bl) => {
-            const expenses = await getExpensesByBlIdFromFirestore(bl.id);
-            const totalExpenseAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-            const balance = bl.allocatedAmount - totalExpenseAmount;
-            return { 
-                ...bl, 
-                expenses, 
-                balance, 
-                financialStatus: balance >= 0 ? 'Bénéfice' : 'Perte',
-                profit: balance >= 0
-            };
-          }));
+    setIsLoading(true);
+    setIsLoadingBls(true);
+    try {
+      const foundClient = await getClientByIdFromFirestore(clientId);
+      setClient(foundClient);
+      if (foundClient) {
+        const bls = await getBLsByClientIdFromFirestore(foundClient.id);
+        
+        const blsWithFullDetails = await Promise.all(bls.map(async (bl) => {
+          const expenses = await getExpensesByBlIdFromFirestore(bl.id);
+          const totalExpenseAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+          const balance = bl.allocatedAmount - totalExpenseAmount;
+          return { 
+              ...bl, 
+              expenses, 
+              balance, 
+              financialStatus: balance >= 0 ? 'Bénéfice' : 'Perte',
+              profit: balance >= 0
+          };
+        }));
 
-          setClientBLsWithDetails(blsWithFullDetails);
-          setIsLoadingBls(false);
-
-          if (foundClient.createdByUserId) {
-            const creatorProfile = await getUserProfile(foundClient.createdByUserId); 
-            setCreatedByUserDisplay(creatorProfile?.displayName || getEmployeeNameFromMock(foundClient.createdByUserId));
-          }
-        } else {
-          setIsLoadingBls(false); 
-          toast({ title: "Erreur", description: "Client non trouvé.", variant: "destructive" });
-        }
-      } catch (error) {
-        console.error("Failed to fetch client details for ID:", clientId, error);
-        setClient(null); 
+        setClientBLsWithDetails(blsWithFullDetails);
         setIsLoadingBls(false);
-        toast({
-          title: "Erreur de Chargement",
-          description: "Impossible de charger les détails du client.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
+
+        if (foundClient.createdByUserId) {
+          const creatorProfile = await getUserProfile(foundClient.createdByUserId); 
+          setCreatedByUserDisplay(creatorProfile?.displayName || getEmployeeNameFromMock(foundClient.createdByUserId));
+        }
+      } else {
+        setIsLoadingBls(false); 
+        toast({ title: "Erreur", description: "Client non trouvé.", variant: "destructive" });
       }
-    };
-    fetchClientDetails();
+    } catch (error) {
+      console.error("Failed to fetch client details for ID:", clientId, error);
+      setClient(null); 
+      setIsLoadingBls(false);
+      toast({
+        title: "Erreur de Chargement",
+        description: "Impossible de charger les détails du client.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }, [clientId, user, toast]);
+
+  useEffect(() => {
+    fetchClientDetails();
+  }, [fetchClientDetails]);
 
   const toggleBlExpansion = (blId: string) => {
     setExpandedBls(prev => {
@@ -229,13 +230,13 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         router.push('/clients');
         router.refresh();
       }
-      setShowPinDialog(false);
-      setPinEntry('');
-      setActivePinRequest(null);
     } catch (error) {
       console.error(`Erreur lors de l'action ${pinActionType} avec PIN:`, error);
       toast({ title: "Erreur", description: `Échec de l'action ${pinActionType} avec PIN.`, variant: "destructive" });
     } finally {
+      setShowPinDialog(false);
+      setPinEntry('');
+      setActivePinRequest(null);
       setIsProcessingRequest(false);
     }
   };
@@ -280,12 +281,12 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             title: "Demande Enregistrée",
             description: "Votre demande de modification du client a été enregistrée et est en attente d'approbation.",
         });
-        setEditRequestReason('');
-        setShowEditRequestDialog(false);
     } catch (error) {
         console.error("Failed to submit edit request for client:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de modification.", variant: "destructive" });
     } finally {
+        setEditRequestReason('');
+        setShowEditRequestDialog(false);
         setIsProcessingRequest(false);
     }
   };
@@ -310,12 +311,12 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             title: "Demande Enregistrée",
             description: "Votre demande de suppression de client a été enregistrée et est en attente d'approbation.",
         });
-        setDeleteClientReason('');
-        setShowDeleteClientDialog(false);
     } catch (error) {
         console.error("Failed to submit delete client request:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
     } finally {
+        setDeleteClientReason('');
+        setShowDeleteClientDialog(false);
         setIsProcessingRequest(false);
     }
   };
@@ -433,7 +434,15 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <p className="ml-2 text-muted-foreground">Chargement des BLs...</p>
                 </div>
-            ) : clientBLsWithDetails.length > 0 ? (
+            ) : clientBLsWithDetails.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <FileText className="mx-auto h-12 w-12 opacity-50" />
+                <p className="mt-2">Aucun connaissement (BL) associé à ce client pour le moment.</p>
+                <Button asChild className="mt-4">
+                    <Link href={`/bls/add?clientId=${client.id}`}><PlusCircle className="mr-2 h-4 w-4" />Ajouter un BL</Link>
+                </Button>
+              </div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -511,11 +520,6 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                   })}
                 </TableBody>
               </Table>
-            ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <FileText className="mx-auto h-12 w-12 opacity-50" />
-                <p className="mt-2">Aucun connaissement (BL) associé à ce client pour le moment.</p>
-              </div>
             )}
           </CardContent>
         </Card>
@@ -543,7 +547,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           </div>
           <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="outline" disabled={isProcessingRequest}>Annuler</Button>
+                <Button type="button" variant="outline" disabled={isProcessingRequest} onClick={() => setShowEditRequestDialog(false)}>Annuler</Button>
               </DialogClose>
             <Button type="button" onClick={handleSubmitEditRequest} disabled={isProcessingRequest || !editRequestReason.trim()}>
                 {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -583,7 +587,9 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {setDeleteClientReason(''); setShowDeleteClientDialog(false);}} disabled={isDeleting || isProcessingRequest}>Annuler</AlertDialogCancel>
+            <DialogClose asChild>
+                <Button variant="outline" disabled={isDeleting || isProcessingRequest} onClick={() => {setDeleteClientReason(''); setShowDeleteClientDialog(false);}}>Annuler</Button>
+            </DialogClose>
             <Button 
               onClick={isAdmin ? handleDeleteClientWithConfirmation : handleSubmitDeleteClientRequest} 
               disabled={isDeleting || isProcessingRequest || (!isAdmin && !deleteClientReason.trim())}
@@ -630,7 +636,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={isProcessingRequest}>Annuler</Button>
+              <Button variant="outline" disabled={isProcessingRequest} onClick={() => setShowPinDialog(false)}>Annuler</Button>
             </DialogClose>
             <Button onClick={handlePinSubmit} disabled={isProcessingRequest || pinEntry.length !== 6}>
               {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

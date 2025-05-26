@@ -12,12 +12,16 @@ import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Loader2, LogIn, LogOut, History } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
 
 export default function SessionAuditLogPage() {
   const { isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
   const [auditEvents, setAuditEvents] = useState<SessionAuditEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -26,23 +30,23 @@ export default function SessionAuditLogPage() {
   }, [authLoading, isAdmin, router]);
 
   const fetchEvents = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const events = await getSessionAuditEvents();
-      setAuditEvents(events);
-    } catch (error) {
-      console.error("Failed to fetch session audit events:", error);
-      // Consider adding a toast notification for the error
-    } finally {
-      setIsLoading(false);
+    if(isAdmin) {
+        setIsLoading(true);
+        try {
+        const events = await getSessionAuditEvents();
+        setAuditEvents(events);
+        } catch (error) {
+        console.error("Failed to fetch session audit events:", error);
+        toast({ title: "Erreur", description: "Impossible de charger le journal d'audit.", variant: "destructive" });
+        } finally {
+        setIsLoading(false);
+        }
     }
-  }, []);
+  }, [isAdmin, toast]);
 
   useEffect(() => {
-    if (isAdmin) {
-      fetchEvents();
-    }
-  }, [isAdmin, fetchEvents]);
+    fetchEvents();
+  }, [fetchEvents]);
 
   if (authLoading || isLoading) {
     return (
@@ -54,7 +58,6 @@ export default function SessionAuditLogPage() {
   }
 
   if (!isAdmin) {
-    // This case should ideally be handled by the redirect in the first useEffect
     return <div className="text-center py-10"><p className="text-xl">Accès non autorisé.</p></div>;
   }
 
@@ -111,5 +114,3 @@ export default function SessionAuditLogPage() {
     </>
   );
 }
-
-    

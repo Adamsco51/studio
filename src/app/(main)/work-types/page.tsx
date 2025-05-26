@@ -15,7 +15,7 @@ import {
     completeApprovalRequestWithPin 
 } from '@/lib/mock-data'; 
 import type { WorkType, ApprovalRequest } from '@/lib/types';
-import { PlusCircle, Edit, Trash2, Search, Loader2, KeyRound } from 'lucide-react'; 
+import { PlusCircle, Edit, Trash2, Search, Loader2, KeyRound, Briefcase } from 'lucide-react'; 
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -95,6 +95,7 @@ export default function WorkTypesPage() {
   const handleEditWorkTypeAction = async (workType: WorkType) => {
     if (!user) return;
     setWorkTypeTargetedForAction(workType);
+    setPinActionType('edit');
 
     if (isAdmin) {
       router.push(`/work-types/${workType.id}/edit`);
@@ -104,7 +105,6 @@ export default function WorkTypesPage() {
         const pinRequest = await getPinIssuedRequestForEntity('workType', workType.id, 'edit');
         if (pinRequest) {
           setActivePinRequest(pinRequest);
-          setPinActionType('edit');
           setShowPinDialog(true);
         } else {
           setEditReason('');
@@ -121,20 +121,20 @@ export default function WorkTypesPage() {
   const handleDeleteWorkTypeAction = async (workType: WorkType) => {
     if (!user) return;
     setWorkTypeTargetedForAction(workType);
+    setPinActionType('delete');
 
     if (isAdmin) {
-        setShowDeleteReasonDialog(true); // For admin, this is direct delete confirmation
+        setShowDeleteReasonDialog(true); 
     } else {
         setIsProcessingAction(true);
         try {
             const pinRequest = await getPinIssuedRequestForEntity('workType', workType.id, 'delete');
             if (pinRequest) {
                 setActivePinRequest(pinRequest);
-                setPinActionType('delete');
                 setShowPinDialog(true);
             } else {
                 setDeleteReason('');
-                setShowDeleteReasonDialog(true); // For non-admin, this is to enter reason
+                setShowDeleteReasonDialog(true); 
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -158,6 +158,7 @@ export default function WorkTypesPage() {
         setShowPinDialog(false);
         setPinEntry('');
         setActivePinRequest(null);
+        setWorkTypeTargetedForAction(null);
         return;
     }
 
@@ -173,14 +174,14 @@ export default function WorkTypesPage() {
             setWorkTypes(prev => prev.filter(wt => wt.id !== workTypeTargetedForAction!.id));
             toast({ title: "Type de Travail Supprimé", description: `"${workTypeTargetedForAction.name}" a été supprimé via PIN.` });
         }
-        setShowPinDialog(false);
-        setPinEntry('');
-        setActivePinRequest(null);
-        setWorkTypeTargetedForAction(null);
     } catch (error) {
         console.error(`Erreur lors de l'action ${pinActionType} avec PIN:`, error);
         toast({ title: "Erreur", description: `Échec de l'action ${pinActionType} avec PIN.`, variant: "destructive" });
     } finally {
+        setShowPinDialog(false);
+        setPinEntry('');
+        setActivePinRequest(null);
+        setWorkTypeTargetedForAction(null);
         setIsProcessingAction(false);
     }
   };
@@ -195,12 +196,12 @@ export default function WorkTypesPage() {
         title: "Type de Travail Supprimé",
         description: "Le type de travail a été supprimé avec succès.",
       });
-      setShowDeleteReasonDialog(false);
-      setWorkTypeTargetedForAction(null);
     } catch (error) {
       console.error("Failed to delete work type:", error);
       toast({ title: "Erreur", description: "Échec de la suppression.", variant: "destructive" });
     } finally {
+        setShowDeleteReasonDialog(false);
+        setWorkTypeTargetedForAction(null);
         setIsProcessingAction(false);
     }
   };
@@ -225,13 +226,13 @@ export default function WorkTypesPage() {
             title: "Demande Enregistrée",
             description: `Votre demande de modification pour "${workTypeTargetedForAction.name}" a été enregistrée.`,
         });
-        setEditReason('');
-        setShowEditReasonDialog(false); 
-        setWorkTypeTargetedForAction(null);
     } catch (error) {
         console.error("Failed to submit edit request for work type:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de modification.", variant: "destructive" });
     } finally {
+        setEditReason('');
+        setShowEditReasonDialog(false); 
+        setWorkTypeTargetedForAction(null);
         setIsProcessingAction(false);
     }
   };
@@ -256,26 +257,18 @@ export default function WorkTypesPage() {
             title: "Demande Enregistrée",
             description: `Votre demande de suppression pour "${workTypeTargetedForAction.name}" a été enregistrée.`,
         });
-        setDeleteReason('');
-        setShowDeleteReasonDialog(false);
-        setWorkTypeTargetedForAction(null); 
     } catch (error) {
         console.error("Failed to submit delete request for work type:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
     } finally {
+        setDeleteReason('');
+        setShowDeleteReasonDialog(false);
+        setWorkTypeTargetedForAction(null); 
         setIsProcessingAction(false);
     }
   };
 
-  if (isLoading && !user) { 
-    return (
-        <div className="flex justify-center items-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="ml-2 text-muted-foreground">Chargement...</p>
-        </div>
-    );
-  }
-  if (!user && !isLoading) {
+  if (!user && !isLoading) { 
     return <div className="flex justify-center items-center h-64">Veuillez vous connecter pour voir cette page.</div>;
   }
 
@@ -316,7 +309,7 @@ export default function WorkTypesPage() {
           <CardTitle>Liste des Types de Travail</CardTitle>
           <CardDescription>
             Aperçu de tous les types de travail enregistrés, triés par date de création (plus récents en premier).
-            Nombre de types affichés: {isLoading ? "Chargement..." : filteredWorkTypes.length}
+            Affichage: {isLoading ? "..." : filteredWorkTypes.length} type(s).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -324,6 +317,21 @@ export default function WorkTypesPage() {
             <div className="flex justify-center items-center py-10">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="ml-2 text-muted-foreground">Chargement des types de travail...</p>
+            </div>
+          ) : filteredWorkTypes.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground">
+                <Briefcase className="mx-auto h-12 w-12 opacity-50" />
+                <p className="mt-2">
+                {searchTerm 
+                    ? "Aucun type de travail ne correspond à votre recherche." 
+                    : "Aucun type de travail n'a été trouvé. Commencez par en ajouter un !"
+                }
+                </p>
+                 {(!searchTerm) && (
+                    <Button asChild className="mt-4">
+                        <Link href="/work-types/add"><PlusCircle className="mr-2 h-4 w-4" />Ajouter un Type</Link>
+                    </Button>
+                )}
             </div>
           ) : (
           <Table>
@@ -342,12 +350,14 @@ export default function WorkTypesPage() {
                   <TableCell>{wt.description || 'N/A'}</TableCell>
                   <TableCell>{wt.createdAt ? format(parseISO(wt.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                   <TableCell className="text-right space-x-1">
-                    <Button variant="outline" size="sm" onClick={() => handleEditWorkTypeAction(wt)} disabled={isProcessingAction && workTypeTargetedForAction?.id === wt.id}>
-                        {(isProcessingAction && workTypeTargetedForAction?.id === wt.id && pinActionType === 'edit') ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Edit className="mr-1 h-4 w-4" />} Modifier
+                    <Button variant="outline" size="sm" onClick={() => handleEditWorkTypeAction(wt)} 
+                        disabled={isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id}>
+                        {(isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Edit className="mr-1 h-4 w-4" />} Modifier
                     </Button>
                    
-                    <Button variant="destructive" size="sm" onClick={() => handleDeleteWorkTypeAction(wt)} disabled={isProcessingAction && workTypeTargetedForAction?.id === wt.id}>
-                        {(isProcessingAction && workTypeTargetedForAction?.id === wt.id && pinActionType === 'delete') ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Trash2 className="mr-1 h-4 w-4" />} Supprimer
+                    <Button variant="destructive" size="sm" onClick={() => handleDeleteWorkTypeAction(wt)} 
+                        disabled={isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id}>
+                        {(isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Trash2 className="mr-1 h-4 w-4" />} Supprimer
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -355,17 +365,12 @@ export default function WorkTypesPage() {
             </TableBody>
           </Table>
           )}
-           {!isLoading && filteredWorkTypes.length === 0 && (
-            <p className="text-center text-muted-foreground py-4">
-                {searchTerm ? "Aucun type de travail ne correspond à votre recherche." : "Aucun type de travail trouvé."}
-            </p>
-          )}
         </CardContent>
       </Card>
 
       {/* Edit Reason Dialog */}
       <Dialog open={showEditReasonDialog} onOpenChange={(isOpen) => {
-        if(!isOpen) { setWorkTypeTargetedForAction(null); setEditReason(''); }
+        if(!isOpen) { setWorkTypeTargetedForAction(null); setEditReason(''); if(pinActionType === 'edit') setActivePinRequest(null); }
         setShowEditReasonDialog(isOpen);
       }}>
         <DialogContent>
@@ -380,7 +385,7 @@ export default function WorkTypesPage() {
             <Textarea id={`editReason-${workTypeTargetedForAction?.id}`} value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Raison de la demande..." disabled={isProcessingAction}/>
           </div>
           <DialogFooter>
-            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction}>Annuler</Button></DialogClose>
+            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction} onClick={() => { setWorkTypeTargetedForAction(null); setEditReason(''); setShowEditReasonDialog(false); if(pinActionType === 'edit') setActivePinRequest(null);}}>Annuler</Button></DialogClose>
             <Button onClick={handleSubmitEditRequest} disabled={isProcessingAction || !editReason.trim()}>
                 {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                 Soumettre
@@ -391,7 +396,7 @@ export default function WorkTypesPage() {
 
       {/* Delete Reason/Confirmation Dialog */}
       <AlertDialog open={showDeleteReasonDialog} onOpenChange={(isOpen) => {
-        if(!isOpen) { setWorkTypeTargetedForAction(null); setDeleteReason(''); }
+        if(!isOpen) { setWorkTypeTargetedForAction(null); setDeleteReason(''); if(pinActionType === 'delete') setActivePinRequest(null);}
         setShowDeleteReasonDialog(isOpen);
       }}>
         <AlertDialogContent>
@@ -411,7 +416,9 @@ export default function WorkTypesPage() {
               )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {setShowDeleteReasonDialog(false); setWorkTypeTargetedForAction(null); setDeleteReason('');}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
+            <DialogClose asChild>
+                <Button variant="outline" disabled={isProcessingAction} onClick={() => {setShowDeleteReasonDialog(false); setWorkTypeTargetedForAction(null); setDeleteReason(''); if(pinActionType === 'delete') setActivePinRequest(null);}}>Annuler</Button>
+            </DialogClose>
             <Button 
               onClick={isAdmin ? handleDeleteWorkTypeDirectly : handleSubmitDeleteRequest}
               variant={isAdmin ? "destructive" : "default"}
@@ -459,7 +466,7 @@ export default function WorkTypesPage() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-                <Button variant="outline" disabled={isProcessingAction}>Annuler</Button>
+                <Button variant="outline" disabled={isProcessingAction} onClick={() => { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setPinActionType(null);}}>Annuler</Button>
             </DialogClose>
             <Button onClick={handlePinSubmit} disabled={isProcessingAction || pinEntry.length !== 6}>
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -471,5 +478,3 @@ export default function WorkTypesPage() {
     </>
   );
 }
-
-    

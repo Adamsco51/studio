@@ -11,11 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { 
     getBLsFromFirestore, 
     getClientsFromFirestore, 
-    getExpensesFromFirestore, // Now we need this for actual expenses
+    getExpensesFromFirestore, 
     MOCK_USERS 
 } from '@/lib/mock-data';
-import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types'; // Added Expense
-import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2 } from 'lucide-react';
+import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types';
+import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/auth-context';
 
 const getStatusBadgeStyle = (status: BLStatus, type: 'badge' | 'text' | 'icon') => {
   switch (status) {
@@ -51,11 +52,12 @@ const StatusIcon = ({ status }: { status: BLStatus }) => {
 };
 
 export default function BillsOfLadingPage() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [bls, setBls] = useState<BillOfLading[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]); 
-  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -64,6 +66,10 @@ export default function BillsOfLadingPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   const fetchData = useCallback(async () => {
+    if (!user) {
+        setIsLoading(false);
+        return;
+    }
     setIsLoading(true);
     try {
       const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
@@ -74,17 +80,17 @@ export default function BillsOfLadingPage() {
       setBls(fetchedBls);
       setClients(fetchedClients);
       setExpenses(fetchedExpenses); 
+      setUsers(MOCK_USERS); // Keep MOCK_USERS for creator names if not migrating user profiles fully
     } catch (error) {
       console.error("Failed to fetch data for BLs page:", error);
       toast({ title: "Erreur de chargement", description: "Impossible de charger toutes les données.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  }, [toast]); 
+  }, [user, toast]); 
 
   useEffect(() => {
     fetchData();
-    setUsers(MOCK_USERS); // Mock users are static for now
   }, [fetchData]); 
 
   const getClientName = useCallback((clientId: string) => {
@@ -93,9 +99,8 @@ export default function BillsOfLadingPage() {
 
   const getUserName = useCallback((userId?: string) => {
     if (!userId) return 'N/A';
-    // For now, MOCK_USERS is fine. If users become dynamic, this needs update.
-    return MOCK_USERS.find(u => u.id === userId)?.name || 'N/A';
-  }, []); // MOCK_USERS is static
+    return users.find(u => u.id === userId)?.name || 'N/A';
+  }, [users]);
 
   const calculateBlDetails = useCallback((blId: string) => {
     const bl = bls.find(b => b.id === blId);
@@ -198,9 +203,9 @@ export default function BillsOfLadingPage() {
 
             <div>
               <Label htmlFor="user-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Utilisateur (Créateur)</Label>
-              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)} disabled={isLoading}>
+              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)} disabled={isLoading || users.length === 0}>
                 <SelectTrigger id="user-filter">
-                  <SelectValue placeholder="Tous les Utilisateurs" />
+                  <SelectValue placeholder={users.length === 0 && !isLoading ? "Aucun utilisateur" : "Tous les Utilisateurs"}/>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Utilisateurs</SelectItem>
@@ -251,7 +256,7 @@ export default function BillsOfLadingPage() {
         <CardHeader>
           <CardTitle>Liste des Connaissements</CardTitle>
           <CardDescription>
-            Aperçu de tous les BLs enregistrés. Nombre de BLs affichés: {isLoading ? "Chargement..." : filteredBLs.length}
+            Aperçu de tous les BLs enregistrés. Affichage: {isLoading ? "..." : filteredBLs.length} BL(s).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -259,6 +264,21 @@ export default function BillsOfLadingPage() {
             <div className="flex justify-center items-center py-10">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="ml-2 text-muted-foreground">Chargement des connaissements...</p>
+            </div>
+          ) : filteredBLs.length === 0 ? (
+             <div className="text-center py-10 text-muted-foreground">
+                <FileText className="mx-auto h-12 w-12 opacity-50" />
+                <p className="mt-2">
+                {searchTerm || selectedClientId || selectedUserId || selectedDate 
+                    ? "Aucun BL ne correspond à vos filtres." 
+                    : "Aucun BL n'a été trouvé. Commencez par en ajouter un !"
+                }
+                </p>
+                 {(!searchTerm && !selectedClientId && !selectedUserId && !selectedDate) && (
+                    <Button asChild className="mt-4">
+                        <Link href="/bls/add"><PlusCircle className="mr-2 h-4 w-4" />Ajouter un BL</Link>
+                    </Button>
+                )}
             </div>
           ) : (
             <Table>
@@ -312,15 +332,8 @@ export default function BillsOfLadingPage() {
               </TableBody>
             </Table>
           )}
-           {!isLoading && filteredBLs.length === 0 && (
-            <p className="text-center text-muted-foreground py-4">
-              {searchTerm || selectedClientId || selectedUserId || selectedDate ? "Aucun BL ne correspond à vos filtres." : "Aucun BL trouvé."}
-            </p>
-          )}
         </CardContent>
       </Card>
     </>
   );
 }
-
-    
