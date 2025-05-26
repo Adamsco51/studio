@@ -7,11 +7,11 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getClientsFromFirestore, MOCK_BILLS_OF_LADING } from '@/lib/mock-data'; // Use Firestore function
+import { getClientsFromFirestore, getBLsFromFirestore } from '@/lib/mock-data'; // Use Firestore functions
 import { PlusCircle, ArrowRight, UserCheck, UserX, Search, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import type { Client } from '@/lib/types';
+import type { Client, BillOfLading } from '@/lib/types'; // Added BillOfLading type
 
 type ClientWithStatus = Client & { isActive: boolean };
 
@@ -20,28 +20,34 @@ export default function ClientsPage({ params: paramsPromise }: { params: Promise
 
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<ClientWithStatus[]>([]);
+  const [allBls, setAllBls] = useState<BillOfLading[]>([]); // State to store all BLs
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchClients = async () => {
+    const fetchData = async () => {
       setIsLoading(true);
       try {
-        const firestoreClients = await getClientsFromFirestore();
+        const [firestoreClients, firestoreBls] = await Promise.all([
+          getClientsFromFirestore(),
+          getBLsFromFirestore() // Fetch all BLs
+        ]);
+        
+        setAllBls(firestoreBls); // Store fetched BLs
+
         const clientsWithStatus = firestoreClients.map(client => {
-          // This isActive logic still relies on MOCK_BILLS_OF_LADING.
-          // This will need to be updated when BLs are also in Firestore.
-          const hasActiveBL = MOCK_BILLS_OF_LADING.some(bl => bl.clientId === client.id && bl.status === 'en cours');
+          // Determine isActive based on BLs fetched from Firestore
+          const hasActiveBL = firestoreBls.some(bl => bl.clientId === client.id && bl.status === 'en cours');
           return { ...client, isActive: hasActiveBL };
         });
         setClients(clientsWithStatus);
       } catch (error) {
-        console.error("Failed to fetch clients:", error);
+        console.error("Failed to fetch clients or BLs:", error);
         // Handle error (e.g., show a toast)
       } finally {
         setIsLoading(false);
       }
     };
-    fetchClients();
+    fetchData();
   }, []); 
 
   const filteredClients = useMemo(() => {
