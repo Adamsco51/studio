@@ -154,7 +154,7 @@ export const getClientByIdFromFirestore = async (clientId: string): Promise<Clie
   }
 };
 
-export const updateClientInFirestore = async (clientId: string, updatedData: Partial<Omit<Client, 'id' | 'createdAt' | 'createdByUserId'>>) => {
+export const updateClientInFirestore = async (clientId: string, updatedData: Partial<Omit<Client, 'id' | 'createdAt' | 'createdByUserId' | 'blIds'>>) => {
   const clientDoc = doc(db, "clients", clientId);
   try {
     await updateDoc(clientDoc, updatedData);
@@ -167,12 +167,16 @@ export const updateClientInFirestore = async (clientId: string, updatedData: Par
 export const deleteClientFromFirestore = async (clientId: string) => {
   const clientDoc = doc(db, "clients", clientId);
   try {
-    const blsSnapshot = await getDocs(query(blsCollectionRef, where("clientId", "==", clientId)));
-    const deleteBLPromises = blsSnapshot.docs.map(blDoc => deleteBLFromFirestore(blDoc.id));
+    // Before deleting the client, find all BLs associated with this client
+    const blsQuery = query(blsCollectionRef, where("clientId", "==", clientId));
+    const blsSnapshot = await getDocs(blsQuery);
+    const deleteBLPromises = blsSnapshot.docs.map(blDoc => deleteBLFromFirestore(blDoc.id)); // This will also handle their expenses
     await Promise.all(deleteBLPromises);
+
+    // Now delete the client
     await deleteDoc(clientDoc);
   } catch (e) {
-    console.error("Error deleting document (client): ", e);
+    console.error("Error deleting document (client and associated BLs/expenses): ", e);
     throw e;
   }
 };
@@ -292,9 +296,10 @@ export const deleteBLFromFirestore = async (blId: string) => {
                 blIds: arrayRemove(blId)
             }).catch(err => console.error("Failed to remove BL ID from client:", err));
         }
+        // Also delete all expenses associated with this BL
         const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
         const expensesSnapshot = await getDocs(expensesQuery);
-        const deleteExpensePromises = expensesSnapshot.docs.map(expenseDoc => deleteExpenseFromFirestore(expenseDoc.id));
+        const deleteExpensePromises = expensesSnapshot.docs.map(expenseDoc => deleteDoc(doc(db, "expenses", expenseDoc.id)));
         await Promise.all(deleteExpensePromises);
     }
     await deleteDoc(blDocRef);
@@ -320,7 +325,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
-    
+    // Fallback, should ideally not be reached if newDocSnap exists
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -399,7 +404,7 @@ export const addWorkTypeToFirestore = async (workTypeData: Omit<WorkType, 'id' |
 export const getWorkTypesFromFirestore = async (): Promise<WorkType[]> => {
   try {
     const data = await getDocs(workTypesCollectionRef);
-    return data.docs.map(docSnap => { // Renamed doc to docSnap to avoid conflict
+    return data.docs.map(docSnap => { 
       const workTypeData = docSnap.data();
       return {
         ...workTypeData,
@@ -464,7 +469,7 @@ export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
 
 // Approval Request Service
 export const addApprovalRequestToFirestore = async (
-  requestData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status' | 'processedAt' | 'adminNotes' | 'processedByUserId' >
+  requestData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status' | 'processedAt' | 'adminNotes' | 'processedByUserId' | 'pinCode' | 'pinExpiresAt' >
 ): Promise<ApprovalRequest> => {
   try {
     const docRef = await addDoc(approvalRequestsCollectionRef, {
@@ -481,7 +486,7 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
-    
+    // Fallback, should ideally not be reached
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -508,6 +513,7 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
         id: docSnap.id,
         createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : new Date().toISOString(),
         processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : undefined,
+        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : undefined,
       } as ApprovalRequest;
     });
   } catch (e: any) {
@@ -524,17 +530,25 @@ export const updateApprovalRequestStatusInFirestore = async (
   requestId: string, 
   newStatus: ApprovalRequestStatus, 
   adminNotes?: string,
-  processedByUserId?: string
+  processedByUserId?: string,
+  pinCode?: string,
+  pinExpiresAt?: Date // Expect a Date object for pinExpiresAt
 ): Promise<void> => {
   const requestDoc = doc(db, "approvalRequests", requestId);
   try {
     const updateData: Partial<ApprovalRequest> = { 
       status: newStatus, 
-      processedAt: serverTimestamp() as any, 
+      processedAt: serverTimestamp() as any, // Firestore will convert this
       processedByUserId: processedByUserId,
     };
-    if (adminNotes !== undefined) { // Allow empty string for notes
+    if (adminNotes !== undefined) { 
       updateData.adminNotes = adminNotes;
+    }
+    if (pinCode !== undefined) {
+      updateData.pinCode = pinCode;
+    }
+    if (pinExpiresAt !== undefined) {
+      updateData.pinExpiresAt = Timestamp.fromDate(pinExpiresAt).toDate().toISOString(); // Store as ISO string
     }
     await updateDoc(requestDoc, updateData);
   } catch (e) {

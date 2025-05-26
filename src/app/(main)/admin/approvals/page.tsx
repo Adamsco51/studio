@@ -18,9 +18,9 @@ import {
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, addHours } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Loader2, CheckCircle, XCircle, HelpCircle, ShieldQuestion } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, HelpCircle, ShieldQuestion, KeyRound } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
@@ -86,6 +88,8 @@ export default function AdminApprovalsPage() {
   const [adminNotes, setAdminNotes] = useState('');
   const [actionToConfirm, setActionToConfirm] = useState<'approve' | 'reject' | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [issuePin, setIssuePin] = useState(false);
+  const [manualPin, setManualPin] = useState('');
 
 
   useEffect(() => {
@@ -111,25 +115,47 @@ export default function AdminApprovalsPage() {
 
   useEffect(() => {
     fetchRequests();
-  }, [isAdmin, toast]);
+  }, [isAdmin, toast]); // Removed toast from here as it might cause infinite loops if toast causes re-render
 
   const handleOpenConfirmationDialog = (request: ApprovalRequest, action: 'approve' | 'reject') => {
     setSelectedRequest(request);
     setActionToConfirm(action);
-    setAdminNotes(request.adminNotes || ''); 
+    setAdminNotes(request.adminNotes || '');
+    setIssuePin(false); // Reset issuePin state
+    setManualPin('');   // Reset manualPin state
   };
 
   const handleProcessRequest = async () => {
     if (!selectedRequest || !actionToConfirm || !user) return;
 
     setIsProcessingAction(true);
-    const newStatus = actionToConfirm === 'approve' ? 'approved' : 'rejected';
+    let newStatus: ApprovalRequestStatus = actionToConfirm === 'approve' ? 'approved' : 'rejected';
+    let pinCodeToSave: string | undefined = undefined;
+    let pinExpiryToSave: Date | undefined = undefined;
+
+    if (actionToConfirm === 'approve' && issuePin) {
+        newStatus = 'pin_issued';
+        pinCodeToSave = manualPin || Math.floor(100000 + Math.random() * 900000).toString(); // Use manual or generate
+        pinExpiryToSave = addHours(new Date(), 24); // PIN expires in 24 hours
+    }
     
     try {
-      await updateApprovalRequestStatusInFirestore(selectedRequest.id, newStatus, adminNotes, user.uid);
-      toast({ title: "Demande Traitée", description: `La demande a été ${newStatus === 'approved' ? 'approuvée' : 'rejetée'}.` });
+      await updateApprovalRequestStatusInFirestore(
+        selectedRequest.id, 
+        newStatus, 
+        adminNotes, 
+        user.uid,
+        pinCodeToSave,
+        pinExpiryToSave
+      );
+      
+      let toastMessage = `La demande a été ${getStatusText(newStatus)}.`;
+      if (newStatus === 'pin_issued' && pinCodeToSave) {
+        toastMessage += ` PIN: ${pinCodeToSave}`;
+      }
+      toast({ title: "Demande Traitée", description: toastMessage });
 
-      if (newStatus === 'approved' && selectedRequest.actionType === 'delete') {
+      if (newStatus === 'approved' && selectedRequest.actionType === 'delete' && !issuePin) { // Only auto-delete if not issuing PIN
         try {
           let entityDeleted = false;
           if (selectedRequest.entityType === 'bl') {
@@ -148,7 +174,6 @@ export default function AdminApprovalsPage() {
 
           if (entityDeleted) {
             toast({ title: "Action Effectuée", description: `${getEntityTypeText(selectedRequest.entityType)} (ID: ${selectedRequest.entityId}) a été supprimé(e) avec succès.` });
-            // Optionally, update request status to 'completed'
             await updateApprovalRequestStatusInFirestore(selectedRequest.id, 'completed', adminNotes ? `${adminNotes}\nEntité supprimée.` : 'Entité supprimée automatiquement après approbation.', user.uid);
           }
         } catch (deleteError: any) {
@@ -157,10 +182,12 @@ export default function AdminApprovalsPage() {
         }
       }
       
-      fetchRequests(); // Refresh the list
+      fetchRequests(); 
       setSelectedRequest(null);
       setActionToConfirm(null);
       setAdminNotes('');
+      setIssuePin(false);
+      setManualPin('');
     } catch (error) {
       console.error("Failed to process request:", error);
       toast({ title: "Erreur", description: "Échec du traitement de la demande.", variant: "destructive" });
@@ -172,24 +199,19 @@ export default function AdminApprovalsPage() {
   const getEntityLink = (request: ApprovalRequest) => {
     switch (request.entityType) {
       case 'bl':
-        return `/bls/${request.entityId}`;
+        return `/bls/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'client':
-        return `/clients/${request.entityId}`;
+        return `/clients/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'workType':
-        return `/work-types/${request.entityId}/edit`; // No detail page, link to edit
+        return `/work-types/${request.entityId}/edit`; 
       case 'expense':
-        // Expenses don't have a direct detail page, ideally link to BL.
-        // This would require fetching expense to get blId, or storing blId in ApprovalRequest for expenses.
-        // For now, we'll just show text or try to parse from description if possible.
-        // A better solution is to ensure the BL ID is part of the approval request for an expense.
-        // For this iteration, we'll provide a simple text or a link if BL ID is in description.
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
-          // This is a very naive way to find a BL ID if it's in the description string.
-          // A robust solution would be to store the parent BL ID in the ApprovalRequest for expenses.
-          // For now, this is a placeholder.
+          if (blMatch && blMatch[1]) {
+            return `/bls/${blMatch[1]}`; // This links to the BL detail page, not the expense itself
+          }
         }
-        return null; // No direct link for expenses for now without more info
+        return null; 
       default:
         return null;
     }
@@ -270,8 +292,12 @@ export default function AdminApprovalsPage() {
                            {req.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
                            {req.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
                            {req.status === 'completed' && <CheckCircle className="mr-1 h-3 w-3 text-green-500" />}
+                           {req.status === 'pin_issued' && <KeyRound className="mr-1 h-3 w-3" />}
                           {getStatusText(req.status)}
                         </Badge>
+                        {req.status === 'pin_issued' && req.pinCode && (
+                          <p className="text-xs text-muted-foreground italic">PIN: {req.pinCode}</p>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         {req.status === 'pending' && (
@@ -304,6 +330,8 @@ export default function AdminApprovalsPage() {
             setSelectedRequest(null);
             setActionToConfirm(null);
             setAdminNotes('');
+            setIssuePin(false);
+            setManualPin('');
         }
       }}>
         <DialogContent>
@@ -316,23 +344,54 @@ export default function AdminApprovalsPage() {
               Demandeur: {selectedRequest?.requestedByUserName}. Raison: "{selectedRequest?.reason}"
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2 space-y-2">
-            <Label htmlFor="adminNotes">Notes Administrateur (Optionnel)</Label>
-            <Textarea 
-              id="adminNotes" 
-              value={adminNotes} 
-              onChange={(e) => setAdminNotes(e.target.value)}
-              placeholder="Ajoutez des notes sur votre décision..." 
-              disabled={isProcessingAction}
-            />
+          
+          <div className="py-2 space-y-4">
+            {actionToConfirm === 'approve' && selectedRequest?.actionType === 'edit' && ( // Only show PIN option for edit approvals for now
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="issuePin" 
+                  checked={issuePin} 
+                  onCheckedChange={(checked) => setIssuePin(checked as boolean)}
+                  disabled={isProcessingAction}
+                />
+                <Label htmlFor="issuePin" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Émettre un PIN pour que l'utilisateur effectue l'action
+                </Label>
+              </div>
+            )}
+            {issuePin && actionToConfirm === 'approve' && (
+              <div className="space-y-2">
+                <Label htmlFor="manualPin">PIN (Optionnel - 6 chiffres auto-générés sinon)</Label>
+                <Input 
+                    id="manualPin" 
+                    value={manualPin} 
+                    onChange={(e) => setManualPin(e.target.value.replace(/\D/g,'').substring(0,6))} 
+                    placeholder="Ex: 123456"
+                    maxLength={6}
+                    disabled={isProcessingAction}
+                />
+                <p className="text-xs text-muted-foreground">Le PIN expirera dans 24 heures.</p>
+              </div>
+            )}
+            <div>
+              <Label htmlFor="adminNotes">Notes Administrateur (Optionnel)</Label>
+              <Textarea 
+                id="adminNotes" 
+                value={adminNotes} 
+                onChange={(e) => setAdminNotes(e.target.value)}
+                placeholder="Ajoutez des notes sur votre décision..." 
+                disabled={isProcessingAction}
+              />
+            </div>
           </div>
+
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline" disabled={isProcessingAction}>Annuler</Button>
             </DialogClose>
             <Button 
                 onClick={handleProcessRequest} 
-                disabled={isProcessingAction}
+                disabled={isProcessingAction || (issuePin && manualPin.length > 0 && manualPin.length !== 6)}
                 variant={actionToConfirm === 'reject' ? 'destructive' : 'default'}
             >
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

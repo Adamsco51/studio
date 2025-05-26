@@ -504,4 +504,3 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     </>
   );
 }
-```
