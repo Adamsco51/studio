@@ -31,7 +31,7 @@ export interface BillOfLading {
   categories: string[]; // Manual categories
   status: BLStatus;
   createdAt: string; // ISO Date string
-  createdByUserId?: string; 
+  createdByUserId?: string;
 }
 
 export interface Expense {
@@ -40,7 +40,7 @@ export interface Expense {
   label: string;
   amount: number;
   date: string; // ISO Date string
-  employeeId: string; 
+  employeeId: string;
 }
 
 export interface User {
@@ -53,22 +53,22 @@ export interface AuthUser {
   uid: string;
   email: string | null;
   displayName: string | null;
-  role?: 'admin' | 'employee'; 
+  role?: 'admin' | 'employee';
 }
 
 export interface UserProfile {
-  uid: string; 
+  uid: string;
   email: string | null;
   displayName: string | null;
   role: 'admin' | 'employee';
-  createdAt: string; 
+  createdAt: string;
 }
 
 
 export interface ChatMessage {
   id: string;
   senderId: string;
-  senderName: string; 
+  senderName: string;
   text: string;
   timestamp: string; // ISO Date string, but Firestore will store as Timestamp
 }
@@ -77,11 +77,11 @@ export interface TodoItem {
   id: string;
   text: string;
   assignedToUserId?: string;
-  assignedToUserName?: string; 
+  assignedToUserName?: string;
   completed: boolean;
   createdAt: string; // ISO Date string, Firestore will store as Timestamp
   createdByUserId: string;
-  createdByName: string; 
+  createdByName: string;
 }
 
 export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense';
@@ -89,19 +89,19 @@ export type ApprovalRequestActionType = 'edit' | 'delete';
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'pin_issued' | 'completed';
 
 export interface ApprovalRequest {
-  id: string; 
+  id: string;
   requestedByUserId: string;
   requestedByUserName: string;
   entityType: ApprovalRequestEntityType;
   entityId: string;
-  entityDescription?: string; 
+  entityDescription?: string;
   actionType: ApprovalRequestActionType;
   reason: string;
   status: ApprovalRequestStatus;
-  createdAt: string; 
-  processedAt?: string; 
+  createdAt: string; // ISO Date string
+  processedAt?: string; // ISO Date string
   adminNotes?: string;
-  processedByUserId?: string; 
-  pinCode?: string; 
-  pinExpiresAt?: string; 
+  processedByUserId?: string;
+  pinCode?: string;
+  pinExpiresAt?: string; // ISO Date string
 }

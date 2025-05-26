@@ -1,26 +1,28 @@
 
-"use client"; 
+"use client";
 
 import React, { useState, useEffect, useMemo, use } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { 
+import {
     getBLByIdFromFirestore,
     getClientByIdFromFirestore,
     getExpensesByBlIdFromFirestore,
-    getWorkTypeByIdFromFirestore, 
-    deleteBLFromFirestore, 
+    getWorkTypeByIdFromFirestore,
+    deleteBLFromFirestore,
     deleteExpenseFromFirestore,
     getEmployeeNameFromMock,
-    addApprovalRequestToFirestore, 
+    addApprovalRequestToFirestore,
     getUserProfile,
     getPinIssuedRequestForEntity,
-    completeApprovalRequestWithPin
+    completeApprovalRequestWithPin,
+    getExpenseByIdFromFirestore, // Added
+    updateExpenseInFirestore // Added
 } from '@/lib/mock-data';
 import type { BillOfLading, Expense, Client, BLStatus, WorkType, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIconLucide, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2, Loader2, KeyRound } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIconLucide, User as EmployeeIconLucideUser, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2, Loader2, KeyRound } from 'lucide-react'; // Renamed User to EmployeeIconLucideUser
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -35,8 +37,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger
 import {
   Dialog,
   DialogContent,
@@ -53,7 +54,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/auth-context'; 
+import { useAuth } from '@/contexts/auth-context';
 
 const getStatusBadgeVariant = (status: BLStatus) => {
   if (status === 'terminé') return 'default';
@@ -70,12 +71,12 @@ const getStatusIcon = (status: BLStatus) => {
 }
 
 export default function BLDetailPage({ params: paramsPromise }: { params: Promise<{ blId: string }> }) {
-  const { blId } = use(paramsPromise); 
-  const { user, isAdmin } = useAuth(); 
+  const { blId } = use(paramsPromise);
+  const { user, isAdmin } = useAuth();
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]); 
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingExpenses, setIsLoadingExpenses] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -92,16 +93,19 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   const [showDeleteExpenseDialog, setShowDeleteExpenseDialog] = useState(false);
   const [requestingDeleteExpense, setRequestingDeleteExpense] = useState<Expense | null>(null);
   const [deleteExpenseReason, setDeleteExpenseReason] = useState('');
-  
+
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [pinEntry, setPinEntry] = useState('');
   const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
   const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
   const [pinEntityType, setPinEntityType] = useState<'bl' | 'expense' | null>(null);
 
+  const [showEditExpenseDialog, setShowEditExpenseDialog] = useState(false); // For Edit Expense
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null); // For Edit Expense
+
 
   useEffect(() => {
-    if (!blId || !user) { 
+    if (!blId || !user) {
         setIsLoading(false);
         setIsLoadingExpenses(false);
         return;
@@ -118,11 +122,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                     const foundClient = await getClientByIdFromFirestore(foundBl.clientId);
                     setClient(foundClient);
                 }
-                if (foundBl.workTypeId) { 
+                if (foundBl.workTypeId) {
                     const foundWorkType = await getWorkTypeByIdFromFirestore(foundBl.workTypeId);
                     setWorkType(foundWorkType || null);
                 }
-                
+
                 const blExpenses = await getExpensesByBlIdFromFirestore(blId);
                 setExpenses(blExpenses);
                 setIsLoadingExpenses(false);
@@ -144,7 +148,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         }
     };
     fetchBlDetails();
-  }, [blId, user, toast]); 
+  }, [blId, user, toast]);
 
   const { totalExpenses, balance, profitStatus, profit } = useMemo(() => {
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
@@ -158,10 +162,19 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     };
   }, [bl, expenses]);
 
-  const handleExpenseAdded = (newExpense: Expense) => { 
-    setExpenses(prevExpenses => [newExpense, ...prevExpenses].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  const handleExpenseAddedOrUpdated = (savedExpense: Expense) => {
+    if (expenses.find(exp => exp.id === savedExpense.id)) { // Update
+        setExpenses(prevExpenses => prevExpenses.map(exp => exp.id === savedExpense.id ? savedExpense : exp)
+        .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    } else { // Add
+        setExpenses(prevExpenses => [savedExpense, ...prevExpenses]
+        .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    }
+    if (showEditExpenseDialog) setShowEditExpenseDialog(false);
+    setEditingExpense(null);
   };
-  
+
+
   const handleEditBlAction = async () => {
     if (!bl || !user) return;
     if (isAdmin) {
@@ -211,10 +224,12 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       }
     }
   };
-  
+
   const handleDeleteExpenseAction = async (expense: Expense) => {
     if(!user || !bl) return;
     setRequestingDeleteExpense(expense);
+    setPinActionType('delete'); // Set pin action type for expense
+    setPinEntityType('expense'); // Set pin entity type for expense
     if (isAdmin) {
       setShowDeleteExpenseDialog(true);
     } else {
@@ -223,8 +238,6 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         const pinRequest = await getPinIssuedRequestForEntity('expense', expense.id, 'delete');
         if (pinRequest) {
           setActivePinRequest(pinRequest);
-          setPinActionType('delete');
-          setPinEntityType('expense');
           setShowPinDialog(true);
         } else {
           setDeleteExpenseReason('');
@@ -237,6 +250,34 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       }
     }
   };
+
+  const handleEditExpenseAction = async (expense: Expense) => {
+    if (!user || !bl) return;
+    setEditingExpense(expense);
+    setPinActionType('edit');
+    setPinEntityType('expense');
+
+    if (isAdmin) {
+      setShowEditExpenseDialog(true);
+    } else {
+      setIsProcessingRequest(true);
+      try {
+        const pinRequest = await getPinIssuedRequestForEntity('expense', expense.id, 'edit');
+        if (pinRequest) {
+          setActivePinRequest(pinRequest);
+          setShowPinDialog(true); // This will open the PIN dialog for edit
+        } else {
+          toast({ title: "Action Requise", description: "Veuillez demander une approbation ou utiliser un PIN pour modifier cette dépense.", variant: "default" });
+          setEditingExpense(null);
+        }
+      } catch (error) {
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants pour la modification de la dépense.", variant: "destructive" });
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    }
+  };
+
 
   const handlePinSubmit = async () => {
     if (!pinEntry.trim() || !activePinRequest || !pinActionType || !pinEntityType || !bl) {
@@ -269,18 +310,27 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
           router.push('/bls');
           router.refresh();
         }
-      } else if (pinEntityType === 'expense' && requestingDeleteExpense) {
-         if (pinActionType === 'delete') {
+      } else if (pinEntityType === 'expense') {
+         if (pinActionType === 'delete' && requestingDeleteExpense) {
             await deleteExpenseFromFirestore(requestingDeleteExpense.id);
-            setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== requestingDeleteExpense.id));
+            setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== requestingDeleteExpense!.id));
             await completeApprovalRequestWithPin(activePinRequest.id);
             toast({ title: "Dépense Supprimée", description: `La dépense "${requestingDeleteExpense.label}" a été supprimée via PIN.` });
+         } else if (pinActionType === 'edit' && editingExpense) {
+            await completeApprovalRequestWithPin(activePinRequest.id);
+            toast({ title: "PIN Validé", description: "Vous pouvez maintenant modifier la dépense." });
+            setShowEditExpenseDialog(true); // editingExpense is already set
          }
       }
       setShowPinDialog(false);
       setPinEntry('');
       setActivePinRequest(null);
-      setRequestingDeleteExpense(null);
+      // Reset target entity only if it was deleted
+      if (pinActionType === 'delete') {
+        if (pinEntityType === 'bl') { /* BL deleted, page will redirect */ }
+        else if (pinEntityType === 'expense') setRequestingDeleteExpense(null);
+      }
+      // Do not reset editingExpense here as it's needed for the edit dialog to open
     } catch (error) {
       console.error(`Erreur lors de l'action ${pinActionType} avec PIN:`, error);
       toast({ title: "Erreur", description: `Échec de l'action ${pinActionType} avec PIN.`, variant: "destructive" });
@@ -290,12 +340,12 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   };
 
 
-  const handleDeleteExpenseDirectly = async (expenseId: string) => { 
-    if (!isAdmin) return; 
-    
-    setIsDeleting(true); 
+  const handleDeleteExpenseDirectly = async (expenseId: string) => {
+    if (!isAdmin) return;
+
+    setIsDeleting(true);
     try {
-      await deleteExpenseFromFirestore(expenseId); 
+      await deleteExpenseFromFirestore(expenseId);
       setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
       toast({
         title: "Dépense Supprimée",
@@ -306,11 +356,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
     } finally {
         setIsDeleting(false);
-        setShowDeleteExpenseDialog(false); 
+        setShowDeleteExpenseDialog(false);
         setRequestingDeleteExpense(null);
     }
   };
-  
+
   const handleDeleteBLDirectly = async () => {
     if (!bl || !bl.id || !isAdmin) return;
     setIsDeleting(true);
@@ -321,7 +371,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
             description: `Le BL N° ${bl.blNumber} a été supprimé.`,
         });
         router.push('/bls');
-        router.refresh(); 
+        router.refresh();
     } catch (error) {
         console.error("Failed to delete BL:", error);
         toast({ title: "Erreur", description: "Échec de la suppression du BL.", variant: "destructive"});
@@ -382,7 +432,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
             description: "Votre demande de suppression de BL a été enregistrée et est en attente d'approbation.",
         });
         setDeleteBlReason('');
-        setShowDeleteBlDialog(false); 
+        setShowDeleteBlDialog(false);
     } catch (error) {
         console.error("Failed to submit delete BL request:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
@@ -413,7 +463,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         });
         setDeleteExpenseReason('');
         setShowDeleteExpenseDialog(false);
-        setRequestingDeleteExpense(null); 
+        setRequestingDeleteExpense(null);
     } catch (error) {
         console.error("Failed to submit delete expense request:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression de dépense.", variant: "destructive" });
@@ -423,7 +473,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   };
 
 
-  if (isLoading || (!bl && isLoading)) { 
+  if (isLoading || (!bl && isLoading)) {
     return (
         <div className="flex justify-center items-center h-64">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -431,7 +481,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         </div>
     );
   }
-  
+
   if (!bl) {
     return (
       <div className="text-center py-10">
@@ -444,7 +494,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       </div>
     );
   }
-  
+
   return (
     <>
       <PageHeader
@@ -462,7 +512,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               {(isProcessingRequest && pinActionType === 'edit' && pinEntityType === 'bl') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Edit className="mr-2 h-4 w-4" /> Modifier
             </Button>
-            
+
             <Button variant="destructive" onClick={handleDeleteBlAction} disabled={isProcessingRequest || isDeleting}>
               {(isDeleting && isAdmin) || (isProcessingRequest && pinActionType === 'delete' && pinEntityType === 'bl') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Trash2 className="mr-2 h-4 w-4" /> Supprimer BL
@@ -579,64 +629,21 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                         <TableCell>{getEmployeeNameFromMock(exp.employeeId)}</TableCell>
                         <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                         <TableCell className="text-right">
-                           <AlertDialog open={showDeleteExpenseDialog && requestingDeleteExpense?.id === exp.id} onOpenChange={(open) => {
-                                if (!open) { 
-                                    setShowDeleteExpenseDialog(false);
-                                    setRequestingDeleteExpense(null);
-                                    setDeleteExpenseReason('');
-                                } else {
-                                  setShowDeleteExpenseDialog(true);
-                                }
-                            }}>
-                            <AlertDialogTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="text-muted-foreground hover:text-destructive"
-                                onClick={() => handleDeleteExpenseAction(exp)}
-                                disabled={(isProcessingRequest && requestingDeleteExpense?.id === exp.id && pinEntityType === 'expense') || (isDeleting && isAdmin && requestingDeleteExpense?.id === exp.id)}
-                              >
-                                {((isProcessingRequest && requestingDeleteExpense?.id === exp.id && pinEntityType === 'expense') || (isDeleting && isAdmin && requestingDeleteExpense?.id === exp.id)) ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  {isAdmin ? "Supprimer cette dépense ?" : `Demande de Suppression: ${exp.label}`}
-                                </AlertDialogTitle>
-                                {isAdmin ? (
-                                  <AlertDialogDescription>
-                                    L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })} est irréversible.
-                                  </AlertDialogDescription>
-                                ) : (
-                                    <div className="space-y-2 py-2 text-left">
-                                        <p className="text-sm text-muted-foreground">Montant : {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</p>
-                                        <Label htmlFor={`deleteExpenseReason-${exp.id}`}>Raison de la demande :</Label>
-                                        <Textarea
-                                            id={`deleteExpenseReason-${exp.id}`}
-                                            placeholder="Expliquez pourquoi vous souhaitez supprimer cette dépense..."
-                                            value={deleteExpenseReason}
-                                            onChange={(e) => setDeleteExpenseReason(e.target.value)}
-                                            className="min-h-[100px]"
-                                            disabled={isProcessingRequest}
-                                        />
-                                        <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
-                                    </div>
-                                )}
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => { setShowDeleteExpenseDialog(false); setRequestingDeleteExpense(null); setDeleteExpenseReason('');}} disabled={isProcessingRequest || isDeleting}>Annuler</AlertDialogCancel>
-                                <Button 
-                                  onClick={isAdmin ? () => handleDeleteExpenseDirectly(exp.id) : handleSubmitDeleteExpenseRequest} 
-                                  variant={isAdmin ? "destructive" : "default"}
-                                  disabled={isProcessingRequest || isDeleting || (!isAdmin && !deleteExpenseReason.trim())}
-                                >
-                                  {(isProcessingRequest || (isDeleting && isAdmin)) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                  {isAdmin ? "Confirmer" : "Soumettre la Demande"}
-                                </Button>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <div className="flex items-center justify-end space-x-1">
+                            <Button variant="ghost" size="sm" title="Modifier Dépense" onClick={() => handleEditExpenseAction(exp)} disabled={(isProcessingRequest && editingExpense?.id === exp.id && pinEntityType === 'expense' && pinActionType === 'edit')}>
+                              {(isProcessingRequest && editingExpense?.id === exp.id && pinEntityType === 'expense' && pinActionType === 'edit') ? <Loader2 className="h-4 w-4 animate-spin"/> : <Edit className="h-4 w-4" />}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDeleteExpenseAction(exp)}
+                              disabled={(isProcessingRequest && requestingDeleteExpense?.id === exp.id && pinEntityType === 'expense') || (isDeleting && isAdmin && requestingDeleteExpense?.id === exp.id)}
+                              title="Supprimer Dépense"
+                            >
+                              {((isProcessingRequest && requestingDeleteExpense?.id === exp.id && pinEntityType === 'expense') || (isDeleting && isAdmin && requestingDeleteExpense?.id === exp.id)) ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -650,16 +657,16 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               )}
             </CardContent>
             <CardFooter>
-                <ExpenseForm blId={bl.id} onExpenseAdded={handleExpenseAdded} />
+                <ExpenseForm blId={bl.id} onExpenseAddedOrUpdated={handleExpenseAddedOrUpdated} />
             </CardFooter>
           </Card>
         </div>
-        
+
         <div className="lg:col-span-1 space-y-6">
             {client && (
                 <Card className="shadow-md">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><ClientIcon className="h-5 w-5 text-primary"/> Infos Client</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><ClientIconLucide className="h-5 w-5 text-primary"/> Infos Client</CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm space-y-1">
                         <p className="font-semibold">{client.name}</p>
@@ -685,7 +692,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         </div>
       </div>
 
-      {/* Edit Request Dialog (for non-admins) */}
+      {/* Edit Request Dialog (for non-admins for BL) */}
       <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
         <DialogContent>
           <DialogHeader>
@@ -720,13 +727,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       {/* Delete BL Confirmation / Request Dialog */}
       <AlertDialog open={showDeleteBlDialog} onOpenChange={(isOpen) => {
           if (!isOpen) {
-              setDeleteBlReason(''); 
+              setDeleteBlReason('');
+              // Do not reset selected BL here if it's used by PIN dialog
           }
           setShowDeleteBlDialog(isOpen);
       }}>
-        <AlertDialogTrigger asChild>
-            {/* This button is now in page header actions */}
-        </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -754,18 +759,92 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => {setDeleteBlReason(''); setShowDeleteBlDialog(false);}} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)}>Annuler</AlertDialogCancel>
             <Button onClick={isAdmin ? handleDeleteBLDirectly : handleSubmitDeleteBlRequest} variant={isAdmin ? "destructive" : "default"} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) || (!isAdmin && !deleteBlReason.trim())}>
-              {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {((isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* PIN Entry Dialog */}
+       {/* Edit Expense Dialog (on BL Detail Page) */}
+       <Dialog open={showEditExpenseDialog} onOpenChange={(open) => {
+          if (!open) setEditingExpense(null);
+          setShowEditExpenseDialog(open);
+        }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Modifier Dépense: {editingExpense?.label}</DialogTitle>
+            <DialogDescription>
+              Mettez à jour les informations de cette dépense.
+            </DialogDescription>
+          </DialogHeader>
+          {editingExpense && bl && ( // Ensure bl is available for blId context
+            <ExpenseForm
+              initialData={editingExpense}
+              blId={bl.id} // Pass current BL's ID for context, though form uses initialData.blId
+              onExpenseAddedOrUpdated={handleExpenseAddedOrUpdated}
+              setDialogOpen={setShowEditExpenseDialog}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Expense Confirmation / Request Dialog (on BL Detail Page) */}
+      <AlertDialog open={showDeleteExpenseDialog} onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setRequestingDeleteExpense(null);
+            setDeleteExpenseReason('');
+          }
+          setShowDeleteExpenseDialog(isOpen);
+        }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {isAdmin ? "Supprimer cette dépense ?" : `Demande de Suppression: ${requestingDeleteExpense?.label}`}
+            </AlertDialogTitle>
+            {isAdmin && requestingDeleteExpense ? (
+              <AlertDialogDescription>
+                L'action de supprimer la dépense "{requestingDeleteExpense.label}" d'un montant de {requestingDeleteExpense.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })} est irréversible.
+              </AlertDialogDescription>
+            ) : requestingDeleteExpense && (
+                <div className="space-y-2 py-2 text-left">
+                    <p className="text-sm text-muted-foreground">Montant : {requestingDeleteExpense.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</p>
+                    <Label htmlFor={`deleteExpenseReason-${requestingDeleteExpense.id}`}>Raison de la demande :</Label>
+                    <Textarea
+                        id={`deleteExpenseReason-${requestingDeleteExpense.id}`}
+                        placeholder="Expliquez pourquoi vous souhaitez supprimer cette dépense..."
+                        value={deleteExpenseReason}
+                        onChange={(e) => setDeleteExpenseReason(e.target.value)}
+                        className="min-h-[100px]"
+                        disabled={isProcessingRequest}
+                    />
+                    <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+                </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setShowDeleteExpenseDialog(false); setRequestingDeleteExpense(null); setDeleteExpenseReason('');}} disabled={isProcessingRequest || isDeleting}>Annuler</AlertDialogCancel>
+            <Button
+              onClick={isAdmin && requestingDeleteExpense ? () => handleDeleteExpenseDirectly(requestingDeleteExpense.id) : handleSubmitDeleteExpenseRequest}
+              variant={isAdmin ? "destructive" : "default"}
+              disabled={isProcessingRequest || isDeleting || (!isAdmin && !deleteExpenseReason.trim())}
+            >
+              {(isProcessingRequest || (isDeleting && isAdmin)) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isAdmin ? "Confirmer" : "Soumettre la Demande"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
+      {/* PIN Entry Dialog (Common for BL and Expense actions on this page) */}
       <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
         if (!isOpen) {
           setPinEntry('');
           setActivePinRequest(null);
+          // Do not reset target entities (editingExpense, requestingDeleteExpense, bl) here
+          // as the PIN dialog might close if PIN is wrong, and we need to keep context.
+          // Reset them after successful PIN action or when initiating a new action.
           setPinActionType(null);
           setPinEntityType(null);
         }
@@ -777,7 +856,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
             </DialogTitle>
             <DialogDescription>
-              Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} {pinEntityType === 'bl' ? `le BL N° ${bl?.blNumber}` : `la dépense "${requestingDeleteExpense?.label}"`}.
+              Un PIN vous a été fourni pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} {pinEntityType === 'bl' ? `le BL N° ${bl?.blNumber}` : `la dépense "${editingExpense?.label || requestingDeleteExpense?.label}"`}.
             </DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-2">
@@ -796,7 +875,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={isProcessingRequest}>Annuler</Button>
+              <Button variant="outline" disabled={isProcessingRequest} onClick={() => {
+                // Explicitly clear targets if PIN dialog is cancelled
+                if (pinEntityType === 'expense' && pinActionType === 'edit') setEditingExpense(null);
+                if (pinEntityType === 'expense' && pinActionType === 'delete') setRequestingDeleteExpense(null);
+              }}>Annuler</Button>
             </DialogClose>
             <Button onClick={handlePinSubmit} disabled={isProcessingRequest || pinEntry.length !== 6}>
               {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

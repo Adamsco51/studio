@@ -1,28 +1,30 @@
 
 import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType } from './types';
 import { db } from '@/lib/firebase/config';
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  getDocs, 
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDocs,
   getDoc,
-  setDoc, 
+  setDoc,
   serverTimestamp,
   Timestamp,
-  query, 
+  query,
   where,
-  orderBy, 
+  orderBy,
   arrayUnion,
   arrayRemove,
-  deleteField, 
+  deleteField,
   onSnapshot,
-  limit
+  limit,
+  writeBatch
 } from "firebase/firestore";
+import { formatISO, parseISO } from 'date-fns';
 
-// MOCK_USERS is still used for things like assignee selection in chat or creator name display if Firestore data is not available.
+
 export let MOCK_USERS: User[] = [
   { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee' },
   { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin' },
@@ -45,12 +47,12 @@ export const createUserProfile = async (uid: string, email: string | null, displ
   const userProfileDocRef = doc(db, "users", uid);
   try {
     await setDoc(userProfileDocRef, {
-      uid, 
+      uid,
       email,
-      displayName: displayName || email, 
+      displayName: displayName || email,
       role,
-      createdAt: serverTimestamp() 
-    }, { merge: true }); 
+      createdAt: serverTimestamp()
+    }, { merge: true });
   } catch (e) {
     console.error("Error creating/updating user profile: ", e);
     throw e;
@@ -124,8 +126,8 @@ export const addClientToFirestore = async (clientData: Omit<Client, 'id' | 'crea
   try {
     const docRef = await addDoc(clientsCollectionRef, {
       ...clientData,
-      blIds: [], 
-      createdAt: serverTimestamp() 
+      blIds: [],
+      createdAt: serverTimestamp()
     });
     return docRef.id;
   } catch (e) {
@@ -197,16 +199,26 @@ export const updateClientInFirestore = async (clientId: string, updatedData: Par
 
 export const deleteClientFromFirestore = async (clientId: string) => {
   const clientDoc = doc(db, "clients", clientId);
+  const batch = writeBatch(db);
   try {
     const clientSnapshot = await getDoc(clientDoc);
     if (clientSnapshot.exists()) {
         const clientData = clientSnapshot.data();
         if (clientData && clientData.blIds && clientData.blIds.length > 0) {
-            const deleteBLPromises = clientData.blIds.map((blId: string) => deleteBLFromFirestore(blId));
-            await Promise.all(deleteBLPromises);
+            for (const blId of clientData.blIds) {
+                const blDocRef = doc(db, "billsOfLading", blId);
+                batch.delete(blDocRef);
+                // Also delete expenses associated with this BL
+                const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
+                const expensesSnapshot = await getDocs(expensesQuery);
+                expensesSnapshot.forEach(expenseDoc => {
+                    batch.delete(expenseDoc.ref);
+                });
+            }
         }
     }
-    await deleteDoc(clientDoc);
+    batch.delete(clientDoc);
+    await batch.commit();
   } catch (e) {
     console.error("Error deleting document (client and associated BLs/expenses): ", e);
     throw e;
@@ -319,22 +331,21 @@ export const updateBLInFirestore = async (blId: string, updatedData: Partial<Omi
 
 export const deleteBLFromFirestore = async (blId: string) => {
   const blDocRef = doc(db, "billsOfLading", blId);
+  const batch = writeBatch(db);
   try {
     const blSnap = await getDoc(blDocRef);
     if (blSnap.exists()) {
-        const blData = blSnap.data(); 
+        const blData = blSnap.data();
         if (blData && blData.clientId) {
             const clientDocRef = doc(db, "clients", blData.clientId);
-            await updateDoc(clientDocRef, {
-                blIds: arrayRemove(blId)
-            }).catch(err => console.error("Failed to remove BL ID from client:", err));
+            batch.update(clientDocRef, { blIds: arrayRemove(blId) });
         }
         const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
         const expensesSnapshot = await getDocs(expensesQuery);
-        const deleteExpensePromises = expensesSnapshot.docs.map(expenseDoc => deleteDoc(doc(db, "expenses", expenseDoc.id)));
-        await Promise.all(deleteExpensePromises);
+        expensesSnapshot.forEach(expenseDoc => batch.delete(expenseDoc.ref));
     }
-    await deleteDoc(blDocRef);
+    batch.delete(blDocRef);
+    await batch.commit();
   } catch (e) {
     console.error("Error deleting document (BL and associated data): ", e);
     throw e;
@@ -342,22 +353,25 @@ export const deleteBLFromFirestore = async (blId: string) => {
 };
 
 // Expense CRUD with Firestore
-export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'date'>) => {
+export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'date'> & { date?: string }) => { // Allow optional date string
   try {
-    const docRef = await addDoc(expensesCollectionRef, {
+    const dataToSave: any = {
       ...expenseData,
-      date: serverTimestamp() 
-    });
+      date: expenseData.date ? Timestamp.fromDate(parseISO(expenseData.date)) : serverTimestamp()
+    };
+    if (expenseData.date === undefined) delete dataToSave.date; // remove if truly meant to be serverTimestamp
+
+    const docRef = await addDoc(expensesCollectionRef, dataToSave);
     const newDocSnap = await getDoc(docRef);
     if (newDocSnap.exists()) {
       const newExpenseData = newDocSnap.data();
-      return { 
+      return {
         ...newExpenseData,
-        id: newDocSnap.id, 
-        date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
+        id: newDocSnap.id,
+        date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString()
       } as Expense;
     }
-    // Fallback if getDoc fails immediately after addDoc, though unlikely with serverTimestamp
+    // Fallback
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -387,27 +401,41 @@ export const getExpensesFromFirestore = async (): Promise<Expense[]> => {
   }
 };
 
-export const getExpensesByBlIdFromFirestore = async (blId: string): Promise<Expense[]> => {
+export const getExpenseByIdFromFirestore = async (expenseId: string): Promise<Expense | null> => {
   try {
-    const q = query(expensesCollectionRef, where("blId", "==", blId), orderBy("date", "desc"));
-    const data = await getDocs(q);
-    return data.docs.map(docSnap => {
-      const expenseData = docSnap.data();
+    const expenseDocRef = doc(db, "expenses", expenseId);
+    const expenseSnap = await getDoc(expenseDocRef);
+    if (expenseSnap.exists()) {
+      const expenseData = expenseSnap.data();
       return {
         ...expenseData,
-        id: docSnap.id,
+        id: expenseSnap.id,
         date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString(),
       } as Expense;
-    });
-  } catch (e: any) {
-    if (e.code === 'permission-denied') {
-      console.error(`Firestore permission denied while trying to fetch expenses for BL ID: ${blId}. Check rules for 'expenses' collection.`, e);
     } else {
-      console.error(`Error getting documents (expenses for BL ${blId}): `, e);
+      console.log("No such document for expense ID:", expenseId);
+      return null;
     }
-    return [];
+  } catch (e: any) {
+    console.error(`Error getting document (expense ${expenseId}): `, e);
+    return null;
   }
 };
+
+export const updateExpenseInFirestore = async (expenseId: string, updatedData: Partial<Omit<Expense, 'id'>>) => {
+  const expenseDoc = doc(db, "expenses", expenseId);
+  try {
+    const dataToUpdate: any = { ...updatedData };
+    if (updatedData.date) {
+      dataToUpdate.date = Timestamp.fromDate(parseISO(updatedData.date));
+    }
+    await updateDoc(expenseDoc, dataToUpdate);
+  } catch (e) {
+    console.error("Error updating document (expense): ", e);
+    throw e;
+  }
+};
+
 
 export const deleteExpenseFromFirestore = async (expenseId: string) => {
   const expenseDoc = doc(db, "expenses", expenseId);
@@ -438,7 +466,7 @@ export const getWorkTypesFromFirestore = async (): Promise<WorkType[]> => {
   try {
     const q = query(workTypesCollectionRef, orderBy("createdAt", "desc"));
     const data = await getDocs(q);
-    return data.docs.map(docSnap => { 
+    return data.docs.map(docSnap => {
       const workTypeData = docSnap.data();
       return {
         ...workTypeData,
@@ -494,6 +522,8 @@ export const updateWorkTypeInFirestore = async (workTypeId: string, updatedData:
 export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
   const workTypeDoc = doc(db, "workTypes", workTypeId);
   try {
+    // Consider if deleting a work type should affect existing BLs (e.g., set their workTypeId to null or a default)
+    // For now, just deleting the work type itself.
     await deleteDoc(workTypeDoc);
   } catch (e) {
     console.error("Error deleting document (work type): ", e);
@@ -511,7 +541,7 @@ export const addApprovalRequestToFirestore = async (
       status: 'pending',
       createdAt: serverTimestamp(),
     });
-    const newDocSnap = await getDoc(docRef); 
+    const newDocSnap = await getDoc(docRef);
     if (newDocSnap.exists()) {
       const data = newDocSnap.data();
       return {
@@ -521,11 +551,11 @@ export const addApprovalRequestToFirestore = async (
       } as ApprovalRequest;
     }
     // Fallback
-    return { 
-      ...requestData, 
-      id: docRef.id, 
-      status: 'pending', 
-      createdAt: new Date().toISOString() 
+    return {
+      ...requestData,
+      id: docRef.id,
+      status: 'pending',
+      createdAt: new Date().toISOString()
     } as ApprovalRequest;
   } catch (e) {
     console.error("Error adding approval request document: ", e);
@@ -535,9 +565,11 @@ export const addApprovalRequestToFirestore = async (
 
 export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestStatus): Promise<ApprovalRequest[]> => {
   try {
-    let q = query(approvalRequestsCollectionRef, orderBy("createdAt", "desc"));
+    let q;
     if (status) {
       q = query(approvalRequestsCollectionRef, where("status", "==", status), orderBy("createdAt", "desc"));
+    } else {
+      q = query(approvalRequestsCollectionRef, orderBy("createdAt", "desc"));
     }
     const data = await getDocs(q);
     return data.docs.map(docSnap => {
@@ -563,8 +595,8 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
 export const getApprovalRequestsByUserIdFromFirestore = async (userId: string): Promise<ApprovalRequest[]> => {
   try {
     const q = query(
-      approvalRequestsCollectionRef, 
-      where("requestedByUserId", "==", userId), 
+      approvalRequestsCollectionRef,
+      where("requestedByUserId", "==", userId),
       orderBy("createdAt", "desc")
     );
     const data = await getDocs(q);
@@ -590,36 +622,38 @@ export const getApprovalRequestsByUserIdFromFirestore = async (userId: string): 
 
 
 export const updateApprovalRequestStatusInFirestore = async (
-  requestId: string, 
-  newStatus: ApprovalRequestStatus, 
+  requestId: string,
+  newStatus: ApprovalRequestStatus,
   adminNotes?: string,
   processedByUserId?: string,
   pinCode?: string,
-  pinExpiresAt?: Date 
+  pinExpiresAt?: Date
 ): Promise<void> => {
   const requestDoc = doc(db, "approvalRequests", requestId);
   try {
-    const updateData: any = { 
-      status: newStatus, 
-      processedAt: serverTimestamp(), 
+    const updateData: any = {
+      status: newStatus,
+      processedAt: serverTimestamp(),
     };
     if (processedByUserId) {
         updateData.processedByUserId = processedByUserId;
     }
-    if (adminNotes !== undefined && adminNotes !== null && adminNotes.trim() !== "") { 
+
+    if (adminNotes !== undefined && adminNotes !== null && adminNotes.trim() !== "") {
       updateData.adminNotes = adminNotes;
-    } else {
-      updateData.adminNotes = deleteField(); 
+    } else if (adminNotes === '' || adminNotes === null || adminNotes === undefined) { // explicitly clear if empty
+      updateData.adminNotes = deleteField();
     }
+
 
     if (pinCode !== undefined) {
       updateData.pinCode = pinCode;
-    } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') { 
+    } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') {
         updateData.pinCode = deleteField();
     }
 
     if (pinExpiresAt !== undefined) {
-      updateData.pinExpiresAt = Timestamp.fromDate(pinExpiresAt); 
+      updateData.pinExpiresAt = Timestamp.fromDate(pinExpiresAt);
     } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') {
         updateData.pinExpiresAt = deleteField();
     }
@@ -656,7 +690,7 @@ export const getPinIssuedRequestForEntity = async (
       } as ApprovalRequest;
 
       if (request.pinCode && request.pinExpiresAt && new Date() < new Date(request.pinExpiresAt)) {
-        return request; 
+        return request;
       }
     }
     return null;
@@ -675,9 +709,9 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
   try {
     await updateDoc(requestDoc, {
       status: 'completed',
-      pinCode: deleteField(), 
+      pinCode: deleteField(),
       pinExpiresAt: deleteField(),
-      processedAt: serverTimestamp() // Mark when the PIN was used
+      processedAt: serverTimestamp()
     });
   } catch (e) {
     console.error(`Error completing approval request ${requestId} with PIN: `, e);
@@ -693,8 +727,16 @@ export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, '
       ...messageData,
       timestamp: serverTimestamp()
     });
-    // To return the full ChatMessage object including server-generated timestamp, we might need to fetch it again or construct it carefully
-    // For simplicity here, returning what was sent plus the new ID and a client-side date (Firestore handles the true server timestamp)
+    const newDocSnap = await getDoc(docRef); // Fetch to get server timestamp
+    if (newDocSnap.exists()) {
+        const data = newDocSnap.data();
+        return {
+            id: newDocSnap.id,
+            ...data,
+            timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate().toISOString() : new Date().toISOString(),
+        } as ChatMessage;
+    }
+    // Fallback, should ideally not happen
     return { ...messageData, id: docRef.id, timestamp: new Date().toISOString() } as ChatMessage;
   } catch (error) {
     console.error("Error adding chat message to Firestore: ", error);
@@ -703,7 +745,7 @@ export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, '
 };
 
 export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[]) => void): (() => void) => {
-  const q = query(chatMessagesCollectionRef, orderBy("timestamp", "asc"), limit(50)); // Get last 50, ascending for display
+  const q = query(chatMessagesCollectionRef, orderBy("timestamp", "asc"), limit(50));
   const unsubscribe = onSnapshot(q, (querySnapshot) => {
     const messages = querySnapshot.docs.map(docSnap => {
       const data = docSnap.data();
@@ -716,9 +758,8 @@ export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[])
     callback(messages);
   }, (error) => {
     console.error("Error listening to chat messages:", error);
-    // Optionally, inform the user via toast or an error message in the UI
   });
-  return unsubscribe; // Return the unsubscribe function
+  return unsubscribe;
 };
 
 
@@ -729,6 +770,17 @@ export const addTodoItemToFirestore = async (todoData: Omit<TodoItem, 'id' | 'cr
       completed: false,
       createdAt: serverTimestamp()
     });
+    const newDocSnap = await getDoc(docRef); // Fetch to get server timestamp
+    if (newDocSnap.exists()) {
+        const data = newDocSnap.data();
+        return {
+            id: newDocSnap.id,
+            ...data,
+            completed: data.completed, // Should be false
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+        } as TodoItem;
+    }
+    // Fallback
     return { ...todoData, id: docRef.id, createdAt: new Date().toISOString(), completed: false } as TodoItem;
   } catch (error) {
     console.error("Error adding todo item to Firestore: ", error);
@@ -777,14 +829,11 @@ export const deleteTodoItemFromFirestore = async (todoId: string): Promise<void>
 
 export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (!employeeId) return 'N/A';
-    // In a real app, this would fetch from a 'users' collection in Firestore
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
-    
-    // If not found in mock, but it's a Firestore UID (typically longer)
-    if (employeeId.length > 10 && !employeeId.startsWith('user-')) { 
+
+    if (employeeId.length > 10 && !employeeId.startsWith('user-')) {
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
-    return 'Utilisateur Inconnu'; 
+    return 'Utilisateur Inconnu';
 };
-
