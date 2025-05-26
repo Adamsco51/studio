@@ -100,14 +100,18 @@ export default function MyRequestsPage() {
       case 'client':
         return `/clients/${request.entityId}`;
       case 'workType': 
-        return `/work-types`; 
+        // For work types, an edit link might be more appropriate if the action was edit
+        // But for now, link to the list page if no specific ID page exists.
+        return request.actionType === 'edit' ? `/work-types/${request.entityId}/edit` : `/work-types`; 
       case 'expense': 
+         // For expenses, linking to the parent BL might be most useful
          if (request.entityDescription?.includes("BL N°")) {
-          const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
+          const blMatch = request.entityDescription.match(/BL N°\\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
-            return `/bls/${blMatch[1]}`;
+            return `/bls/${blMatch[1]}`; // Link to the BL detail page
           }
         }
+        // Fallback to the general expenses page if BL ID can't be parsed
         return `/expenses`;
       default:
         return null;
