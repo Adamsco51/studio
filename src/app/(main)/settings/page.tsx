@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Database, UserCircle, Loader2, Log } from 'lucide-react'; 
+import { Bell, Database, UserCircle, Loader2, Logs } from 'lucide-react'; // Changed Log to Logs
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useForm, Controller } from 'react-hook-form';
@@ -139,7 +139,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
         
-        <Card className="shadow-lg md:col-span-2 lg:col-span-3">
+        <Card className="shadow-lg">
            <CardHeader>
             <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5 text-primary" /> Données et Audit</CardTitle>
             <CardDescription>Gérez les options d'exportation des données et la traçabilité.</CardDescription>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
                 {isAdmin ? (
                   <Link href="/admin/audit-log/sessions" passHref>
                     <Button variant="outline">
-                      <Log className="mr-2 h-4 w-4" />
+                      <Logs className="mr-2 h-4 w-4" /> 
                       Voir le journal d'audit
                     </Button>
                   </Link>
