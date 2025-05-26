@@ -22,7 +22,7 @@ import type { BillOfLading, Client, BLStatus, WorkType } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { addBLToFirestore, updateBLInFirestore, getClientsFromFirestore, MOCK_WORK_TYPES } from "@/lib/mock-data"; // Using Firestore functions
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/contexts/auth-context"; // Corrected import path
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
