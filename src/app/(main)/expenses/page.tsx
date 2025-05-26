@@ -21,7 +21,6 @@ import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -30,6 +29,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { ExpenseForm } from '@/components/expense/expense-form'; // Import ExpenseForm
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -64,6 +74,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
 
   const [deletingExpense, setDeletingExpense] = useState<ExpenseWithDetails | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
+  const [showAddExpenseDialog, setShowAddExpenseDialog] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -173,6 +184,20 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     setDeletingExpense(null);
   };
 
+  const handleExpenseAddedFromDialog = (newExpense: Expense) => {
+    const bl = allBls.find(b => b.id === newExpense.blId);
+    const client = bl ? allClients.find(c => c.id === bl.clientId) : undefined;
+    const detailedNewExpense: ExpenseWithDetails = {
+        ...newExpense,
+        blNumber: bl?.blNumber,
+        clientName: client?.name,
+        employeeName: getEmployeeNameFromMock(newExpense.employeeId),
+    };
+    setExpenses(prevExpenses => [detailedNewExpense, ...prevExpenses].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setShowAddExpenseDialog(false); // Close the dialog
+  };
+
+
   if (!user && !isLoading) { 
     return <div className="flex justify-center items-center h-64">Veuillez vous connecter pour voir cette page.</div>;
   }
@@ -182,6 +207,28 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
       <PageHeader
         title="Gestion des Dépenses"
         description="Consultez et gérez toutes les dépenses enregistrées."
+        actions={
+          <Dialog open={showAddExpenseDialog} onOpenChange={setShowAddExpenseDialog}>
+            <DialogTrigger asChild>
+              <Button>
+                <PlusCircle className="mr-2 h-4 w-4" /> Ajouter une Dépense
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[480px]">
+              <DialogHeader>
+                <DialogTitle>Ajouter une Nouvelle Dépense</DialogTitle>
+                <DialogDescription>
+                  Remplissez les informations ci-dessous pour enregistrer une nouvelle dépense.
+                </DialogDescription>
+              </DialogHeader>
+              <ExpenseForm 
+                onExpenseAdded={handleExpenseAddedFromDialog} 
+                availableBls={allBls} 
+                setDialogOpen={setShowAddExpenseDialog} 
+              />
+            </DialogContent>
+          </Dialog>
+        }
       />
       <Card className="shadow-lg mb-6">
         <CardHeader>
@@ -263,7 +310,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
               </Popover>
             </div>
 
-            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto" disabled={isLoading}>
+            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto xl:mt-[22px]" disabled={isLoading}>
               <FilterX className="mr-2 h-4 w-4" /> Réinitialiser
             </Button>
           </div>
