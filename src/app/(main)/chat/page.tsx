@@ -18,7 +18,7 @@ import {
     getTodoItemsFromFirestore,
     updateTodoItemInFirestore,
     deleteTodoItemFromFirestore,
-    getAllUserProfiles // Import to get real users
+    getAllUserProfiles, // Import to get real users
 } from '@/lib/mock-data';
 import type { ChatMessage, TodoItem, UserProfile } from '@/lib/types'; 
 import { useForm, Controller } from "react-hook-form";
@@ -114,7 +114,7 @@ export default function ChatPage() {
 
   const handleSendMessage = async (data: ChatMessageFormValues) => {
     if (!user) {
-        toast({title: "Erreur", description: "Vous devez être connecté pour envoyer un message.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Vous devez être connecté pour envoyer un message.", variant: "destructive" });
         return;
     }
     const messagePayload = {
@@ -127,13 +127,13 @@ export default function ChatPage() {
       chatForm.reset();
     } catch (error) {
         console.error("Error sending message:", error);
-        toast({title: "Erreur d'envoi", description: "Impossible d'envoyer le message.", variant: "destructive"});
+        toast({ title: "Erreur d'envoi", description: "Impossible d'envoyer le message.", variant: "destructive" });
     }
   };
 
   const handleAddTodo = async (data: TodoItemFormValues) => {
      if (!user) {
-        toast({title: "Erreur", description: "Vous devez être connecté pour ajouter une tâche.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Vous devez être connecté pour ajouter une tâche.", variant: "destructive" });
         return;
     }
     const assignedUser = appUsers.find(u => u.uid === data.assignedToUserId);
@@ -150,7 +150,7 @@ export default function ChatPage() {
         toast({ title: "Tâche ajoutée", description: `"${data.text}" a été ajoutée.` });
     } catch (error) {
         console.error("Error adding todo:", error);
-        toast({title: "Erreur d'ajout", description: "Impossible d'ajouter la tâche.", variant: "destructive"});
+        toast({ title: "Erreur d'ajout", description: "Impossible d'ajouter la tâche.", variant: "destructive" });
     }
   };
 
@@ -168,7 +168,7 @@ export default function ChatPage() {
         // Firestore listener will update the local state
     } catch (error) {
         console.error("Error toggling todo:", error);
-        toast({title: "Erreur de mise à jour", description: "Impossible de mettre à jour la tâche.", variant: "destructive"});
+        toast({ title: "Erreur de mise à jour", description: "Impossible de mettre à jour la tâche.", variant: "destructive" });
     }
   };
   
@@ -179,7 +179,7 @@ export default function ChatPage() {
         // Firestore listener will update the local state
     } catch (error) {
         console.error("Error deleting todo:", error);
-        toast({title: "Erreur de suppression", description: "Impossible de supprimer la tâche.", variant: "destructive"});
+        toast({ title: "Erreur de suppression", description: "Impossible de supprimer la tâche.", variant: "destructive" });
     }
   };
 

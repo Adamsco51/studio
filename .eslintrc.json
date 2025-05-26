@@ -1,0 +1,35 @@
+{
+  "extends": [
+    "next/core-web-vitals",
+    "next",
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "plugins": ["@typescript-eslint"],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "project": "./tsconfig.json",
+    "sourceType": "module"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2021": true
+  },
+  "rules": {
+    // Style général
+    "max-len": ["warn", { "code": 100 }],
+    "comma-dangle": ["error", "always-multiline"],
+    "spaced-comment": ["warn", "always", { "exceptions": ["-","+"] }],
+
+    // TypeScript
+    "@typescript-eslint/no-unused-vars": "warn",
+    "@typescript-eslint/no-var-requires": "off",
+    "object-curly-spacing": "off",
+    
+    // Import
+    "no-console": "off",
+    "import/order": "off"
+  },
+  "ignorePatterns": ["node_modules/", ".next/", "functions/lib/"]
+}

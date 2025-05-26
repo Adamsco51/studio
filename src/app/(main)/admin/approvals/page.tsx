@@ -13,7 +13,7 @@ import {
     deleteBLFromFirestore,
     deleteClientFromFirestore,
     deleteExpenseFromFirestore,
-    deleteWorkTypeFromFirestore
+    deleteWorkTypeFromFirestore,
 } from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
@@ -146,7 +146,7 @@ export default function AdminApprovalsPage() {
         adminNotes, 
         user.uid,
         pinCodeToSave,
-        pinExpiryToSave 
+        pinExpiryToSave, 
       );
       
       let toastMessage = `La demande a été ${getStatusText(newStatus)}.`;
@@ -312,7 +312,7 @@ export default function AdminApprovalsPage() {
                         )}
                         {req.status !== 'pending' && req.adminNotes && (
                            <p className="text-xs text-muted-foreground italic text-left" title={`Notes Admin: ${req.adminNotes}${req.processedByUserId ? ` (par ${req.processedByUserId.substring(0,6)}...)` : ''}`}>
-                             Traité {req.processedAt ? format(parseISO(req.processedAt), 'dd/MM/yy HH:mm', {locale: fr}) : ''}
+                             Traité {req.processedAt ? format(parseISO(req.processedAt), 'dd/MM/yy HH:mm', { locale: fr }) : ''}
                            </p>
                         )}
                       </TableCell>

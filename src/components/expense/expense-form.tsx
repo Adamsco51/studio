@@ -62,7 +62,7 @@ export function ExpenseForm({
   blId: providedBlId,
   onExpenseAddedOrUpdated,
   availableBls,
-  setDialogOpen
+  setDialogOpen,
 }: ExpenseFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -122,7 +122,7 @@ export function ExpenseForm({
     const blIdToUse = data.isEditingOrBlProvided ? (initialData?.blId || providedBlId) : data.blId;
 
     if (!blIdToUse) {
-        toast({ title: "Erreur", description: "N° BL manquant.", variant: "destructive"});
+        toast({ title: "Erreur", description: "N° BL manquant.", variant: "destructive" });
         setIsSubmitting(false);
         return;
     }
@@ -250,7 +250,7 @@ export function ExpenseForm({
                       variant={"outline"}
                       className={cn(
                         "w-full pl-3 text-left font-normal",
-                        !field.value && "text-muted-foreground"
+                        !field.value && "text-muted-foreground",
                       )}
                       disabled={isSubmitting}
                     >

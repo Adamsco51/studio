@@ -12,7 +12,7 @@ import {
     deleteWorkTypeFromFirestore, 
     addApprovalRequestToFirestore,
     getPinIssuedRequestForEntity, 
-    completeApprovalRequestWithPin 
+    completeApprovalRequestWithPin, 
 } from '@/lib/mock-data'; 
 import type { WorkType, ApprovalRequest } from '@/lib/types';
 import { PlusCircle, Edit, Trash2, Search, Loader2, KeyRound, Briefcase } from 'lucide-react'; 
@@ -88,7 +88,7 @@ export default function WorkTypesPage() {
     if (!searchTerm) return workTypes;
     return workTypes.filter(wt => 
       wt.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (wt.description && wt.description.toLowerCase().includes(searchTerm.toLowerCase()))
+      (wt.description && wt.description.toLowerCase().includes(searchTerm.toLowerCase())),
     );
   }, [workTypes, searchTerm]);
 

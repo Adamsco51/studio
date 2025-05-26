@@ -38,7 +38,7 @@ const blFormSchema = z.object({
   allocatedAmount: z.coerce.number().positive({ message: "Le montant alloué doit être positif." }),
   workTypeId: z.string({ required_error: "Veuillez sélectionner un type de travail." }),
   description: z.string().optional(),
-  categories: z.string().min(1, { message: "Veuillez entrer au moins une catégorie."}), 
+  categories: z.string().min(1, { message: "Veuillez entrer au moins une catégorie." }), 
   status: z.enum(["en cours", "terminé", "inactif"], { required_error: "Veuillez sélectionner un statut." }),
 });
 
@@ -64,13 +64,13 @@ export function BLForm({ initialData }: BLFormProps) {
     try {
       const [fetchedClients, fetchedWorkTypes] = await Promise.all([
         getClientsFromFirestore(),
-        getWorkTypesFromFirestore()
+        getWorkTypesFromFirestore(),
       ]);
       setClients(fetchedClients);
       setWorkTypes(fetchedWorkTypes);
     } catch (error) {
       console.error("Failed to fetch clients or work types for BL form:", error);
-      toast({title: "Erreur de chargement", description: "Impossible de charger les clients ou types de travail.", variant: "destructive"});
+      toast({ title: "Erreur de chargement", description: "Impossible de charger les clients ou types de travail.", variant: "destructive" });
     } finally {
       setIsLoadingDropdownData(false);
     }

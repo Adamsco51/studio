@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { ReactNode} from 'react';
+import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { CompanyProfile } from '@/lib/types';
 import { getCompanyProfileFromFirestore } from '@/lib/mock-data'; // Assuming this function exists and fetches the profile

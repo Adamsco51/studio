@@ -20,15 +20,15 @@ import {
   deleteField,
   onSnapshot,
   limit,
-  writeBatch
+  writeBatch,
 } from "firebase/firestore";
 import { formatISO, parseISO, addHours } from 'date-fns';
 
 
-export let MOCK_USERS: User[] = [
+export const MOCK_USERS: User[] = [
   { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee' },
   { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin' },
-  { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee'},
+  { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee' },
 ];
 
 
@@ -53,7 +53,7 @@ export const createUserProfile = async (uid: string, email: string | null, displ
       email,
       displayName: displayName || email,
       role,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
     }, { merge: true });
   } catch (e) {
     console.error("Error creating/updating user profile: ", e);
@@ -136,7 +136,7 @@ export const addClientToFirestore = async (clientData: Omit<Client, 'id' | 'crea
     const docRef = await addDoc(clientsCollectionRef, {
       ...clientData,
       blIds: [],
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
     });
     return docRef.id;
   } catch (e) {
@@ -162,7 +162,7 @@ export const getClientsFromFirestore = async (): Promise<Client[]> => {
       console.error(
         "Firestore permission denied while trying to fetch clients. " +
         "Please check your Firestore security rules in the Firebase console for the 'clients' collection. ",
-        e
+        e,
       );
     } else {
       console.error("Error getting documents (clients): ", e);
@@ -242,12 +242,12 @@ export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'create
   try {
     const docRef = await addDoc(blsCollectionRef, {
       ...blData,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
     });
     if (blData.clientId) {
         const clientDocRef = doc(db, "clients", blData.clientId);
         await updateDoc(clientDocRef, {
-            blIds: arrayUnion(docRef.id)
+            blIds: arrayUnion(docRef.id),
         }).catch(err => console.error("Failed to update client with new BL ID:", err));
     }
     return docRef.id;
@@ -274,7 +274,7 @@ export const getBLsFromFirestore = async (): Promise<BillOfLading[]> => {
       console.error(
         "Firestore permission denied while trying to fetch Bills of Lading. " +
         "Please check your Firestore security rules for the 'billsOfLading' collection.",
-        e
+        e,
       );
     } else {
       console.error("Error getting documents (BLs): ", e);
@@ -369,7 +369,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
   try {
     const dataToSave: any = {
       ...expenseData,
-      date: expenseData.date ? Timestamp.fromDate(parseISO(expenseData.date)) : serverTimestamp()
+      date: expenseData.date ? Timestamp.fromDate(parseISO(expenseData.date)) : serverTimestamp(),
     };
 
     const docRef = await addDoc(expensesCollectionRef, dataToSave);
@@ -379,7 +379,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
       return {
         ...newExpenseData,
         id: newDocSnap.id,
-        date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString()
+        date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString(),
       } as Expense;
     }
     // Fallback
@@ -420,7 +420,7 @@ export const getExpensesByBlIdFromFirestore = async (blId: string): Promise<Expe
     return {
       ...expenseData,
       id: docSnap.id,
-      date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString()
+      date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString(),
     } as Expense;
   });
 };
@@ -483,7 +483,7 @@ export const addWorkTypeToFirestore = async (workTypeData: Omit<WorkType, 'id' |
   try {
     const docRef = await addDoc(workTypesCollectionRef, {
       ...workTypeData,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
     });
     return docRef.id;
   } catch (e) {
@@ -561,7 +561,7 @@ export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
 
 // Approval Request Service
 export const addApprovalRequestToFirestore = async (
-  requestData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status' | 'processedAt' | 'adminNotes' | 'processedByUserId' | 'pinCode' | 'pinExpiresAt' >
+  requestData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status' | 'processedAt' | 'adminNotes' | 'processedByUserId' | 'pinCode' | 'pinExpiresAt' >,
 ): Promise<ApprovalRequest> => {
   try {
     const docRef = await addDoc(approvalRequestsCollectionRef, {
@@ -584,7 +584,7 @@ export const addApprovalRequestToFirestore = async (
       ...requestData,
       id: docRef.id,
       status: 'pending',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     } as ApprovalRequest;
   } catch (e) {
     console.error("Error adding approval request document: ", e);
@@ -626,7 +626,7 @@ export const getApprovalRequestsByUserIdFromFirestore = async (userId: string): 
     const q = query(
       approvalRequestsCollectionRef,
       where("requestedByUserId", "==", userId),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
     const data = await getDocs(q);
     return data.docs.map(docSnap => {
@@ -656,7 +656,7 @@ export const updateApprovalRequestStatusInFirestore = async (
   adminNotes?: string,
   processedByUserId?: string,
   pinCode?: string,
-  pinExpiresAt?: Date | string | Timestamp // Accept Date or ISO string or Timestamp
+  pinExpiresAt?: Date | string | Timestamp, // Accept Date or ISO string or Timestamp
 ): Promise<void> => {
   const requestDoc = doc(db, "approvalRequests", requestId);
   try {
@@ -702,14 +702,14 @@ export const updateApprovalRequestStatusInFirestore = async (
 export const getPinIssuedRequestForEntity = async (
   entityType: ApprovalRequestEntityType,
   entityId: string,
-  actionType: ApprovalRequestActionType
+  actionType: ApprovalRequestActionType,
 ): Promise<ApprovalRequest | null> => {
   const q = query(
     approvalRequestsCollectionRef,
     where("entityType", "==", entityType),
     where("entityId", "==", entityId),
     where("actionType", "==", actionType),
-    where("status", "==", "pin_issued")
+    where("status", "==", "pin_issued"),
   );
 
   try {
@@ -746,7 +746,7 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
       status: 'completed',
       pinCode: deleteField(), 
       pinExpiresAt: deleteField(), 
-      processedAt: serverTimestamp() 
+      processedAt: serverTimestamp(), 
     });
   } catch (e) {
     console.error(`Error completing approval request ${requestId} with PIN: `, e);
@@ -760,7 +760,7 @@ export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, '
   try {
     const docRef = await addDoc(chatMessagesCollectionRef, {
       ...messageData,
-      timestamp: serverTimestamp()
+      timestamp: serverTimestamp(),
     });
     const newDocSnap = await getDoc(docRef);
     if (newDocSnap.exists()) {
@@ -804,7 +804,7 @@ export const addTodoItemToFirestore = async (todoData: Omit<TodoItem, 'id' | 'cr
     const docRef = await addDoc(todoItemsCollectionRef, {
       ...todoData,
       completed: false,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
     });
     const newDocSnap = await getDoc(docRef); 
     if (newDocSnap.exists()) {
@@ -881,7 +881,7 @@ export const logSessionEvent = async (
   userId: string,
   userDisplayName: string | null,
   userEmail: string | null,
-  action: 'login' | 'logout'
+  action: 'login' | 'logout',
 ): Promise<void> => {
   try {
     await addDoc(auditLogSessionsCollectionRef, {

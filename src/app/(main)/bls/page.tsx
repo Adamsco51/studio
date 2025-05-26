@@ -12,7 +12,7 @@ import {
     getBLsFromFirestore, 
     getClientsFromFirestore, 
     getExpensesFromFirestore, 
-    MOCK_USERS 
+    MOCK_USERS, 
 } from '@/lib/mock-data';
 import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types';
 import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2, FileText } from 'lucide-react';
@@ -75,7 +75,7 @@ export default function BillsOfLadingPage() {
       const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
         getBLsFromFirestore(),
         getClientsFromFirestore(),
-        getExpensesFromFirestore() 
+        getExpensesFromFirestore(), 
       ]);
       setBls(fetchedBls);
       setClients(fetchedClients);
@@ -148,7 +148,7 @@ export default function BillsOfLadingPage() {
       bl.blNumber.toLowerCase().includes(lowerSearchTerm) ||
       getClientName(bl.clientId).toLowerCase().includes(lowerSearchTerm) ||
       bl.status.toLowerCase().includes(lowerSearchTerm) ||
-      (bl.createdByUserId && getUserName(bl.createdByUserId).toLowerCase().includes(lowerSearchTerm))
+      (bl.createdByUserId && getUserName(bl.createdByUserId).toLowerCase().includes(lowerSearchTerm)),
     );
   }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate, getClientName, getUserName]); 
 
@@ -225,7 +225,7 @@ export default function BillsOfLadingPage() {
                     variant={"outline"}
                     className={cn(
                       "w-full justify-start text-left font-normal",
-                      !selectedDate && "text-muted-foreground"
+                      !selectedDate && "text-muted-foreground",
                     )}
                     disabled={isLoading}
                   >

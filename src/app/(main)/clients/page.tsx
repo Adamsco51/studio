@@ -34,7 +34,7 @@ export default function ClientsPage() {
     try {
       const [firestoreClients, firestoreBls] = await Promise.all([
         getClientsFromFirestore(),
-        getBLsFromFirestore() 
+        getBLsFromFirestore(), 
       ]);
       
       setAllBls(firestoreBls); 
@@ -61,7 +61,7 @@ export default function ClientsPage() {
     return clients.filter(client =>
       client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.email.toLowerCase().includes(searchTerm.toLowerCase())
+      client.email.toLowerCase().includes(searchTerm.toLowerCase()),
     );
   }, [clients, searchTerm]);
 

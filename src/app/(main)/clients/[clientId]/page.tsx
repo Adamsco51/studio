@@ -14,7 +14,7 @@ import {
   addApprovalRequestToFirestore,
   getUserProfile,
   getPinIssuedRequestForEntity, 
-  completeApprovalRequestWithPin 
+  completeApprovalRequestWithPin, 
 } from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
@@ -107,7 +107,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
               expenses, 
               balance, 
               financialStatus: balance >= 0 ? 'Bénéfice' : 'Perte',
-              profit: balance >= 0
+              profit: balance >= 0,
           };
         }));
 
@@ -169,7 +169,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           setShowEditRequestDialog(true);
         }
       } catch (error) {
-        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
       } finally {
         setIsProcessingRequest(false);
       }
@@ -193,7 +193,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           setShowDeleteClientDialog(true); 
         }
       } catch (error) {
-        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
       } finally {
         setIsProcessingRequest(false);
       }
@@ -254,7 +254,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       router.refresh(); 
     } catch (error) {
       console.error("Failed to delete client:", error);
-      toast({ title: "Erreur", description: "Échec de la suppression du client.", variant: "destructive"});
+      toast({ title: "Erreur", description: "Échec de la suppression du client.", variant: "destructive" });
     } finally {
       setIsDeleting(false);
       setShowDeleteClientDialog(false);

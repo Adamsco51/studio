@@ -83,11 +83,11 @@ export default function ReportsPage() {
 
       if (selectedReportType === "profitability_bl") {
         const filteredBls = allBls.filter(bl => 
-          bl.createdAt && isWithinInterval(parseISO(bl.createdAt), { start: periodStart, end: periodEnd })
+          bl.createdAt && isWithinInterval(parseISO(bl.createdAt), { start: periodStart, end: periodEnd }),
         );
 
         if (filteredBls.length === 0) {
-          toast({ title: "Aucune Donnée", description: `Aucun BL trouvé pour ${format(periodDate, 'MMMM yyyy', { locale: fr })}.`});
+          toast({ title: "Aucune Donnée", description: `Aucun BL trouvé pour ${format(periodDate, 'MMMM yyyy', { locale: fr })}.` });
           setReportResults([]);
           setIsGeneratingReport(false);
           return;
@@ -106,7 +106,7 @@ export default function ReportsPage() {
           };
         }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setReportResults(results);
-        toast({ title: "Rapport Généré", description: `Rentabilité par BL pour ${format(periodDate, 'MMMM yyyy', { locale: fr })}.`});
+        toast({ title: "Rapport Généré", description: `Rentabilité par BL pour ${format(periodDate, 'MMMM yyyy', { locale: fr })}.` });
 
       } else {
         toast({ title: "Non Implémenté", description: "Ce type de rapport n'est pas encore disponible.", variant: "default" });
@@ -247,7 +247,7 @@ export default function ReportsPage() {
         <Card className="mt-6 shadow-lg">
           <CardHeader>
             <CardTitle>
-              Résultats: {selectedReportType === "profitability_bl" && selectedPeriod ? `Rentabilité par BL pour ${format(parse(selectedPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy', {locale: fr})}` : "Rapport"}
+              Résultats: {selectedReportType === "profitability_bl" && selectedPeriod ? `Rentabilité par BL pour ${format(parse(selectedPeriod, 'yyyy-MM', new Date()), 'MMMM yyyy', { locale: fr })}` : "Rapport"}
             </CardTitle>
             {reportResults.length === 0 && <CardDescription>Aucun résultat à afficher pour la période sélectionnée.</CardDescription>}
           </CardHeader>
@@ -269,7 +269,7 @@ export default function ReportsPage() {
                     <TableRow key={index}>
                       <TableCell className="font-medium">{item.blNumber}</TableCell>
                       <TableCell>{item.clientName}</TableCell> 
-                      <TableCell>{item.createdAt ? format(parseISO(item.createdAt), 'dd MMM yyyy', {locale: fr}) : 'N/A'}</TableCell>
+                      <TableCell>{item.createdAt ? format(parseISO(item.createdAt), 'dd MMM yyyy', { locale: fr }) : 'N/A'}</TableCell>
                       <TableCell className="text-right">{item.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                       <TableCell className="text-right">{item.totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                       <TableCell className={`text-right font-semibold ${item.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>

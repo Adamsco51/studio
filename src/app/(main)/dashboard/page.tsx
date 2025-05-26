@@ -36,7 +36,7 @@ export default function DashboardPage() {
         const [fetchedClients, fetchedBls, fetchedExpenses] = await Promise.all([
           getClientsFromFirestore(),
           getBLsFromFirestore(),
-          getExpensesFromFirestore()
+          getExpensesFromFirestore(),
         ]);
         setClients(fetchedClients);
         setBlsData(fetchedBls);
@@ -72,7 +72,7 @@ export default function DashboardPage() {
   const isOverallProfit = overallProfitability >= 0;
 
   const clientsWithOpenBLs = clients.filter(client => 
-    blsData.some(bl => bl.clientId === client.id && bl.status === 'en cours')
+    blsData.some(bl => bl.clientId === client.id && bl.status === 'en cours'),
   );
 
   const stats = [
@@ -116,7 +116,7 @@ export default function DashboardPage() {
     'en cours': { label: 'En Cours', color: 'hsl(var(--chart-1))' },
     terminé: { label: 'Terminés', color: 'hsl(var(--chart-2))' },
     inactif: { label: 'Inactifs', color: 'hsl(var(--chart-3))' },
-    count: { label: 'Nombre de BLs' }
+    count: { label: 'Nombre de BLs' },
   } satisfies ChartConfig;
 
   const expensesByMonthAggregated: Record<string, number> = {};
@@ -136,7 +136,7 @@ export default function DashboardPage() {
   });
   const monthlyExpensesChartConfig = {
     totalExpenses: { label: "Dépenses Totales", color: "hsl(var(--chart-4))" },
-    month: { label: "Mois" }
+    month: { label: "Mois" },
   } satisfies ChartConfig;
 
   if (isLoading) {

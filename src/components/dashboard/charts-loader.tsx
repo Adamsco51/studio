@@ -44,7 +44,7 @@ const DashboardCharts = dynamic(() => import('@/components/dashboard/dashboard-c
         </CardContent>
       </Card>
     </>
-  )
+  ),
 });
 
 export default function ChartsLoader({ 
@@ -52,7 +52,7 @@ export default function ChartsLoader({
   blStatusChartConfig,
   monthlyExpensesChartData,
   monthlyExpensesChartConfig,
-  isLoading // Destructure isLoading
+  isLoading, // Destructure isLoading
 }: ChartsLoaderProps) {
   // If parent component (DashboardPage) is loading data, show a more generic loading state for charts.
   if (isLoading) {

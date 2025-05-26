@@ -18,7 +18,7 @@ import {
     getPinIssuedRequestForEntity,
     completeApprovalRequestWithPin,
     getExpenseByIdFromFirestore, 
-    updateExpenseInFirestore
+    updateExpenseInFirestore,
 } from '@/lib/mock-data';
 import type { BillOfLading, Expense, Client, BLStatus, WorkType, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
@@ -195,7 +195,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
           setShowEditRequestDialog(true);
         }
       } catch (error) {
-         toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+         toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
       } finally {
         setIsProcessingRequest(false);
       }
@@ -221,7 +221,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
           setShowDeleteBlDialog(true);
         }
       } catch (error) {
-        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
       } finally {
         setIsProcessingRequest(false);
       }
@@ -248,7 +248,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
           setShowDeleteExpenseDialog(true);
         }
       } catch (error) {
-        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
       } finally {
         setIsProcessingRequest(false);
       }
@@ -365,7 +365,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
       setRequestingDeleteExpense(null);
     } catch (error) {
         console.error("Failed to delete expense:", error);
-        toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive" });
     } finally {
         setIsDeleting(false);
     }
@@ -384,7 +384,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         router.refresh();
     } catch (error) {
         console.error("Failed to delete BL:", error);
-        toast({ title: "Erreur", description: "Échec de la suppression du BL.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Échec de la suppression du BL.", variant: "destructive" });
     } finally {
         setIsDeleting(false);
         setShowDeleteBlDialog(false);
@@ -542,7 +542,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                     "capitalize",
                     bl.status === 'terminé' && 'bg-green-100 text-green-700 border-green-300',
                     bl.status === 'en cours' && 'bg-blue-100 text-blue-700 border-blue-300',
-                    bl.status === 'inactif' && 'bg-gray-100 text-gray-700 border-gray-300'
+                    bl.status === 'inactif' && 'bg-gray-100 text-gray-700 border-gray-300',
                   )}>
                     {getStatusIcon(bl.status)}
                     {bl.status}

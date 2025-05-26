@@ -16,7 +16,7 @@ import {
     addApprovalRequestToFirestore,
     getPinIssuedRequestForEntity,
     completeApprovalRequestWithPin,
-    getExpenseByIdFromFirestore 
+    getExpenseByIdFromFirestore, 
 } from '@/lib/mock-data';
 import type { Expense, BillOfLading, Client, ApprovalRequest } from '@/lib/types';
 import { PlusCircle, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon as CalendarIconLucide, FilterX, Eye, Edit, Loader2, KeyRound, DollarSign } from 'lucide-react'; 
@@ -97,7 +97,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         const [fetchedExpenses, fetchedBls, fetchedClients] = await Promise.all([
             getExpensesFromFirestore(),
             getBLsFromFirestore(),
-            getClientsFromFirestore()
+            getClientsFromFirestore(),
         ]);
         setAllBls(fetchedBls);
         setAllClients(fetchedClients);
@@ -116,7 +116,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
 
     } catch (error) {
         console.error("Failed to fetch data for expenses page:", error);
-        toast({title: "Erreur de chargement", description: "Impossible de charger les données de base.", variant: "destructive"});
+        toast({ title: "Erreur de chargement", description: "Impossible de charger les données de base.", variant: "destructive" });
     } finally {
         setIsLoading(false);
     }
@@ -163,7 +163,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
       (exp.blNumber && exp.blNumber.toLowerCase().includes(lowerSearchTerm)) ||
       (exp.clientName && exp.clientName.toLowerCase().includes(lowerSearchTerm)) ||
       (exp.employeeName && exp.employeeName.toLowerCase().includes(lowerSearchTerm)) ||
-      exp.amount.toString().includes(lowerSearchTerm)
+      exp.amount.toString().includes(lowerSearchTerm),
     );
   }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate, allBls]);
 
@@ -208,7 +208,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
           setActivePinRequest(pinRequest);
           setShowPinDialog(true); 
         } else {
-          toast({title: "Action Requise", description: "Veuillez demander une approbation avec PIN à un administrateur pour modifier cette dépense.", variant: "default", duration: 5000});
+          toast({ title: "Action Requise", description: "Veuillez demander une approbation avec PIN à un administrateur pour modifier cette dépense.", variant: "default", duration: 5000 });
           setExpenseTargetedForAction(null);
         }
        } catch (error) {
@@ -275,7 +275,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
       });
     } catch (error) {
         console.error("Failed to delete expense:", error);
-        toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
+        toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive" });
     } finally {
         setExpenseTargetedForAction(null);
         setShowReasonDialog(false);
@@ -430,7 +430,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                     variant={"outline"}
                     className={cn(
                       "w-full justify-start text-left font-normal",
-                      !selectedDate && "text-muted-foreground"
+                      !selectedDate && "text-muted-foreground",
                     )}
                     disabled={isLoading}
                   >

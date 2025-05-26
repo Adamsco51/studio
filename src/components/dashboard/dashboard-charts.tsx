@@ -9,7 +9,7 @@ import {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
-  type ChartConfig
+  type ChartConfig,
 } from "@/components/ui/chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PieChart as PieChartIcon, Activity } from 'lucide-react'; 
@@ -26,7 +26,7 @@ export default function DashboardCharts({
   blStatusChartData, 
   blStatusChartConfig,
   monthlyExpensesChartData,
-  monthlyExpensesChartConfig
+  monthlyExpensesChartConfig,
 }: DashboardChartsProps) {
 
   return (
