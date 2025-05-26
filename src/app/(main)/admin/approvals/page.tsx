@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -98,7 +98,7 @@ export default function AdminApprovalsPage() {
     }
   }, [authLoading, isAdmin, router]);
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     if (isAdmin) {
       setIsLoading(true);
       try {
@@ -111,11 +111,11 @@ export default function AdminApprovalsPage() {
         setIsLoading(false);
       }
     }
-  };
+  }, [isAdmin, toast]); // toast is stable, isAdmin is a dependency
 
   useEffect(() => {
     fetchRequests();
-  }, [isAdmin, toast]); // Removed toast from here as it might cause infinite loops if toast causes re-render
+  }, [fetchRequests]);
 
   const handleOpenConfirmationDialog = (request: ApprovalRequest, action: 'approve' | 'reject') => {
     setSelectedRequest(request);
@@ -146,7 +146,7 @@ export default function AdminApprovalsPage() {
         adminNotes, 
         user.uid,
         pinCodeToSave,
-        pinExpiryToSave
+        pinExpiryToSave ? pinExpiryToSave.toISOString() : undefined
       );
       
       let toastMessage = `La demande a été ${getStatusText(newStatus)}.`;
@@ -285,7 +285,7 @@ export default function AdminApprovalsPage() {
                       </TableCell>
                       <TableCell>{getActionText(req.actionType)}</TableCell>
                       <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
-                      <TableCell>{format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                      <TableCell>{req.createdAt ? format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
                            {req.status === 'pending' && <HelpCircle className="mr-1 h-3 w-3" />}
@@ -403,6 +403,5 @@ export default function AdminApprovalsPage() {
     </>
   );
 }
-
 
     

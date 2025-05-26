@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,7 @@ interface ProfitabilityBlResult {
 export default function ReportsPage() {
   const [selectedReportType, setSelectedReportType] = useState<ReportType | undefined>(undefined);
   const [selectedPeriod, setSelectedPeriod] = useState<string>(""); // YYYY-MM
-  const [isLoading, setIsLoading] = useState(false); 
+  const [isLoadingData, setIsLoadingData] = useState(true); 
   const [isGeneratingReport, setIsGeneratingReport] = useState(false); 
   const [reportResults, setReportResults] = useState<ProfitabilityBlResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,31 +40,32 @@ export default function ReportsPage() {
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [allClients, setAllClients] = useState<Client[]>([]); 
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [bls, expenses, clients] = await Promise.all([
-          getBLsFromFirestore(),
-          getExpensesFromFirestore(),
-          getClientsFromFirestore(), 
-        ]);
-        setAllBls(bls);
-        setAllExpenses(expenses);
-        setAllClients(clients); 
-      } catch (err) {
-        console.error("Error fetching base data for reports:", err);
-        toast({ title: "Erreur", description: "Impossible de charger les données de base pour les rapports.", variant: "destructive" });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
+  const fetchData = useCallback(async () => {
+    setIsLoadingData(true);
+    try {
+      const [bls, expenses, clients] = await Promise.all([
+        getBLsFromFirestore(),
+        getExpensesFromFirestore(),
+        getClientsFromFirestore(), 
+      ]);
+      setAllBls(bls);
+      setAllExpenses(expenses);
+      setAllClients(clients); 
+    } catch (err) {
+      console.error("Error fetching base data for reports:", err);
+      toast({ title: "Erreur", description: "Impossible de charger les données de base pour les rapports.", variant: "destructive" });
+    } finally {
+      setIsLoadingData(false);
+    }
   }, [toast]);
 
-  const getClientName = (clientId: string) => {
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const getClientName = useCallback((clientId: string) => {
     return allClients.find(c => c.id === clientId)?.name || 'N/A';
-  }
+  }, [allClients]);
 
   const handleGenerateReport = async () => {
     if (!selectedReportType || !selectedPeriod) {
@@ -119,7 +120,7 @@ export default function ReportsPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoadingData) {
     return (
       <>
         <PageHeader
@@ -288,3 +289,5 @@ export default function ReportsPage() {
     </>
   );
 }
+
+    

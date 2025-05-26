@@ -23,7 +23,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { addBLToFirestore, updateBLInFirestore, getClientsFromFirestore, getWorkTypesFromFirestore } from "@/lib/mock-data"; 
 import { useAuth } from "@/contexts/auth-context"; 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 
 const blStatusOptions: { value: BLStatus; label: string }[] = [
@@ -59,25 +59,26 @@ export function BLForm({ initialData }: BLFormProps) {
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [isLoadingDropdownData, setIsLoadingDropdownData] = useState(true);
 
-  useEffect(() => {
-    const fetchDropdownData = async () => {
-      setIsLoadingDropdownData(true);
-      try {
-        const [fetchedClients, fetchedWorkTypes] = await Promise.all([
-          getClientsFromFirestore(),
-          getWorkTypesFromFirestore()
-        ]);
-        setClients(fetchedClients);
-        setWorkTypes(fetchedWorkTypes);
-      } catch (error) {
-        console.error("Failed to fetch clients or work types for BL form:", error);
-        toast({title: "Erreur de chargement", description: "Impossible de charger les clients ou types de travail.", variant: "destructive"});
-      } finally {
-        setIsLoadingDropdownData(false);
-      }
-    };
-    fetchDropdownData();
+  const fetchDropdownData = useCallback(async () => {
+    setIsLoadingDropdownData(true);
+    try {
+      const [fetchedClients, fetchedWorkTypes] = await Promise.all([
+        getClientsFromFirestore(),
+        getWorkTypesFromFirestore()
+      ]);
+      setClients(fetchedClients);
+      setWorkTypes(fetchedWorkTypes);
+    } catch (error) {
+      console.error("Failed to fetch clients or work types for BL form:", error);
+      toast({title: "Erreur de chargement", description: "Impossible de charger les clients ou types de travail.", variant: "destructive"});
+    } finally {
+      setIsLoadingDropdownData(false);
+    }
   }, [toast]);
+
+  useEffect(() => {
+    fetchDropdownData();
+  }, [fetchDropdownData]);
 
 
   const defaultCategories = initialData?.categories ? initialData.categories.join(", ") : "";
@@ -256,9 +257,9 @@ export function BLForm({ initialData }: BLFormProps) {
                 name="allocatedAmount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Montant Alloué par le Client (€)</FormLabel>
+                    <FormLabel>Montant Alloué par le Client (XOF)</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="Ex: 5000" {...field} disabled={isSubmitting} />
+                      <Input type="number" placeholder="Ex: 5000000" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -335,3 +336,5 @@ export function BLForm({ initialData }: BLFormProps) {
     </div>
   );
 }
+
+    

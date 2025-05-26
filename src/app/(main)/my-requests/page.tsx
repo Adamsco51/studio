@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,10 +10,11 @@ import { getApprovalRequestsByUserIdFromFirestore } from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Loader2, CheckCircle, XCircle, HelpCircle, KeyRound, ShieldQuestion, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 const getStatusVariant = (status: ApprovalRequestStatus) => {
   switch (status) {
@@ -58,6 +59,7 @@ const getEntityTypeText = (entityType: ApprovalRequest['entityType']) => {
 export default function MyRequestsPage() {
   const { user, loading: authLoading, isAdmin } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -71,7 +73,7 @@ export default function MyRequestsPage() {
     }
   }, [authLoading, user, isAdmin, router]);
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     if (user && !isAdmin) { // Only fetch if user is logged in and not an admin
       setIsLoading(true);
       try {
@@ -79,18 +81,18 @@ export default function MyRequestsPage() {
         setRequests(fetchedRequests);
       } catch (error) {
         console.error("Failed to fetch user approval requests:", error);
-        // toast({ title: "Erreur", description: "Impossible de charger vos demandes.", variant: "destructive" });
+        toast({ title: "Erreur", description: "Impossible de charger vos demandes.", variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     } else if (!user && !authLoading) {
         setIsLoading(false); // Not logged in, no requests to load
     }
-  };
+  }, [user, isAdmin, toast]); // toast is stable
 
   useEffect(() => {
     fetchRequests();
-  }, [user, isAdmin]); // Re-fetch if user or isAdmin status changes (e.g., after login)
+  }, [fetchRequests]); 
 
   const getEntityLink = (request: ApprovalRequest) => {
     // Basic link to entity page, not specific edit/action page for this view
@@ -165,7 +167,7 @@ export default function MyRequestsPage() {
               <TableBody>
                 {requests.map((req) => {
                   const entityLink = getEntityLink(req);
-                  const isPinValid = req.pinCode && req.pinExpiresAt && new Date() < new Date(req.pinExpiresAt);
+                  const isPinValid = req.pinCode && req.pinExpiresAt && new Date() < parseISO(req.pinExpiresAt);
                   return (
                     <TableRow key={req.id}>
                       <TableCell>
@@ -182,7 +184,7 @@ export default function MyRequestsPage() {
                       </TableCell>
                       <TableCell>{getActionText(req.actionType)}</TableCell>
                       <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
-                      <TableCell>{format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                      <TableCell>{req.createdAt ? format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
                            {req.status === 'pending' && <Clock className="mr-1 h-3 w-3" />}
@@ -194,7 +196,7 @@ export default function MyRequestsPage() {
                         </Badge>
                         {req.status === 'pin_issued' && req.pinCode && (
                           <p className={`text-xs ${isPinValid ? 'text-green-600' : 'text-red-500 line-through'} italic`}>
-                            PIN: {req.pinCode} {isPinValid ? `(Expire le ${format(new Date(req.pinExpiresAt!), 'dd/MM HH:mm', { locale: fr })})` : '(Expiré)'}
+                            PIN: {req.pinCode} {req.pinExpiresAt && isPinValid ? `(Expire le ${format(parseISO(req.pinExpiresAt), 'dd/MM HH:mm', { locale: fr })})` : '(Expiré)'}
                           </p>
                         )}
                       </TableCell>
@@ -202,7 +204,7 @@ export default function MyRequestsPage() {
                         {req.adminNotes || '-'}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {req.processedAt ? format(new Date(req.processedAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : '-'}
+                        {req.processedAt ? format(parseISO(req.processedAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : '-'}
                       </TableCell>
                     </TableRow>
                   );
@@ -215,3 +217,5 @@ export default function MyRequestsPage() {
     </>
   );
 }
+
+    

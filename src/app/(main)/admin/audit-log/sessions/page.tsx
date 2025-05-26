@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -25,23 +25,24 @@ export default function SessionAuditLogPage() {
     }
   }, [authLoading, isAdmin, router]);
 
+  const fetchEvents = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const events = await getSessionAuditEvents();
+      setAuditEvents(events);
+    } catch (error) {
+      console.error("Failed to fetch session audit events:", error);
+      // Consider adding a toast notification for the error
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAdmin) {
-      const fetchEvents = async () => {
-        setIsLoading(true);
-        try {
-          const events = await getSessionAuditEvents();
-          setAuditEvents(events);
-        } catch (error) {
-          console.error("Failed to fetch session audit events:", error);
-          // Consider adding a toast notification for the error
-        } finally {
-          setIsLoading(false);
-        }
-      };
       fetchEvents();
     }
-  }, [isAdmin]);
+  }, [isAdmin, fetchEvents]);
 
   if (authLoading || isLoading) {
     return (
@@ -110,3 +111,5 @@ export default function SessionAuditLogPage() {
     </>
   );
 }
+
+    

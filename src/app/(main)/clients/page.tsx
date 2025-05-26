@@ -1,54 +1,52 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, use } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Added React
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getClientsFromFirestore, getBLsFromFirestore } from '@/lib/mock-data'; // Use Firestore functions
+import { getClientsFromFirestore, getBLsFromFirestore } from '@/lib/mock-data'; 
 import { PlusCircle, ArrowRight, UserCheck, UserX, Search, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import type { Client, BillOfLading } from '@/lib/types'; // Added BillOfLading type
+import type { Client, BillOfLading } from '@/lib/types'; 
 
 type ClientWithStatus = Client & { isActive: boolean };
 
-export default function ClientsPage({ params: paramsPromise }: { params: Promise<{}> }) {
-  const params = use(paramsPromise); 
-
+export default function ClientsPage() { 
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<ClientWithStatus[]>([]);
-  const [allBls, setAllBls] = useState<BillOfLading[]>([]); // State to store all BLs
+  const [allBls, setAllBls] = useState<BillOfLading[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [firestoreClients, firestoreBls] = await Promise.all([
-          getClientsFromFirestore(),
-          getBLsFromFirestore() // Fetch all BLs
-        ]);
-        
-        setAllBls(firestoreBls); // Store fetched BLs
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [firestoreClients, firestoreBls] = await Promise.all([
+        getClientsFromFirestore(),
+        getBLsFromFirestore() 
+      ]);
+      
+      setAllBls(firestoreBls); 
 
-        const clientsWithStatus = firestoreClients.map(client => {
-          // Determine isActive based on BLs fetched from Firestore
-          const hasActiveBL = firestoreBls.some(bl => bl.clientId === client.id && bl.status === 'en cours');
-          return { ...client, isActive: hasActiveBL };
-        });
-        setClients(clientsWithStatus);
-      } catch (error) {
-        console.error("Failed to fetch clients or BLs:", error);
-        // Handle error (e.g., show a toast)
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
+      const clientsWithStatus = firestoreClients.map(client => {
+        const hasActiveBL = firestoreBls.some(bl => bl.clientId === client.id && bl.status === 'en cours');
+        return { ...client, isActive: hasActiveBL };
+      });
+      setClients(clientsWithStatus);
+    } catch (error) {
+      console.error("Failed to fetch clients or BLs:", error);
+      // Handle error (e.g., show a toast)
+    } finally {
+      setIsLoading(false);
+    }
   }, []); 
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]); 
 
   const filteredClients = useMemo(() => {
     if (!searchTerm) return clients;
@@ -145,3 +143,5 @@ export default function ClientsPage({ params: paramsPromise }: { params: Promise
     </>
   );
 }
+
+    

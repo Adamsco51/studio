@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,7 +10,7 @@ import { getAllUserProfiles, updateUserProfileInFirestore } from '@/lib/mock-dat
 import type { UserProfile } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Loader2, Users, UserCheck, ShieldCheck, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
     }
   }, [authLoading, isAdmin, router]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     if (isAdmin) {
       setIsLoading(true);
       try {
@@ -59,11 +59,11 @@ export default function AdminUsersPage() {
         setIsLoading(false);
       }
     }
-  };
+  },[isAdmin, toast]);
 
   useEffect(() => {
     fetchUsers();
-  }, [isAdmin, toast]);
+  }, [fetchUsers]);
 
   const handleOpenEditRoleDialog = (userToEdit: UserProfile) => {
     setEditingUser(userToEdit);
@@ -161,7 +161,7 @@ export default function AdminUsersPage() {
                         {profile.role === 'admin' ? 'Admin' : 'Employé'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{profile.createdAt ? format(new Date(profile.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                    <TableCell>{profile.createdAt ? format(parseISO(profile.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{profile.uid}</TableCell>
                     <TableCell className="text-right">
                        <Button variant="outline" size="sm" onClick={() => handleOpenEditRoleDialog(profile)} disabled={isUpdatingRole}>
@@ -234,3 +234,5 @@ export default function AdminUsersPage() {
     </>
   );
 }
+
+    

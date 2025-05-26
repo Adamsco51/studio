@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, use } from 'react'; 
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; 
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,8 @@ import {
     getWorkTypesFromFirestore, 
     deleteWorkTypeFromFirestore, 
     addApprovalRequestToFirestore,
-    getPinIssuedRequestForEntity, // Added
-    completeApprovalRequestWithPin // Added
+    getPinIssuedRequestForEntity, 
+    completeApprovalRequestWithPin 
 } from '@/lib/mock-data'; 
 import type { WorkType, ApprovalRequest } from '@/lib/types';
 import { PlusCircle, Edit, Trash2, Search, Loader2, KeyRound } from 'lucide-react'; 
@@ -25,7 +25,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   Dialog,
@@ -34,19 +33,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '@/contexts/auth-context';
 
-export default function WorkTypesPage({ params: paramsPromise }: { params: Promise<{}> }) { 
-  const params = use(paramsPromise); 
+export default function WorkTypesPage() { 
   const { user, isAdmin } = useAuth();
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,26 +63,26 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
   const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
   const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
 
-
-  useEffect(() => {
+  const fetchWorkTypes = useCallback(async () => {
     if (!user) {
       setIsLoading(false); 
       return;
     }
-    const fetchWorkTypes = async () => {
-      setIsLoading(true);
-      try {
-        const fetchedWorkTypes = await getWorkTypesFromFirestore();
-        setWorkTypes(fetchedWorkTypes.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-      } catch (error) {
-        console.error("Failed to fetch work types:", error);
-        toast({ title: "Erreur", description: "Impossible de charger les types de travail.", variant: "destructive" });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    setIsLoading(true);
+    try {
+      const fetchedWorkTypes = await getWorkTypesFromFirestore();
+      setWorkTypes(fetchedWorkTypes.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    } catch (error) {
+      console.error("Failed to fetch work types:", error);
+      toast({ title: "Erreur", description: "Impossible de charger les types de travail.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  },[user, toast]);
+
+  useEffect(() => {
     fetchWorkTypes();
-  }, [user, toast]);
+  }, [fetchWorkTypes]);
 
   const filteredWorkTypes = useMemo(() => {
     if (!searchTerm) return workTypes;
@@ -156,7 +153,7 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
         toast({ title: "Erreur", description: "PIN incorrect.", variant: "destructive" });
         return;
     }
-    if (activePinRequest.pinExpiresAt && new Date() > new Date(activePinRequest.pinExpiresAt)) {
+    if (activePinRequest.pinExpiresAt && new Date() > parseISO(activePinRequest.pinExpiresAt)) {
         toast({ title: "Erreur", description: "Le PIN a expiré.", variant: "destructive" });
         setShowPinDialog(false);
         setPinEntry('');
@@ -270,7 +267,7 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
     }
   };
 
-  if (!user && isLoading) { 
+  if (isLoading && !user) { 
     return (
         <div className="flex justify-center items-center h-64">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -343,7 +340,7 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
                 <TableRow key={wt.id}>
                   <TableCell className="font-medium">{wt.name}</TableCell>
                   <TableCell>{wt.description || 'N/A'}</TableCell>
-                  <TableCell>{format(new Date(wt.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                  <TableCell>{wt.createdAt ? format(parseISO(wt.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                   <TableCell className="text-right space-x-1">
                     <Button variant="outline" size="sm" onClick={() => handleEditWorkTypeAction(wt)} disabled={isProcessingAction && workTypeTargetedForAction?.id === wt.id}>
                         {(isProcessingAction && workTypeTargetedForAction?.id === wt.id && pinActionType === 'edit') ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Edit className="mr-1 h-4 w-4" />} Modifier

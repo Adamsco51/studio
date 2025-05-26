@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, use } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { 
     getBLsFromFirestore, 
     getClientsFromFirestore, 
-    getExpensesFromFirestore, 
+    getExpensesFromFirestore, // Now we need this for actual expenses
     MOCK_USERS 
 } from '@/lib/mock-data';
-import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types';
+import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types'; // Added Expense
 import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -50,9 +50,7 @@ const StatusIcon = ({ status }: { status: BLStatus }) => {
   return null;
 };
 
-export default function BillsOfLadingPage({ params: paramsPromise }: { params: Promise<{}> }) {
-  const params = use(paramsPromise); 
-
+export default function BillsOfLadingPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [bls, setBls] = useState<BillOfLading[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -65,39 +63,41 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
   const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
-          getBLsFromFirestore(),
-          getClientsFromFirestore(),
-          getExpensesFromFirestore() 
-        ]);
-        setBls(fetchedBls);
-        setClients(fetchedClients);
-        setExpenses(fetchedExpenses); 
-      } catch (error) {
-        console.error("Failed to fetch data for BLs page:", error);
-        toast({ title: "Erreur de chargement", description: "Impossible de charger toutes les données.", variant: "destructive" });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-    setUsers(MOCK_USERS);
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
+        getBLsFromFirestore(),
+        getClientsFromFirestore(),
+        getExpensesFromFirestore() 
+      ]);
+      setBls(fetchedBls);
+      setClients(fetchedClients);
+      setExpenses(fetchedExpenses); 
+    } catch (error) {
+      console.error("Failed to fetch data for BLs page:", error);
+      toast({ title: "Erreur de chargement", description: "Impossible de charger toutes les données.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   }, [toast]); 
 
-  const getClientName = (clientId: string) => {
+  useEffect(() => {
+    fetchData();
+    setUsers(MOCK_USERS); // Mock users are static for now
+  }, [fetchData]); 
+
+  const getClientName = useCallback((clientId: string) => {
     return clients.find(c => c.id === clientId)?.name || 'N/A';
-  };
+  }, [clients]);
 
-  const getUserName = (userId?: string) => {
+  const getUserName = useCallback((userId?: string) => {
     if (!userId) return 'N/A';
+    // For now, MOCK_USERS is fine. If users become dynamic, this needs update.
     return MOCK_USERS.find(u => u.id === userId)?.name || 'N/A';
-  };
+  }, []); // MOCK_USERS is static
 
-  const calculateBlDetails = (blId: string) => {
+  const calculateBlDetails = useCallback((blId: string) => {
     const bl = bls.find(b => b.id === blId);
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
     
@@ -106,7 +106,7 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
     const balance = bl.allocatedAmount - totalExpenses;
     const profitStatus = balance >= 0 ? 'Bénéfice' : 'Perte';
     return { totalExpenses, balance, profitStatus, profit: balance >= 0 };
-  };
+  }, [bls, expenses]);
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -145,7 +145,7 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
       bl.status.toLowerCase().includes(lowerSearchTerm) ||
       (bl.createdByUserId && getUserName(bl.createdByUserId).toLowerCase().includes(lowerSearchTerm))
     );
-  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate, clients]); 
+  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate, getClientName, getUserName]); 
 
   return (
     <>
@@ -322,3 +322,5 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
     </>
   );
 }
+
+    
