@@ -1,0 +1,17 @@
+
+{
+  "indexes": [
+    // Firestore automatically creates single-field indexes.
+    // Add composite indexes here if your queries require them.
+    // Example:
+    // {
+    //   "collectionGroup": "posts",
+    //   "queryScope": "COLLECTION",
+    //   "fields": [
+    //     { "fieldPath": "author", "order": "ASCENDING" },
+    //     { "fieldPath": "timestamp", "order": "DESCENDING" }
+    //   ]
+    // }
+  ],
+  "fieldOverrides": []
+}
