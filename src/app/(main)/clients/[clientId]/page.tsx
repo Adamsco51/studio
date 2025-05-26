@@ -11,12 +11,14 @@ import {
   deleteClientFromFirestore, 
   getClientByIdFromFirestore,
   getEmployeeNameFromMock,
-  addApprovalRequestToFirestore, // Import new service function
-  getUserProfile // Import getUserProfile
+  addApprovalRequestToFirestore,
+  getUserProfile,
+  getPinIssuedRequestForEntity, // Added
+  completeApprovalRequestWithPin // Added
 } from '@/lib/mock-data';
-import type { Client, BillOfLading, Expense, User as MockUser, ApprovalRequest } from '@/lib/types';
+import type { Client, BillOfLading, Expense, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays, Loader2, KeyRound } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
@@ -76,6 +78,12 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [isDeleting, setIsDeleting] = useState(false);
   const [isProcessingRequest, setIsProcessingRequest] = useState(false);
 
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pinEntry, setPinEntry] = useState('');
+  const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
+  const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
+
+
   useEffect(() => {
     if (!clientId || !user) { 
       setIsLoading(false);
@@ -113,6 +121,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           }
         } else {
           setIsLoadingBls(false); 
+          toast({ title: "Erreur", description: "Client non trouvé.", variant: "destructive" });
         }
       } catch (error) {
         console.error("Failed to fetch client details for ID:", clientId, error);
@@ -142,7 +151,96 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     });
   };
 
-  const handleDeleteClient = async () => {
+  const handleEditClientAction = async () => {
+    if (!client || !user) return;
+    if (isAdmin) {
+      router.push(`/clients/${client.id}/edit`);
+    } else {
+      setIsProcessingRequest(true);
+      try {
+        const pinRequest = await getPinIssuedRequestForEntity('client', client.id, 'edit');
+        if (pinRequest) {
+          setActivePinRequest(pinRequest);
+          setPinActionType('edit');
+          setShowPinDialog(true);
+        } else {
+          setEditRequestReason('');
+          setShowEditRequestDialog(true);
+        }
+      } catch (error) {
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    }
+  };
+
+  const handleDeleteClientAction = async () => {
+    if (!client || !user) return;
+    if (isAdmin) {
+      setShowDeleteClientDialog(true); // Open direct delete confirmation for admin
+    } else {
+      setIsProcessingRequest(true);
+      try {
+        const pinRequest = await getPinIssuedRequestForEntity('client', client.id, 'delete');
+        if (pinRequest) {
+          setActivePinRequest(pinRequest);
+          setPinActionType('delete');
+          setShowPinDialog(true);
+        } else {
+          setDeleteClientReason('');
+          setShowDeleteClientDialog(true); // This dialog will now show reason input for non-admins
+        }
+      } catch (error) {
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    }
+  };
+
+  const handlePinSubmit = async () => {
+    if (!pinEntry.trim() || !activePinRequest || !pinActionType || !client) {
+      toast({ title: "Erreur", description: "PIN requis ou informations manquantes.", variant: "destructive" });
+      return;
+    }
+    if (pinEntry !== activePinRequest.pinCode) {
+      toast({ title: "Erreur", description: "PIN incorrect.", variant: "destructive" });
+      return;
+    }
+    if (activePinRequest.pinExpiresAt && new Date() > new Date(activePinRequest.pinExpiresAt)) {
+        toast({ title: "Erreur", description: "Le PIN a expiré.", variant: "destructive" });
+        setShowPinDialog(false);
+        setPinEntry('');
+        setActivePinRequest(null);
+        return;
+    }
+
+    setIsProcessingRequest(true);
+    try {
+      if (pinActionType === 'edit') {
+        await completeApprovalRequestWithPin(activePinRequest.id);
+        toast({ title: "PIN Validé", description: "Redirection vers la page de modification." });
+        router.push(`/clients/${client.id}/edit`);
+      } else if (pinActionType === 'delete') {
+        await deleteClientFromFirestore(client.id);
+        await completeApprovalRequestWithPin(activePinRequest.id);
+        toast({ title: "Client Supprimé", description: `Le client ${client.name} a été supprimé avec succès via PIN.` });
+        router.push('/clients');
+        router.refresh();
+      }
+      setShowPinDialog(false);
+      setPinEntry('');
+      setActivePinRequest(null);
+    } catch (error) {
+      console.error(`Erreur lors de l'action ${pinActionType} avec PIN:`, error);
+      toast({ title: "Erreur", description: `Échec de l'action ${pinActionType} avec PIN.`, variant: "destructive" });
+    } finally {
+      setIsProcessingRequest(false);
+    }
+  };
+
+  const handleDeleteClientWithConfirmation = async () => {
     if (!client || !client.id || !isAdmin) return;
     setIsDeleting(true);
     try {
@@ -158,6 +256,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       toast({ title: "Erreur", description: "Échec de la suppression du client.", variant: "destructive"});
     } finally {
       setIsDeleting(false);
+      setShowDeleteClientDialog(false);
     }
   };
 
@@ -257,95 +356,15 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
               </Button>
             </Link>
 
-            {isAdmin ? (
-              <Link href={`/clients/${client.id}/edit`} passHref>
-                <Button variant="outline" disabled={isProcessingRequest || isDeleting}>
-                  <Edit className="mr-2 h-4 w-4" /> Modifier
-                </Button>
-              </Link>
-            ) : (
-              <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" onClick={() => setEditRequestReason('')} disabled={isProcessingRequest || isDeleting}>
-                    {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Edit className="mr-2 h-4 w-4" /> Modifier
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Demande de Modification du Client</DialogTitle>
-                    <DialogDescription>
-                      Veuillez expliquer pourquoi vous souhaitez modifier ce client. Votre demande sera examinée par un administrateur.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-2 py-2">
-                    <Label htmlFor="editReasonClient">Raison de la demande :</Label>
-                    <Textarea
-                      id="editReasonClient"
-                      placeholder="Ex: Correction de l'adresse email, mise à jour du contact..."
-                      value={editRequestReason}
-                      onChange={(e) => setEditRequestReason(e.target.value)}
-                      className="min-h-[100px]"
-                      disabled={isProcessingRequest}
-                    />
-                  </div>
-                  <DialogFooter>
-                     <DialogClose asChild>
-                       <Button type="button" variant="outline" disabled={isProcessingRequest}>Annuler</Button>
-                    </DialogClose>
-                    <Button type="button" onClick={handleSubmitEditRequest} disabled={isProcessingRequest || !editRequestReason.trim()}>
-                        {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Soumettre la Demande
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-
-            <AlertDialog open={showDeleteClientDialog} onOpenChange={setShowDeleteClientDialog}>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteClientReason(''); setShowDeleteClientDialog(true);}} disabled={isProcessingRequest || isDeleting}>
-                  {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  <Trash2 className="mr-2 h-4 w-4" /> Supprimer
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                     {isAdmin ? "Êtes-vous sûr de vouloir supprimer ce client ?" : "Demande de Suppression de Client"}
-                  </AlertDialogTitle>
-                  {isAdmin ? (
-                    <AlertDialogDescription>
-                      Cette action est irréversible et supprimera le client "{client.name}". Les BLs associés pourraient être affectés ou nécessiter une suppression manuelle.
-                    </AlertDialogDescription>
-                  ) : (
-                     <div className="space-y-2 py-2 text-left">
-                      <Label htmlFor="deleteClientReason">Raison de la demande de suppression :</Label>
-                      <Textarea
-                        id="deleteClientReason"
-                        placeholder="Expliquez pourquoi vous souhaitez supprimer ce client..."
-                        value={deleteClientReason}
-                        onChange={(e) => setDeleteClientReason(e.target.value)}
-                        className="min-h-[100px]"
-                        disabled={isProcessingRequest}
-                      />
-                       <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
-                    </div>
-                  )}
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => {setDeleteClientReason(''); setShowDeleteClientDialog(false);}} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)}>Annuler</AlertDialogCancel>
-                  <Button 
-                    onClick={isAdmin ? handleDeleteClient : handleSubmitDeleteClientRequest} 
-                    disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) || (!isAdmin && !deleteClientReason.trim())}
-                    variant={isAdmin ? "destructive" : "default"}
-                  >
-                    {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {isAdmin ? "Confirmer Suppression" : "Soumettre la Demande"}
-                  </Button>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button variant="outline" onClick={handleEditClientAction} disabled={isProcessingRequest || isDeleting}>
+              {(isProcessingRequest && pinActionType === 'edit') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Edit className="mr-2 h-4 w-4" /> Modifier
+            </Button>
+            
+            <Button variant="destructive" onClick={handleDeleteClientAction} disabled={isProcessingRequest || isDeleting}>
+              {(isDeleting && isAdmin) || (isProcessingRequest && pinActionType === 'delete') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Trash2 className="mr-2 h-4 w-4" /> Supprimer
+            </Button>
           </div>
         }
       />
@@ -501,6 +520,127 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Request Dialog (for non-admins) */}
+      <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Demande de Modification du Client</DialogTitle>
+            <DialogDescription>
+              Veuillez expliquer pourquoi vous souhaitez modifier ce client. Votre demande sera examinée par un administrateur.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="editReasonClient">Raison de la demande :</Label>
+            <Textarea
+              id="editReasonClient"
+              placeholder="Ex: Correction de l'adresse email, mise à jour du contact..."
+              value={editRequestReason}
+              onChange={(e) => setEditRequestReason(e.target.value)}
+              className="min-h-[100px]"
+              disabled={isProcessingRequest}
+            />
+          </div>
+          <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={isProcessingRequest}>Annuler</Button>
+              </DialogClose>
+            <Button type="button" onClick={handleSubmitEditRequest} disabled={isProcessingRequest || !editRequestReason.trim()}>
+                {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Soumettre la Demande
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation / Request Dialog */}
+      <AlertDialog open={showDeleteClientDialog} onOpenChange={(isOpen) => {
+          if (!isOpen) setDeleteClientReason('');
+          setShowDeleteClientDialog(isOpen);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+                {isAdmin ? "Êtes-vous sûr de vouloir supprimer ce client ?" : "Demande de Suppression de Client"}
+            </AlertDialogTitle>
+            {isAdmin ? (
+              <AlertDialogDescription>
+                Cette action est irréversible et supprimera le client "{client?.name}". Les BLs associés pourraient être affectés ou nécessiter une suppression manuelle.
+              </AlertDialogDescription>
+            ) : (
+                <div className="space-y-2 py-2 text-left">
+                <Label htmlFor="deleteClientReason">Raison de la demande de suppression :</Label>
+                <Textarea
+                  id="deleteClientReason"
+                  placeholder="Expliquez pourquoi vous souhaitez supprimer ce client..."
+                  value={deleteClientReason}
+                  onChange={(e) => setDeleteClientReason(e.target.value)}
+                  className="min-h-[100px]"
+                  disabled={isProcessingRequest}
+                />
+                  <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {setDeleteClientReason(''); setShowDeleteClientDialog(false);}} disabled={isDeleting || isProcessingRequest}>Annuler</AlertDialogCancel>
+            <Button 
+              onClick={isAdmin ? handleDeleteClientWithConfirmation : handleSubmitDeleteClientRequest} 
+              disabled={isDeleting || isProcessingRequest || (!isAdmin && !deleteClientReason.trim())}
+              variant={isAdmin ? "destructive" : "default"}
+            >
+              {(isDeleting || isProcessingRequest) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isAdmin ? "Confirmer Suppression" : "Soumettre la Demande"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* PIN Entry Dialog */}
+      <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setPinEntry('');
+          setActivePinRequest(null);
+          setPinActionType(null);
+        }
+        setShowPinDialog(isOpen);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
+            </DialogTitle>
+            <DialogDescription>
+              Un PIN vous a été fourni par un administrateur pour effectuer cette action : {pinActionType === 'edit' ? 'Modifier' : 'Supprimer'} Client "{client?.name}".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="pinCode">Code PIN (6 chiffres)</Label>
+            <Input
+              id="pinCode"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={pinEntry}
+              onChange={(e) => setPinEntry(e.target.value.replace(/\D/g, '').substring(0,6))}
+              placeholder="123456"
+              disabled={isProcessingRequest}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isProcessingRequest}>Annuler</Button>
+            </DialogClose>
+            <Button onClick={handlePinSubmit} disabled={isProcessingRequest || pinEntry.length !== 6}>
+              {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Valider le PIN
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
+
+    

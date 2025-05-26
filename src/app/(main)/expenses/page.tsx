@@ -13,10 +13,12 @@ import {
     getClientsFromFirestore, 
     deleteExpenseFromFirestore,
     getEmployeeNameFromMock,
-    addApprovalRequestToFirestore // Import
+    addApprovalRequestToFirestore,
+    getPinIssuedRequestForEntity, // Added
+    completeApprovalRequestWithPin // Added
 } from '@/lib/mock-data';
 import type { Expense, BillOfLading, Client, ApprovalRequest } from '@/lib/types';
-import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit, Loader2 } from 'lucide-react';
+import { PlusCircle, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit, Loader2, KeyRound } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -73,9 +75,15 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
-  const [deletingExpense, setDeletingExpense] = useState<ExpenseWithDetails | null>(null);
+  const [expenseTargetedForAction, setExpenseTargetedForAction] = useState<ExpenseWithDetails | null>(null);
   const [deleteReason, setDeleteReason] = useState('');
   const [showAddExpenseDialog, setShowAddExpenseDialog] = useState(false);
+  const [showReasonDialog, setShowReasonDialog] = useState(false);
+
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pinEntry, setPinEntry] = useState('');
+  const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -153,16 +161,79 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     );
   }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate, allBls]);
 
-  const handleDeleteExpenseDirectly = async (expenseId: string) => {
+  const handleDeleteExpenseAction = async (expense: ExpenseWithDetails) => {
+    if (!user) return;
+    setExpenseTargetedForAction(expense);
+
+    if (isAdmin) {
+      setShowReasonDialog(true); // For admin, this is direct delete confirmation
+    } else {
+      setIsProcessingAction(true);
+      try {
+        const pinRequest = await getPinIssuedRequestForEntity('expense', expense.id, 'delete');
+        if (pinRequest) {
+          setActivePinRequest(pinRequest);
+          setShowPinDialog(true);
+        } else {
+          setDeleteReason('');
+          setShowReasonDialog(true); // For non-admin, this is to enter reason for request
+        }
+      } catch (error) {
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
+      } finally {
+        setIsProcessingAction(false);
+      }
+    }
+  };
+  
+  const handlePinSubmitForDeleteExpense = async () => {
+    if (!pinEntry.trim() || !activePinRequest || !expenseTargetedForAction) {
+        toast({ title: "Erreur", description: "PIN requis ou informations manquantes.", variant: "destructive" });
+        return;
+    }
+    if (pinEntry !== activePinRequest.pinCode) {
+        toast({ title: "Erreur", description: "PIN incorrect.", variant: "destructive" });
+        return;
+    }
+    if (activePinRequest.pinExpiresAt && new Date() > new Date(activePinRequest.pinExpiresAt)) {
+        toast({ title: "Erreur", description: "Le PIN a expiré.", variant: "destructive" });
+        setShowPinDialog(false);
+        setPinEntry('');
+        setActivePinRequest(null);
+        return;
+    }
+
     setIsProcessingAction(true);
     try {
-      await deleteExpenseFromFirestore(expenseId);
-      setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
+        await deleteExpenseFromFirestore(expenseTargetedForAction.id);
+        await completeApprovalRequestWithPin(activePinRequest.id);
+        setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseTargetedForAction.id));
+        toast({ title: "Dépense Supprimée", description: `La dépense "${expenseTargetedForAction.label}" a été supprimée via PIN.` });
+        setShowPinDialog(false);
+        setPinEntry('');
+        setActivePinRequest(null);
+        setExpenseTargetedForAction(null);
+    } catch (error) {
+        console.error("Erreur lors de la suppression de la dépense avec PIN:", error);
+        toast({ title: "Erreur", description: "Échec de la suppression de la dépense avec PIN.", variant: "destructive" });
+    } finally {
+        setIsProcessingAction(false);
+    }
+  };
+
+
+  const handleDeleteExpenseDirectly = async () => {
+    if (!expenseTargetedForAction) return;
+    setIsProcessingAction(true);
+    try {
+      await deleteExpenseFromFirestore(expenseTargetedForAction.id);
+      setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseTargetedForAction!.id));
       toast({
         title: "Dépense Supprimée",
         description: "La dépense a été supprimée avec succès.",
       });
-      setDeletingExpense(null);
+      setExpenseTargetedForAction(null);
+      setShowReasonDialog(false);
     } catch (error) {
         console.error("Failed to delete expense:", error);
         toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
@@ -172,7 +243,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   };
 
   const handleSubmitDeleteRequest = async () => {
-    if (!deletingExpense || !deleteReason.trim() || !user) {
+    if (!expenseTargetedForAction || !deleteReason.trim() || !user) {
         toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
         return;
     }
@@ -182,17 +253,18 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
             requestedByUserId: user.uid,
             requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
             entityType: 'expense',
-            entityId: deletingExpense.id,
-            entityDescription: `Dépense: ${deletingExpense.label} (BL N° ${deletingExpense.blNumber || 'N/A'})`,
+            entityId: expenseTargetedForAction.id,
+            entityDescription: `Dépense: ${expenseTargetedForAction.label} (BL N° ${expenseTargetedForAction.blNumber || 'N/A'})`,
             actionType: 'delete',
             reason: deleteReason,
         });
         toast({
             title: "Demande Enregistrée",
-            description: `Votre demande de suppression pour la dépense "${deletingExpense.label}" a été enregistrée.`,
+            description: `Votre demande de suppression pour la dépense "${expenseTargetedForAction.label}" a été enregistrée.`,
         });
         setDeleteReason('');
-        setDeletingExpense(null); 
+        setExpenseTargetedForAction(null); 
+        setShowReasonDialog(false);
     } catch (error) {
         console.error("Failed to submit delete expense request:", error);
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
@@ -255,14 +327,14 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
             <div className="lg:col-span-2 xl:col-span-1">
               <label htmlFor="search-term" className="block text-sm font-medium text-muted-foreground mb-1">Recherche générale</label>
-              <div className="flex items-center gap-2">
-                <Search className="h-5 w-5 text-muted-foreground" />
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search-term"
                   placeholder="Libellé, N° BL, employé..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full"
+                  className="pl-8 w-full"
                   disabled={isLoading}
                 />
               </div>
@@ -390,62 +462,16 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                       <Button variant="ghost" size="sm" title="Modifier Dépense" disabled> 
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <AlertDialog open={deletingExpense?.id === exp.id && !isProcessingAction} onOpenChange={(isOpen) => {
-                          if(!isOpen && !isProcessingAction) {
-                            setDeletingExpense(null);
-                            setDeleteReason('');
-                          }
-                      }}>
-                        <AlertDialogTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-muted-foreground hover:text-destructive" 
-                            title="Supprimer Dépense"
-                            onClick={() => {setDeletingExpense(exp); setDeleteReason('');}}
-                            disabled={isProcessingAction && deletingExpense?.id === exp.id}
-                          >
-                            {isProcessingAction && deletingExpense?.id === exp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                                {isAdmin ? "Supprimer cette dépense ?" : `Demande de Suppression: ${exp.label}`}
-                            </AlertDialogTitle>
-                            {isAdmin ? (
-                                <AlertDialogDescription>
-                                L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
-                                </AlertDialogDescription>
-                            ) : (
-                                <div className="space-y-2 py-2 text-left">
-                                    <p className="text-sm text-muted-foreground">Montant : {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
-                                    <Label htmlFor={`deleteExpenseReason-${exp.id}`}>Raison de la demande :</Label>
-                                    <Textarea
-                                        id={`deleteExpenseReason-${exp.id}`}
-                                        placeholder="Expliquez pourquoi vous souhaitez supprimer cette dépense..."
-                                        value={deleteReason}
-                                        onChange={(e) => setDeleteReason(e.target.value)}
-                                        className="min-h-[100px]"
-                                        disabled={isProcessingAction}
-                                    />
-                                    <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
-                                </div>
-                            )}
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => {setDeletingExpense(null); setDeleteReason('');}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
-                            <Button 
-                                onClick={isAdmin ? () => handleDeleteExpenseDirectly(exp.id) : handleSubmitDeleteRequest}
-                                variant={isAdmin ? "destructive" : "default"}
-                                disabled={isProcessingAction || (!isAdmin && !deleteReason.trim())}
-                            >
-                              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              {isAdmin ? "Confirmer" : "Soumettre la Demande"}
-                            </Button>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-muted-foreground hover:text-destructive" 
+                        title="Supprimer Dépense"
+                        onClick={() => handleDeleteExpenseAction(exp)}
+                        disabled={isProcessingAction && expenseTargetedForAction?.id === exp.id}
+                      >
+                        {(isProcessingAction && expenseTargetedForAction?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -460,6 +486,99 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
           )}
         </CardContent>
       </Card>
+
+      {/* Reason/Confirmation Dialog for Delete */}
+      <AlertDialog open={showReasonDialog} onOpenChange={(isOpen) => {
+          if(!isOpen) {
+            setExpenseTargetedForAction(null);
+            setDeleteReason('');
+          }
+          setShowReasonDialog(isOpen);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+                {isAdmin ? `Supprimer Dépense: "${expenseTargetedForAction?.label}"?` : `Demande de Suppression: ${expenseTargetedForAction?.label}`}
+            </AlertDialogTitle>
+            {isAdmin ? (
+                <AlertDialogDescription>
+                L'action de supprimer la dépense "{expenseTargetedForAction?.label}" d'un montant de {expenseTargetedForAction?.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                </AlertDialogDescription>
+            ) : (
+                <div className="space-y-2 py-2 text-left">
+                    <p className="text-sm text-muted-foreground">Montant : {expenseTargetedForAction?.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                    <Label htmlFor={`deleteExpenseReason-${expenseTargetedForAction?.id}`}>Raison de la demande :</Label>
+                    <Textarea
+                        id={`deleteExpenseReason-${expenseTargetedForAction?.id}`}
+                        placeholder="Expliquez pourquoi vous souhaitez supprimer cette dépense..."
+                        value={deleteReason}
+                        onChange={(e) => setDeleteReason(e.target.value)}
+                        className="min-h-[100px]"
+                        disabled={isProcessingAction}
+                    />
+                    <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+                </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {setExpenseTargetedForAction(null); setDeleteReason(''); setShowReasonDialog(false);}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
+            <Button 
+                onClick={isAdmin ? handleDeleteExpenseDirectly : handleSubmitDeleteRequest}
+                variant={isAdmin ? "destructive" : "default"}
+                disabled={isProcessingAction || (!isAdmin && !deleteReason.trim())}
+            >
+              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isAdmin ? "Confirmer" : "Soumettre la Demande"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* PIN Entry Dialog for Delete Expense */}
+      <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setPinEntry('');
+          setActivePinRequest(null);
+          setExpenseTargetedForAction(null);
+        }
+        setShowPinDialog(isOpen);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+                <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
+            </DialogTitle>
+            <DialogDescription>
+              Un PIN vous a été fourni par un administrateur pour supprimer la dépense "{expenseTargetedForAction?.label}".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="pinCodeExpense">Code PIN (6 chiffres)</Label>
+            <Input
+              id="pinCodeExpense"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={pinEntry}
+              onChange={(e) => setPinEntry(e.target.value.replace(/\D/g, '').substring(0,6))}
+              placeholder="123456"
+              disabled={isProcessingAction}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+                <Button variant="outline" disabled={isProcessingAction}>Annuler</Button>
+            </DialogClose>
+            <Button onClick={handlePinSubmitForDeleteExpense} disabled={isProcessingAction || pinEntry.length !== 6}>
+              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Valider et Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
+
+    
