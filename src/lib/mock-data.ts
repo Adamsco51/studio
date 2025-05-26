@@ -17,9 +17,9 @@ import {
   orderBy, 
   arrayUnion,
   arrayRemove,
-  deleteField,
-  onSnapshot, // For real-time updates
-  limit // For limiting results
+  deleteField, // Import deleteField
+  onSnapshot,
+  limit
 } from "firebase/firestore";
 
 // MOCK_USERS is still used for things like assignee selection in chat or creator name display.
@@ -81,6 +81,16 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
       console.error(`Error getting user profile (UID ${uid}): `, e);
     }
     return null;
+  }
+};
+
+export const updateUserProfileInFirestore = async (uid: string, data: Partial<Pick<UserProfile, 'displayName'>>): Promise<void> => {
+  const userProfileDocRef = doc(db, "users", uid);
+  try {
+    await updateDoc(userProfileDocRef, data);
+  } catch (e) {
+    console.error(`Error updating user profile in Firestore for UID ${uid}: `, e);
+    throw e;
   }
 };
 
@@ -321,6 +331,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
+    // Fallback if getDoc fails immediately after addDoc, though unlikely with serverTimestamp
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -481,6 +492,7 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
+    // Fallback
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -569,7 +581,7 @@ export const updateApprovalRequestStatusInFirestore = async (
     if (adminNotes !== undefined && adminNotes !== null && adminNotes.trim() !== "") { 
       updateData.adminNotes = adminNotes;
     } else {
-      updateData.adminNotes = deleteField();
+      updateData.adminNotes = deleteField(); 
     }
 
     if (pinCode !== undefined) {
@@ -637,7 +649,7 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
       status: 'completed',
       pinCode: deleteField(), 
       pinExpiresAt: deleteField(),
-      processedAt: serverTimestamp()
+      processedAt: serverTimestamp() // Mark when the PIN was used
     });
   } catch (e) {
     console.error(`Error completing approval request ${requestId} with PIN: `, e);
@@ -653,9 +665,6 @@ export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, '
       ...messageData,
       timestamp: serverTimestamp()
     });
-    // To return the full object with ID and resolved timestamp, we'd ideally fetch it,
-    // but for simplicity and immediate feedback, we'll construct it.
-    // Firestore returns serverTimestamp as null on client initially if not fetched.
     return { ...messageData, id: docRef.id, timestamp: new Date().toISOString() } as ChatMessage;
   } catch (error) {
     console.error("Error adding chat message to Firestore: ", error);
@@ -664,7 +673,7 @@ export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, '
 };
 
 export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[]) => void): (() => void) => {
-  const q = query(chatMessagesCollectionRef, orderBy("timestamp", "asc"), limit(50)); // Get last 50, oldest first for display
+  const q = query(chatMessagesCollectionRef, orderBy("timestamp", "asc"), limit(50));
   const unsubscribe = onSnapshot(q, (querySnapshot) => {
     const messages = querySnapshot.docs.map(docSnap => {
       const data = docSnap.data();
@@ -677,9 +686,8 @@ export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[])
     callback(messages);
   }, (error) => {
     console.error("Error listening to chat messages:", error);
-    // Handle error appropriately in UI if needed
   });
-  return unsubscribe; // Return the unsubscribe function for cleanup
+  return unsubscribe; 
 };
 
 
@@ -738,9 +746,11 @@ export const deleteTodoItemFromFirestore = async (todoId: string): Promise<void>
 
 export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (!employeeId) return 'N/A';
+    // In a real app, this would fetch from a 'users' collection in Firestore
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
     
+    // If not found in mock, but it's a Firestore UID (typically longer)
     if (employeeId.length > 10 && !employeeId.startsWith('user-')) { 
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
