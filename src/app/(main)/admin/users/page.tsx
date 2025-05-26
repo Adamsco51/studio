@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getAllUserProfiles } from '@/lib/mock-data';
+import { getAllUserProfiles, updateUserProfileInFirestore } from '@/lib/mock-data';
 import type { UserProfile } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
@@ -15,19 +15,18 @@ import { fr } from 'date-fns/locale';
 import { Loader2, Users, UserCheck, ShieldCheck, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-// Import dialog components for potential future role editing
-// import {
-//   Dialog,
-//   DialogContent,
-//   DialogDescription,
-//   DialogFooter,
-//   DialogHeader,
-//   DialogTitle,
-//   DialogTrigger,
-//   DialogClose,
-// } from "@/components/ui/dialog";
-// import { Label } from '@/components/ui/label';
-// import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 
 export default function AdminUsersPage() {
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -36,10 +35,10 @@ export default function AdminUsersPage() {
 
   const [usersList, setUsersList] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  // const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  // const [newRole, setNewRole] = useState<'admin' | 'employee' | undefined>(undefined);
-  // const [isUpdatingRole, setIsUpdatingRole] = useState(false);
-
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [newRole, setNewRole] = useState<'admin' | 'employee' | undefined>(undefined);
+  const [newDisplayName, setNewDisplayName] = useState<string>('');
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -64,29 +63,46 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     fetchUsers();
-  }, [isAdmin]); // Removed toast to prevent potential loop
+  }, [isAdmin, toast]);
 
-  // Role editing functionality can be added here in the future
-  // const handleOpenEditRoleDialog = (userToEdit: UserProfile) => {
-  //   setEditingUser(userToEdit);
-  //   setNewRole(userToEdit.role);
-  // };
+  const handleOpenEditRoleDialog = (userToEdit: UserProfile) => {
+    setEditingUser(userToEdit);
+    setNewRole(userToEdit.role);
+    setNewDisplayName(userToEdit.displayName || '');
+  };
 
-  // const handleUpdateUserRole = async () => {
-  //   if (!editingUser || !newRole) return;
-  //   setIsUpdatingRole(true);
-  //   try {
-  //     await updateUserProfileInFirestore(editingUser.uid, { role: newRole });
-  //     toast({ title: "Rôle Mis à Jour", description: `Le rôle de ${editingUser.displayName} est maintenant ${newRole}.` });
-  //     fetchUsers(); // Refresh the list
-  //     setEditingUser(null);
-  //   } catch (error) {
-  //     console.error("Failed to update user role:", error);
-  //     toast({ title: "Erreur", description: "Impossible de mettre à jour le rôle.", variant: "destructive" });
-  //   } finally {
-  //     setIsUpdatingRole(false);
-  //   }
-  // };
+  const handleUpdateUserInfo = async () => {
+    if (!editingUser || !newRole || newDisplayName.trim() === '') {
+        toast({ title: "Erreur", description: "Veuillez vérifier les informations saisies.", variant: "destructive" });
+        return;
+    }
+    setIsUpdatingRole(true);
+    try {
+      const updates: Partial<UserProfile> = {};
+      if (newDisplayName !== editingUser.displayName) {
+        updates.displayName = newDisplayName;
+      }
+      if (newRole !== editingUser.role) {
+        updates.role = newRole;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        toast({ title: "Aucune Modification", description: "Aucune information n'a été modifiée." });
+        setEditingUser(null);
+        return;
+      }
+
+      await updateUserProfileInFirestore(editingUser.uid, updates);
+      toast({ title: "Informations Mises à Jour", description: `Les informations de ${editingUser.displayName || editingUser.email} ont été mises à jour.` });
+      fetchUsers(); 
+      setEditingUser(null);
+    } catch (error) {
+      console.error("Failed to update user info:", error);
+      toast({ title: "Erreur", description: "Impossible de mettre à jour les informations.", variant: "destructive" });
+    } finally {
+      setIsUpdatingRole(false);
+    }
+  };
 
   if (authLoading || isLoading) {
     return (
@@ -131,7 +147,7 @@ export default function AdminUsersPage() {
                   <TableHead>Rôle</TableHead>
                   <TableHead>Date de Création</TableHead>
                   <TableHead>UID</TableHead>
-                  {/* <TableHead className="text-right">Actions</TableHead> */}
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -145,13 +161,13 @@ export default function AdminUsersPage() {
                         {profile.role === 'admin' ? 'Admin' : 'Employé'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{format(new Date(profile.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                    <TableCell>{profile.createdAt ? format(new Date(profile.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{profile.uid}</TableCell>
-                    {/* <TableCell className="text-right">
-                       <Button variant="outline" size="sm" onClick={() => handleOpenEditRoleDialog(profile)} disabled>
-                         <Edit className="mr-1 h-4 w-4" /> Modifier Rôle
+                    <TableCell className="text-right">
+                       <Button variant="outline" size="sm" onClick={() => handleOpenEditRoleDialog(profile)} disabled={isUpdatingRole}>
+                         <Edit className="mr-1 h-4 w-4" /> Modifier
                        </Button>
-                    </TableCell> */}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -160,39 +176,61 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      {/* Dialog for editing user role - Future Enhancement
       {editingUser && (
         <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) setEditingUser(null); }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Modifier le Rôle de {editingUser.displayName}</DialogTitle>
+              <DialogTitle>Modifier Utilisateur: {editingUser.displayName || editingUser.email}</DialogTitle>
               <DialogDescription>
-                Sélectionnez le nouveau rôle pour cet utilisateur.
+                Modifiez le nom d'affichage et/ou le rôle de cet utilisateur.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4 space-y-2">
-              <Label htmlFor="userRole">Nouveau Rôle</Label>
-              <Select value={newRole} onValueChange={(value) => setNewRole(value as 'admin' | 'employee')}>
-                <SelectTrigger id="userRole">
-                  <SelectValue placeholder="Sélectionner un rôle" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="employee">Employé</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="py-4 space-y-4">
+              <div>
+                <Label htmlFor="userEmail">Email (Non modifiable)</Label>
+                <Input id="userEmail" value={editingUser.email || ''} disabled className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="userDisplayName">Nom d'Affichage</Label>
+                <Input 
+                  id="userDisplayName" 
+                  value={newDisplayName} 
+                  onChange={(e) => setNewDisplayName(e.target.value)} 
+                  className="mt-1"
+                  disabled={isUpdatingRole}
+                />
+              </div>
+              <div>
+                <Label htmlFor="userRole">Nouveau Rôle</Label>
+                <Select value={newRole} onValueChange={(value) => setNewRole(value as 'admin' | 'employee')} disabled={isUpdatingRole}>
+                  <SelectTrigger id="userRole" className="mt-1">
+                    <SelectValue placeholder="Sélectionner un rôle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="employee">Employé</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <DialogClose asChild><Button variant="outline" disabled={isUpdatingRole}>Annuler</Button></DialogClose>
-              <Button onClick={handleUpdateUserRole} disabled={isUpdatingRole || !newRole || newRole === editingUser.role}>
+              <Button 
+                onClick={handleUpdateUserInfo} 
+                disabled={
+                  isUpdatingRole || 
+                  !newRole || 
+                  newDisplayName.trim() === '' ||
+                  (newRole === editingUser.role && newDisplayName === (editingUser.displayName || ''))
+                }
+              >
                 {isUpdatingRole && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Mettre à Jour le Rôle
+                Sauvegarder
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
-      */}
     </>
   );
 }

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Users, ShieldCheck, Bell, Database, UserCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Bell, Database, UserCircle, Loader2 } from 'lucide-react'; // Removed Users, ShieldCheck, ExternalLink
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useForm, Controller } from 'react-hook-form';
@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { updateUserProfileInFirestore } from '@/lib/mock-data';
-import Link from 'next/link'; // Import Link
+// Removed Link import as it's no longer used here
 
 const profileFormSchema = z.object({
   displayName: z.string().min(1, { message: "Le nom d'affichage ne peut pas être vide." }),
@@ -27,7 +27,7 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export default function SettingsPage() {
-  const { user, loading: authLoading, isAdmin } = useAuth(); // Get isAdmin
+  const { user, loading: authLoading, isAdmin } = useAuth(); 
   const { toast } = useToast();
   const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
 
@@ -57,7 +57,6 @@ export default function SettingsPage() {
       await updateUserProfileInFirestore(user.uid, { displayName: data.displayName });
       
       toast({ title: "Profil Mis à Jour", description: "Votre nom d'affichage a été mis à jour." });
-      // AuthContext should pick up the change via onAuthStateChanged, or you might need to manually update it
     } catch (error) {
       console.error("Error updating profile:", error);
       toast({ title: "Erreur de Mise à Jour", description: "Impossible de mettre à jour le profil.", variant: "destructive" });
@@ -122,59 +121,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
         
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" /> Informations de l'Entreprise</CardTitle>
-            <CardDescription>Modifiez les informations de base de votre entreprise.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="appName">Nom de l'application</Label>
-              <Input id="appName" defaultValue="TransitFlow" disabled />
-            </div>
-            <div>
-              <Label htmlFor="companyName">Nom de l'entreprise</Label>
-              <Input id="companyName" placeholder="Votre Entreprise SARL" disabled />
-            </div>
-            <div>
-              <Label htmlFor="companyAddress">Adresse de l'entreprise</Label>
-              <Input id="companyAddress" placeholder="123 Rue Principale, Paris" disabled />
-            </div>
-            <Button disabled>Sauvegarder les Informations</Button>
-            <p className="text-xs text-muted-foreground">
-              La modification des informations de l'entreprise est réservée aux administrateurs et nécessite une configuration backend (non implémentée).
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> Gestion des Utilisateurs</CardTitle>
-            <CardDescription>Gérez les comptes employés et administrateurs.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isAdmin ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Consultez la liste des utilisateurs et leurs rôles.
-                </p>
-                <Link href="/admin/users" passHref>
-                  <Button variant="outline" className="w-full">
-                    Voir la liste des utilisateurs <ExternalLink className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
-                <Button disabled className="w-full">Ajouter un nouvel utilisateur</Button>
-                 <p className="text-xs text-muted-foreground">
-                    La modification des rôles et l'ajout direct sont des fonctionnalités avancées (non implémentées ici).
-                 </p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                La gestion des utilisateurs est réservée aux administrateurs.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        {/* Card for "Gestion des Utilisateurs" has been removed */}
+        {/* Card for "Informations de l'Entreprise" has been removed */}
         
         <Card className="shadow-lg">
           <CardHeader>
@@ -223,4 +171,3 @@ export default function SettingsPage() {
     </>
   );
 }
-
