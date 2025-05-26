@@ -1,12 +1,12 @@
 
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, use } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
-  MOCK_BILLS_OF_LADING, 
+  getBLsByClientIdFromFirestore, 
   MOCK_EXPENSES, 
   MOCK_USERS, 
   deleteClientFromFirestore, 
@@ -50,10 +50,11 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/auth-context'; 
 
 export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
-  const { clientId } = React.use(paramsPromise);
+  const { clientId } = use(paramsPromise);
   const { user, isAdmin } = useAuth(); 
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingBls, setIsLoadingBls] = useState(true);
   const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
   const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]); 
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
@@ -66,18 +67,22 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (!clientId) {
+    if (!clientId || !user) { // Wait for user and clientId
       setIsLoading(false);
+      setIsLoadingBls(false);
       return;
     }
     const fetchClientDetails = async () => {
       setIsLoading(true);
+      setIsLoadingBls(true);
       try {
         const foundClient = await getClientByIdFromFirestore(clientId);
         setClient(foundClient);
         if (foundClient) {
-          const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === foundClient.id);
+          const bls = await getBLsByClientIdFromFirestore(foundClient.id);
           setClientBLs(bls);
+          setIsLoadingBls(false);
+
           if (foundClient.createdByUserId) {
             const mockCreator = MOCK_USERS.find(u => u.id === foundClient.createdByUserId);
              if (mockCreator) {
@@ -88,10 +93,13 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                 setCreatedByUserDisplay("Utilisateur Système");
             }
           }
+        } else {
+          setIsLoadingBls(false); // No client, no BLs to load
         }
       } catch (error) {
         console.error("Failed to fetch client details for ID:", clientId, error);
         setClient(null); 
+        setIsLoadingBls(false);
         toast({
           title: "Erreur de Chargement",
           description: "Impossible de charger les détails du client. Vérifiez la console pour plus d'informations.",
@@ -102,7 +110,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       }
     };
     fetchClientDetails();
-  }, [clientId, user, toast]); // Added toast to dependency array
+  }, [clientId, user, toast]);
 
   const toggleBlExpansion = (blId: string) => {
     setExpandedBls(prev => {
@@ -127,7 +135,10 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     if (!client || !client.id) return;
     setIsDeleting(true);
     try {
-      await deleteClientFromFirestore(client.id);
+      // Consider implications: deleting a client might require deleting their BLs first or reassigning them.
+      // For now, deleteBLFromFirestore in mock-data attempts to remove BL ID from client.
+      // If BLs are in Firestore, they should be handled (e.g., deleted or clientID nulled).
+      await deleteClientFromFirestore(client.id); 
       toast({
         title: "Client Supprimé",
         description: `Le client ${client.name} a été supprimé.`,
@@ -192,11 +203,10 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     );
   }
 
-
-  const calculateBlBalanceAndStatus = (blId: string) => {
-    const bl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
+  // Calculate BL balance and status (using mock expenses for now)
+  const calculateBlBalanceAndStatus = (bl: BillOfLading) => {
     if (!bl) return { balance: 0, status: 'N/A', profit: false };
-    const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === blId);
+    const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === bl.id); // Still mock
     const totalExpenseAmount = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
     const balance = bl.allocatedAmount - totalExpenseAmount;
     return { balance, status: balance >= 0 ? 'Bénéfice' : 'Perte', profit: balance >= 0 };
@@ -269,7 +279,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                   </AlertDialogTitle>
                   {isAdmin ? (
                     <AlertDialogDescription>
-                      Cette action est irréversible et supprimera le client "{client.name}". Les BLs et dépenses associés devront être gérés manuellement ou via des fonctions serveur.
+                      Cette action est irréversible et supprimera le client "{client.name}". Les BLs associés pourraient être affectés ou nécessiter une suppression manuelle.
                     </AlertDialogDescription>
                   ) : (
                      <div className="space-y-2 py-2 text-left">
@@ -305,7 +315,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         <Card className="lg:col-span-1 shadow-lg">
           <CardHeader>
             <div className="flex items-center space-x-4 mb-4">
-                <Image src={`https://placehold.co/80x80.png`} alt={client.name} width={80} height={80} className="rounded-full border" data-ai-hint="company logo"/>
+                <Image src={`https://placehold.co/80x80.png?text=${client.name.substring(0,2)}`} alt={client.name} width={80} height={80} className="rounded-full border" data-ai-hint="company logo"/>
                 <div>
                     <CardTitle className="text-2xl">{client.name}</CardTitle>
                     <CardDescription>ID: {client.id}</CardDescription>
@@ -352,7 +362,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Connaissements (BLs) Associés</CardTitle>
-              <CardDescription>Liste des BLs gérés pour ce client. Cliquez sur une ligne pour voir les dépenses. (Données BLs encore mockées)</CardDescription>
+              <CardDescription>Liste des BLs gérés pour ce client. Cliquez sur une ligne pour voir les dépenses (mock).</CardDescription>
             </div>
              <Link href={`/bls/add?clientId=${client.id}`} passHref>
                 <Button size="sm">
@@ -361,7 +371,12 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             </Link>
           </CardHeader>
           <CardContent>
-            {clientBLs.length > 0 ? (
+            {isLoadingBls ? (
+                 <div className="flex justify-center items-center py-10">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <p className="ml-2 text-muted-foreground">Chargement des BLs...</p>
+                </div>
+            ) : clientBLs.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -375,8 +390,8 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                 </TableHeader>
                 <TableBody>
                   {clientBLs.map((bl) => {
-                    const { balance, status: financialStatus, profit } = calculateBlBalanceAndStatus(bl.id);
-                    const blExpenses = MOCK_EXPENSES.filter(exp => exp.blId === bl.id);
+                    const { balance, status: financialStatus, profit } = calculateBlBalanceAndStatus(bl);
+                    const blExpenses = MOCK_EXPENSES.filter(exp => exp.blId === bl.id); // Mock expenses
                     const isExpanded = expandedBls.has(bl.id);
 
                     return (
@@ -405,7 +420,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                           <TableRow className="bg-muted/10 dark:bg-muted/5">
                             <TableCell colSpan={6} className="p-0">
                               <div className="p-4 border-t border-border">
-                                <h4 className="text-md font-semibold mb-3 text-foreground">Dépenses pour BL N° {bl.blNumber}</h4>
+                                <h4 className="text-md font-semibold mb-3 text-foreground">Dépenses (Mock) pour BL N° {bl.blNumber}</h4>
                                 {blExpenses.length > 0 ? (
                                   <Table className="bg-card shadow-sm rounded-md">
                                     <TableHeader>
@@ -430,7 +445,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                                 ) : (
                                   <div className="text-center py-4">
                                     <DollarSign className="mx-auto h-10 w-10 text-muted-foreground opacity-50" />
-                                    <p className="mt-2 text-sm text-muted-foreground">Aucune dépense enregistrée pour ce BL.</p>
+                                    <p className="mt-2 text-sm text-muted-foreground">Aucune dépense (mock) enregistrée pour ce BL.</p>
                                   </div>
                                 )}
                               </div>
@@ -454,6 +469,3 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     </>
   );
 }
-
-
-    

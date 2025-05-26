@@ -1,8 +1,8 @@
 
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare } from 'lucide-react';
-import { getClientsFromFirestore, MOCK_BILLS_OF_LADING, MOCK_EXPENSES } from '@/lib/mock-data'; // Import getClientsFromFirestore
+import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare, Loader2 } from 'lucide-react';
+import { getClientsFromFirestore, getBLsFromFirestore, MOCK_EXPENSES } from '@/lib/mock-data'; 
 import type { BillOfLading, Client } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -14,22 +14,28 @@ import { fr } from 'date-fns/locale';
 import { RecentChatCard } from '@/components/dashboard/recent-chat-card';
 
 
-export default async function DashboardPage() { // Make the component async
-  const clients: Client[] = await getClientsFromFirestore(); // Fetch clients from Firestore
+export default async function DashboardPage() { 
+  const [clients, blsData] = await Promise.all([
+    getClientsFromFirestore(),
+    getBLsFromFirestore()
+  ]);
+  
   const totalClients = clients.length;
   
-  const blsByStatus = MOCK_BILLS_OF_LADING.reduce((acc, bl) => {
+  const blsByStatus = blsData.reduce((acc, bl) => {
     acc[bl.status] = (acc[bl.status] || 0) + 1;
     return acc;
   }, {} as Record<BillOfLading['status'], number>);
 
+  // Expenses are still mock
   const totalExpensesGlobal = MOCK_EXPENSES.reduce((sum, exp) => sum + exp.amount, 0);
 
   const calculateTotalProfitability = () => {
     let totalAllocated = 0;
-    MOCK_BILLS_OF_LADING.forEach(bl => {
+    blsData.forEach(bl => {
       totalAllocated += bl.allocatedAmount;
     });
+    // This profitability is based on mock expenses. Will need update when expenses are in Firestore.
     return totalAllocated - totalExpensesGlobal;
   };
 
@@ -37,12 +43,12 @@ export default async function DashboardPage() { // Make the component async
   const isOverallProfit = overallProfitability >= 0;
 
   const clientsWithOpenBLs = clients.filter(client => 
-    MOCK_BILLS_OF_LADING.some(bl => bl.clientId === client.id && bl.status === 'en cours')
+    blsData.some(bl => bl.clientId === client.id && bl.status === 'en cours')
   );
 
   const stats = [
     { title: 'Rentabilité Globale', value: `${overallProfitability.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: isOverallProfit ? TrendingUp : TrendingDown, color: isOverallProfit ? 'text-green-500' : 'text-red-500' },
-    { title: 'Total Dépenses (BLs)', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: DollarSign, color: 'text-red-500' },
+    { title: 'Total Dépenses (BLs - Mock)', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: DollarSign, color: 'text-red-500' },
     { title: 'Total Clients', value: totalClients, icon: Users, color: 'text-primary' },
     { title: 'BLs en Cours', value: blsByStatus['en cours'] || 0, icon: Clock, color: 'text-blue-500' },
     { title: 'BLs Terminés', value: blsByStatus['terminé'] || 0, icon: CheckCircle, color: 'text-green-600' },
@@ -52,7 +58,8 @@ export default async function DashboardPage() { // Make the component async
   const blProfitabilityStats = () => {
     let profitableBls = 0;
     let lossMakingBls = 0;
-    MOCK_BILLS_OF_LADING.forEach(bl => {
+    blsData.forEach(bl => {
+      // This calculation uses mock expenses
       const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === bl.id);
       const totalExpensesForBl = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
       const balance = bl.allocatedAmount - totalExpensesForBl;
@@ -63,7 +70,7 @@ export default async function DashboardPage() { // Make the component async
       }
     });
     return {
-      totalBls: MOCK_BILLS_OF_LADING.length,
+      totalBls: blsData.length,
       profitableBls,
       lossMakingBls,
     };
@@ -71,7 +78,6 @@ export default async function DashboardPage() { // Make the component async
 
   const { totalBls, profitableBls, lossMakingBls } = blProfitabilityStats();
 
-  // Data for BL Status Pie Chart
   const blStatusChartData = [
     { status: 'en cours', count: blsByStatus['en cours'] || 0, fill: 'var(--color-en_cours)' },
     { status: 'terminé', count: blsByStatus['terminé'] || 0, fill: 'var(--color-terminé)' },
@@ -79,51 +85,31 @@ export default async function DashboardPage() { // Make the component async
   ].filter(d => d.count > 0);
 
   const blStatusChartConfig = {
-    'en cours': {
-      label: 'En Cours',
-      color: 'hsl(var(--chart-1))', 
-    },
-    terminé: {
-      label: 'Terminés',
-      color: 'hsl(var(--chart-2))', 
-    },
-    inactif: {
-      label: 'Inactifs',
-      color: 'hsl(var(--chart-3))', 
-    },
-    count: { 
-      label: 'Nombre de BLs',
-    }
+    'en cours': { label: 'En Cours', color: 'hsl(var(--chart-1))' },
+    terminé: { label: 'Terminés', color: 'hsl(var(--chart-2))' },
+    inactif: { label: 'Inactifs', color: 'hsl(var(--chart-3))' },
+    count: { label: 'Nombre de BLs' }
   } satisfies ChartConfig;
 
-  // Data for Monthly Expenses Line Chart
+  // Data for Monthly Expenses Line Chart (still mock)
   const expensesByMonthAggregated: Record<string, number> = {};
   MOCK_EXPENSES.forEach(expense => {
-    const monthKey = format(parseISO(expense.date), 'yyyy-MM'); // Key for sorting
+    const monthKey = format(parseISO(expense.date), 'yyyy-MM'); 
     expensesByMonthAggregated[monthKey] = (expensesByMonthAggregated[monthKey] || 0) + expense.amount;
   });
-
   const sortedMonthKeys = Object.keys(expensesByMonthAggregated).sort();
-
   const monthlyExpensesChartData = sortedMonthKeys.map(monthKey => {
     const [year, monthNum] = monthKey.split('-');
     const dateForLabel = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
     return {
-      month: format(dateForLabel, 'MMM yy', { locale: fr }), // Short month format for X-axis
+      month: format(dateForLabel, 'MMM yy', { locale: fr }), 
       totalExpenses: expensesByMonthAggregated[monthKey],
     };
   });
-  
   const monthlyExpensesChartConfig = {
-    totalExpenses: {
-      label: "Dépenses Totales",
-      color: "hsl(var(--chart-4))", // Using a different chart color variable
-    },
-    month: {
-      label: "Mois", // Not directly used by line chart data, but good for consistency
-    }
+    totalExpenses: { label: "Dépenses Totales (Mock)", color: "hsl(var(--chart-4))" },
+    month: { label: "Mois" }
   } satisfies ChartConfig;
-
 
   return (
     <>
@@ -151,12 +137,12 @@ export default async function DashboardPage() { // Make the component async
         />
       </div>
       
-      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3"> {/* Adjusted for 3 columns to include chat */}
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="h-6 w-6 text-primary" />
-              Analyse de Rentabilité des BLs
+              Analyse de Rentabilité des BLs (Basée sur Dépenses Mock)
             </CardTitle>
             <CardDescription>Rentabilité des connaissements enregistrés.</CardDescription>
           </CardHeader>
@@ -240,5 +226,3 @@ export default async function DashboardPage() { // Make the component async
     </>
   );
 }
-
-    

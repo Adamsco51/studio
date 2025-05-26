@@ -33,6 +33,8 @@ export let MOCK_WORK_TYPES: WorkType[] = [
 // MOCK_CLIENTS is now managed by Firestore
 // export let MOCK_CLIENTS: Client[] = [ ... ]; 
 
+// MOCK_BILLS_OF_LADING is now managed by Firestore
+/*
 export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
   {
     id: 'bl-1',
@@ -60,15 +62,32 @@ export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
   },
   // ... other BLs, ensuring clientId points to Firestore IDs if linked
 ];
+*/
 
 export let MOCK_EXPENSES: Expense[] = [
   {
     id: 'exp-1',
-    blId: 'bl-1',
+    blId: 'bl-1', // This ID would need to match a Firestore BL ID once expenses are migrated
     label: 'Ocean Freight Charges',
     amount: 2500,
     date: new Date('2023-10-20T11:00:00Z').toISOString(),
     employeeId: 'user-1-mock',
+  },
+   {
+    id: 'exp-2',
+    blId: 'bl-1',
+    label: 'Local Transport',
+    amount: 300,
+    date: new Date('2023-10-22T09:00:00Z').toISOString(),
+    employeeId: 'user-1-mock',
+  },
+  {
+    id: 'exp-3',
+    blId: 'bl-2', // This ID would need to match a Firestore BL ID
+    label: 'Customs Clearance',
+    amount: 1200,
+    date: new Date('2023-11-05T16:00:00Z').toISOString(),
+    employeeId: 'user-2-mock',
   },
   // ... other expenses
 ];
@@ -86,6 +105,8 @@ export let MOCK_TODO_ITEMS: TodoItem[] = [
 ];
 
 const clientsCollectionRef = collection(db, "clients");
+const blsCollectionRef = collection(db, "billsOfLading");
+
 
 // Client CRUD with Firestore
 export const addClientToFirestore = async (clientData: Omit<Client, 'id' | 'createdAt' | 'blIds'> & { createdByUserId: string }) => {
@@ -97,7 +118,7 @@ export const addClientToFirestore = async (clientData: Omit<Client, 'id' | 'crea
     });
     return docRef.id;
   } catch (e) {
-    console.error("Error adding document: ", e);
+    console.error("Error adding document (client): ", e);
     throw e;
   }
 };
@@ -110,7 +131,6 @@ export const getClientsFromFirestore = async (): Promise<Client[]> => {
       return {
         ...clientData,
         id: doc.id,
-        // Convert Firestore Timestamp to ISO string
         createdAt: clientData.createdAt instanceof Timestamp ? clientData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as Client;
     });
@@ -165,7 +185,7 @@ export const updateClientInFirestore = async (clientId: string, updatedData: Par
   try {
     await updateDoc(clientDoc, updatedData);
   } catch (e) {
-    console.error("Error updating document: ", e);
+    console.error("Error updating document (client): ", e);
     throw e;
   }
 };
@@ -175,41 +195,159 @@ export const deleteClientFromFirestore = async (clientId: string) => {
   try {
     // TODO: In a real app, handle deletion of associated BLs and Expenses, or use Firestore Functions for cascading deletes.
     // For now, just delete the client.
+    // Consider deleting BLs associated with this client:
+    // const blsSnapshot = await getDocs(query(blsCollectionRef, where("clientId", "==", clientId)));
+    // const deletePromises = blsSnapshot.docs.map(blDoc => deleteBLFromFirestore(blDoc.id));
+    // await Promise.all(deletePromises);
     await deleteDoc(clientDoc);
   } catch (e) {
-    console.error("Error deleting document: ", e);
+    console.error("Error deleting document (client): ", e);
+    throw e;
+  }
+};
+
+// BL CRUD with Firestore
+export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'createdAt'>) => {
+  try {
+    const docRef = await addDoc(blsCollectionRef, {
+      ...blData,
+      createdAt: serverTimestamp()
+    });
+    // Optionally update client's blIds array
+    if (blData.clientId) {
+        const clientDocRef = doc(db, "clients", blData.clientId);
+        const clientSnap = await getDoc(clientDocRef);
+        if (clientSnap.exists()) {
+            const clientData = clientSnap.data() as Client;
+            const updatedBlIds = [...(clientData.blIds || []), docRef.id];
+            await updateDoc(clientDocRef, { blIds: updatedBlIds });
+        }
+    }
+    return docRef.id;
+  } catch (e) {
+    console.error("Error adding document (BL): ", e);
+    throw e;
+  }
+};
+
+export const getBLsFromFirestore = async (): Promise<BillOfLading[]> => {
+  try {
+    const data = await getDocs(blsCollectionRef);
+    return data.docs.map(doc => {
+      const blData = doc.data();
+      return {
+        ...blData,
+        id: doc.id,
+        createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as BillOfLading;
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Sort by newest first
+  } catch (e: any) {
+     if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch BLs.", e);
+    } else {
+      console.error("Error getting documents (BLs): ", e);
+    }
+    return [];
+  }
+};
+
+export const getBLByIdFromFirestore = async (blId: string): Promise<BillOfLading | null> => {
+  try {
+    const blDocRef = doc(db, "billsOfLading", blId);
+    const blSnap = await getDoc(blDocRef);
+    if (blSnap.exists()) {
+      const blData = blSnap.data();
+      return {
+        ...blData,
+        id: blSnap.id,
+        createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as BillOfLading;
+    } else {
+      console.log("No such document for BL ID:", blId);
+      return null;
+    }
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch BL with ID: ${blId}.`, e);
+    } else {
+      console.error(`Error getting document (BL ${blId}): `, e);
+    }
+    return null;
+  }
+};
+
+export const getBLsByClientIdFromFirestore = async (clientId: string): Promise<BillOfLading[]> => {
+  try {
+    const q = query(blsCollectionRef, where("clientId", "==", clientId));
+    const data = await getDocs(q);
+    return data.docs.map(doc => {
+      const blData = doc.data();
+      return {
+        ...blData,
+        id: doc.id,
+        createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as BillOfLading;
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch BLs for client ID: ${clientId}.`, e);
+    } else {
+      console.error(`Error getting documents (BLs for client ${clientId}): `, e);
+    }
+    return [];
+  }
+};
+
+
+export const updateBLInFirestore = async (blId: string, updatedData: Partial<Omit<BillOfLading, 'id' | 'createdAt' | 'createdByUserId'>>) => {
+  const blDoc = doc(db, "billsOfLading", blId);
+  try {
+    await updateDoc(blDoc, updatedData);
+  } catch (e) {
+    console.error("Error updating document (BL): ", e);
+    throw e;
+  }
+};
+
+export const deleteBLFromFirestore = async (blId: string) => {
+  const blDocRef = doc(db, "billsOfLading", blId);
+  try {
+    const blSnap = await getDoc(blDocRef);
+    if (blSnap.exists()) {
+        const blData = blSnap.data() as BillOfLading;
+        // Remove BL ID from client's blIds array
+        if (blData.clientId) {
+            const clientDocRef = doc(db, "clients", blData.clientId);
+            const clientSnap = await getDoc(clientDocRef);
+            if (clientSnap.exists()) {
+                const clientData = clientSnap.data() as Client;
+                const updatedBlIds = (clientData.blIds || []).filter(id => id !== blId);
+                await updateDoc(clientDocRef, { blIds: updatedBlIds });
+            }
+        }
+    }
+    // TODO: Delete associated expenses when expenses are migrated to Firestore.
+    await deleteDoc(blDocRef);
+  } catch (e) {
+    console.error("Error deleting document (BL): ", e);
     throw e;
   }
 };
 
 
 // --- Legacy Mock Data Functions (to be phased out or adapted for other entities) ---
-
+/*
 export const addBL = (bl: BillOfLading) => {
   MOCK_BILLS_OF_LADING.push(bl);
-  // This logic will need to be adapted if clients are in Firestore
-  // const client = MOCK_CLIENTS.find(c => c.id === bl.clientId);
-  // if (client && !client.blIds.includes(bl.id)) {
-  //   client.blIds.push(bl.id);
-  // }
 };
 export const updateBL = (updatedBL: BillOfLading) => {
   MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.map(bl => bl.id === updatedBL.id ? { ...bl, ...updatedBL } : bl);
 };
 export const deleteBL = (blId: string) => {
-  // This logic will need to be adapted
-  // const blToDelete = MOCK_BILLS_OF_LADING.find(bl => bl.id === blId);
-  // if (blToDelete) {
-  //   MOCK_CLIENTS = MOCK_CLIENTS.map(client => {
-  //     if (client.id === blToDelete.clientId) {
-  //       return { ...client, blIds: client.blIds.filter(id => id !== blId) };
-  //     }
-  //     return client;
-  //   });
-  // }
   MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.id !== blId);
   MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.blId !== blId); 
 };
+*/
 
 export const addExpense = (expense: Expense) => {
   MOCK_EXPENSES.push(expense);
@@ -270,6 +408,3 @@ export const toggleTodoItemCompletion = (todoId: string): void => {
 export const deleteTodoItem = (todoId: string): void => {
   MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.filter(todo => todo.id !== todoId);
 };
-
-
-    

@@ -1,16 +1,21 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, use } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_EXPENSES, MOCK_USERS } from '@/lib/mock-data';
+import { 
+    getBLsFromFirestore, 
+    getClientsFromFirestore, 
+    MOCK_EXPENSES, // Expenses are still mock
+    MOCK_USERS 
+} from '@/lib/mock-data';
 import type { BLStatus, BillOfLading, Client, User as AppUser } from '@/lib/types';
-import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX } from 'lucide-react';
+import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -44,25 +49,42 @@ const StatusIcon = ({ status }: { status: BLStatus }) => {
   return null;
 };
 
-export default function BillsOfLadingPage() {
+export default function BillsOfLadingPage({ params: paramsPromise }: { params: Promise<{}> }) {
+  const params = use(paramsPromise); 
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [bls, setBls] = useState<BillOfLading[]>(MOCK_BILLS_OF_LADING);
-  const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
-  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
+  const [bls, setBls] = useState<BillOfLading[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS); // Users are still mock
+  const [isLoading, setIsLoading] = useState(true);
 
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
   const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
-
   useEffect(() => {
-    setBls(MOCK_BILLS_OF_LADING);
-    setClients(MOCK_CLIENTS);
-    setUsers(MOCK_USERS);
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [fetchedBls, fetchedClients] = await Promise.all([
+          getBLsFromFirestore(),
+          getClientsFromFirestore()
+        ]);
+        setBls(fetchedBls);
+        setClients(fetchedClients);
+      } catch (error) {
+        console.error("Failed to fetch BLs or Clients:", error);
+        // Optionally, show a toast message to the user
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+    setUsers(MOCK_USERS); // Users are still mock
   }, []); 
 
   const getClientName = (clientId: string) => {
-    return MOCK_CLIENTS.find(c => c.id === clientId)?.name || 'N/A';
+    return clients.find(c => c.id === clientId)?.name || 'N/A';
   };
 
   const getUserName = (userId?: string) => {
@@ -74,6 +96,7 @@ export default function BillsOfLadingPage() {
     const bl = bls.find(b => b.id === blId);
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
     
+    // Expenses are still from MOCK_EXPENSES for now
     const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === blId);
     const totalExpenses = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
     const balance = bl.allocatedAmount - totalExpenses;
@@ -117,7 +140,7 @@ export default function BillsOfLadingPage() {
       bl.status.toLowerCase().includes(lowerSearchTerm) ||
       (bl.createdByUserId && getUserName(bl.createdByUserId).toLowerCase().includes(lowerSearchTerm))
     );
-  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate]);
+  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate, clients]); // Added clients to dependency array
 
   return (
     <>
@@ -148,15 +171,16 @@ export default function BillsOfLadingPage() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 w-full" 
+                  disabled={isLoading}
                 />
               </div>
             </div>
 
             <div>
               <Label htmlFor="client-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Client</Label>
-              <Select value={selectedClientId} onValueChange={(value) => setSelectedClientId(value === "all" ? undefined : value)}>
+              <Select value={selectedClientId} onValueChange={(value) => setSelectedClientId(value === "all" ? undefined : value)} disabled={isLoading || clients.length === 0}>
                 <SelectTrigger id="client-filter">
-                  <SelectValue placeholder="Tous les Clients" />
+                  <SelectValue placeholder={clients.length === 0 && !isLoading ? "Aucun client" : "Tous les Clients"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Clients</SelectItem>
@@ -169,13 +193,13 @@ export default function BillsOfLadingPage() {
 
             <div>
               <Label htmlFor="user-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Utilisateur (Créateur)</Label>
-              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)}>
+              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)} disabled={isLoading}>
                 <SelectTrigger id="user-filter">
                   <SelectValue placeholder="Tous les Utilisateurs" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Utilisateurs</SelectItem>
-                  {users.map(user => (
+                  {users.map(user => ( // MOCK_USERS still used for assignee selection
                     <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -193,6 +217,7 @@ export default function BillsOfLadingPage() {
                       "w-full justify-start text-left font-normal",
                       !selectedDate && "text-muted-foreground"
                     )}
+                    disabled={isLoading}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {selectedDate ? format(selectedDate, "PPP", { locale: fr }) : <span>Choisir une date</span>}
@@ -210,7 +235,7 @@ export default function BillsOfLadingPage() {
               </Popover>
             </div>
 
-            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto xl:mt-[22px]"> {/* Adjusted margin for alignment */}
+            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto xl:mt-[22px]" disabled={isLoading}>
               <FilterX className="mr-2 h-4 w-4" /> Réinitialiser
             </Button>
           </div>
@@ -221,61 +246,68 @@ export default function BillsOfLadingPage() {
         <CardHeader>
           <CardTitle>Liste des Connaissements</CardTitle>
           <CardDescription>
-            Aperçu de tous les BLs enregistrés. Nombre de BLs affichés: {filteredBLs.length}
+            Aperçu de tous les BLs enregistrés. Nombre de BLs affichés: {isLoading ? "Chargement..." : filteredBLs.length}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>N° BL</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Créé par</TableHead>
-                <TableHead>Date Création</TableHead>
-                <TableHead>Statut BL</TableHead>
-                <TableHead>Montant Alloué</TableHead>
-                <TableHead>Dépenses Totales</TableHead>
-                <TableHead>Solde</TableHead>
-                <TableHead>Statut Financier</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredBLs.map((bl) => {
-                const { totalExpenses, balance, profitStatus, profit } = calculateBlDetails(bl.id);
-                return (
-                  <TableRow key={bl.id}>
-                    <TableCell className="font-medium">{bl.blNumber}</TableCell>
-                    <TableCell>{getClientName(bl.clientId)}</TableCell>
-                    <TableCell>{getUserName(bl.createdByUserId)}</TableCell>
-                    <TableCell>{format(new Date(bl.createdAt), 'dd MMM yyyy', { locale: fr })}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={cn("capitalize flex items-center w-fit", getStatusBadgeStyle(bl.status, 'badge'))}>
-                        <StatusIcon status={bl.status} />
-                        {bl.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
-                    <TableCell>{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
-                    <TableCell className={profit ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                      {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={profit ? 'default' : 'destructive'} className={profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{profitStatus}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link href={`/bls/${bl.id}`} passHref>
-                        <Button variant="ghost" size="sm">
-                          Voir Détails <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-           {filteredBLs.length === 0 && (
+          {isLoading ? (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="ml-2 text-muted-foreground">Chargement des connaissements...</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>N° BL</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Créé par</TableHead>
+                  <TableHead>Date Création</TableHead>
+                  <TableHead>Statut BL</TableHead>
+                  <TableHead>Montant Alloué</TableHead>
+                  <TableHead>Dépenses Totales</TableHead>
+                  <TableHead>Solde</TableHead>
+                  <TableHead>Statut Financier</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredBLs.map((bl) => {
+                  const { totalExpenses, balance, profitStatus, profit } = calculateBlDetails(bl.id);
+                  return (
+                    <TableRow key={bl.id}>
+                      <TableCell className="font-medium">{bl.blNumber}</TableCell>
+                      <TableCell>{getClientName(bl.clientId)}</TableCell>
+                      <TableCell>{getUserName(bl.createdByUserId)}</TableCell>
+                      <TableCell>{format(new Date(bl.createdAt), 'dd MMM yyyy', { locale: fr })}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn("capitalize flex items-center w-fit", getStatusBadgeStyle(bl.status, 'badge'))}>
+                          <StatusIcon status={bl.status} />
+                          {bl.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
+                      <TableCell>{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
+                      <TableCell className={profit ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                        {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={profit ? 'default' : 'destructive'} className={profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{profitStatus}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/bls/${bl.id}`} passHref>
+                          <Button variant="ghost" size="sm">
+                            Voir Détails <ArrowRight className="ml-2 h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+           {!isLoading && filteredBLs.length === 0 && (
             <p className="text-center text-muted-foreground py-4">
               {searchTerm || selectedClientId || selectedUserId || selectedDate ? "Aucun BL ne correspond à vos filtres." : "Aucun BL trouvé."}
             </p>

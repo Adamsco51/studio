@@ -1,23 +1,23 @@
 
 "use client"; 
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, use } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
-    MOCK_BILLS_OF_LADING, 
-    MOCK_CLIENTS, 
-    MOCK_EXPENSES as INITIAL_MOCK_EXPENSES, 
-    MOCK_USERS, // Keep for mapping createdByUserId from MOCK_DATA to names
+    getBLByIdFromFirestore,
+    getClientByIdFromFirestore, // To fetch client details
+    MOCK_EXPENSES as INITIAL_MOCK_EXPENSES, // Expenses are still mock
+    MOCK_USERS, 
     MOCK_WORK_TYPES,
-    deleteBL,
-    deleteExpense as deleteGlobalExpense,
-    addExpense as addGlobalExpense
+    deleteBLFromFirestore, // Firestore delete function for BL
+    deleteExpense as deleteGlobalExpense, // Mock expense delete
+    addExpense as addGlobalExpense // Mock expense add
 } from '@/lib/mock-data';
 import type { BillOfLading, Expense, Client, User as MockUser, BLStatus, WorkType } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIconLucide, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2 } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIconLucide, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
@@ -51,7 +51,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/auth-context'; // Import useAuth
+import { useAuth } from '@/contexts/auth-context'; 
 
 const getStatusBadgeVariant = (status: BLStatus) => {
   if (status === 'terminé') return 'default';
@@ -68,14 +68,15 @@ const getStatusIcon = (status: BLStatus) => {
 }
 
 export default function BLDetailPage({ params: paramsPromise }: { params: Promise<{ blId: string }> }) {
-  const { blId } = React.use(paramsPromise); 
-  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
+  const { blId } = use(paramsPromise); 
+  const { user, isAdmin } = useAuth(); 
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [workType, setWorkType] = useState<WorkType | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [isMounted, setIsMounted] = useState(false);
-  const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null); // For display name
+  const [expenses, setExpenses] = useState<Expense[]>([]); // Still mock
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -87,33 +88,55 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
 
 
   useEffect(() => {
-    if (!blId) return; 
-    const foundBl = MOCK_BILLS_OF_LADING.find(b => b.id === blId);
-    if (foundBl) {
-      setBl(foundBl);
-      const foundClient = MOCK_CLIENTS.find(c => c.id === foundBl.clientId);
-      setClient(foundClient || null);
-      const foundWorkType = MOCK_WORK_TYPES.find(wt => wt.id === foundBl.workTypeId);
-      setWorkType(foundWorkType || null);
-      const blExpenses = INITIAL_MOCK_EXPENSES.filter(exp => exp.blId === blId);
-      setExpenses(blExpenses);
-      if (foundBl.createdByUserId) {
-        // Try to find in MOCK_USERS first (for older data), then fallback to current auth user's display name if IDs match
-        const mockCreator = MOCK_USERS.find(u => u.id === foundBl.createdByUserId);
-        if (mockCreator) {
-          setCreatedByUserDisplay(mockCreator.name);
-        } else if (user && user.uid === foundBl.createdByUserId) {
-          setCreatedByUserDisplay(user.displayName || user.email);
-        } else {
-            setCreatedByUserDisplay("Utilisateur Système"); // Fallback
-        }
-      }
+    if (!blId || !user) { // Ensure blId and user are available
+        setIsLoading(false);
+        return;
     }
-    setIsMounted(true);
-  }, [blId, user]); // Add user to dependencies
+    const fetchBlDetails = async () => {
+        setIsLoading(true);
+        try {
+            const foundBl = await getBLByIdFromFirestore(blId);
+            setBl(foundBl);
+
+            if (foundBl) {
+                if (foundBl.clientId) {
+                    const foundClient = await getClientByIdFromFirestore(foundBl.clientId);
+                    setClient(foundClient);
+                }
+                const foundWorkType = MOCK_WORK_TYPES.find(wt => wt.id === foundBl.workTypeId);
+                setWorkType(foundWorkType || null);
+                
+                // Expenses are still mock
+                const blExpenses = INITIAL_MOCK_EXPENSES.filter(exp => exp.blId === blId);
+                setExpenses(blExpenses);
+
+                if (foundBl.createdByUserId) {
+                    const mockCreator = MOCK_USERS.find(u => u.id === foundBl.createdByUserId);
+                    if (mockCreator) {
+                        setCreatedByUserDisplay(mockCreator.name);
+                    } else if (user && user.uid === foundBl.createdByUserId) {
+                        setCreatedByUserDisplay(user.displayName || user.email);
+                    } else {
+                        // Potentially fetch user from a 'users' collection in Firestore if needed
+                        setCreatedByUserDisplay("Utilisateur Système"); 
+                    }
+                }
+            } else {
+                toast({ title: "Erreur", description: "Connaissement non trouvé.", variant: "destructive" });
+            }
+        } catch (error) {
+            console.error("Failed to fetch BL details:", error);
+            toast({ title: "Erreur de chargement", description: "Impossible de charger les détails du BL.", variant: "destructive" });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    fetchBlDetails();
+  }, [blId, user, toast]); // Added toast to dependencies
 
   const { totalExpenses, balance, profitStatus, profit } = useMemo(() => {
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
+    // Expenses sum is still mock-based
     const currentTotalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     const currentBalance = bl.allocatedAmount - currentTotalExpenses;
     return {
@@ -124,29 +147,37 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     };
   }, [bl, expenses]);
 
-  const handleExpenseAdded = (newExpense: Expense) => {
+  const handleExpenseAdded = (newExpense: Expense) => { // Mock
     addGlobalExpense(newExpense); 
     setExpenses(prevExpenses => [...prevExpenses, newExpense]);
   };
 
-  const handleDeleteExpense = (expenseId: string) => {
+  const handleDeleteExpense = (expenseId: string) => { // Mock
     deleteGlobalExpense(expenseId); 
     setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
     toast({
       title: "Dépense Supprimée",
-      description: "La dépense a été supprimée avec succès.",
+      description: "La dépense a été supprimée avec succès (simulation).",
     });
   };
   
-  const handleDeleteBL = () => {
-    if (!bl) return;
-    deleteBL(bl.id);
-    toast({
-      title: "BL Supprimé",
-      description: `Le BL N° ${bl.blNumber} a été supprimé.`,
-    });
-    router.push('/bls');
-    router.refresh(); 
+  const handleDeleteBL = async () => {
+    if (!bl || !bl.id) return;
+    setIsDeleting(true);
+    try {
+        await deleteBLFromFirestore(bl.id);
+        toast({
+            title: "BL Supprimé",
+            description: `Le BL N° ${bl.blNumber} a été supprimé de Firestore.`,
+        });
+        router.push('/bls');
+        router.refresh(); 
+    } catch (error) {
+        console.error("Failed to delete BL:", error);
+        toast({ title: "Erreur", description: "Échec de la suppression du BL.", variant: "destructive"});
+    } finally {
+        setIsDeleting(false);
+    }
   };
 
   const handleSubmitEditRequest = () => {
@@ -191,7 +222,6 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     setRequestingDeleteExpense(null);
   };
 
-  // Function to get employee name (can try MOCK_USERS or use current user's display name if it's them)
   const getEmployeeName = (employeeId: string) => {
     const mockEmployee = MOCK_USERS.find(u => u.id === employeeId);
     if (mockEmployee) return mockEmployee.name;
@@ -200,14 +230,19 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   };
 
 
-  if (!isMounted || !user) { // Ensure user is loaded as well for isAdmin check
-    return <div className="flex justify-center items-center h-64"><ArrowLeft className="animate-spin h-8 w-8 text-primary" /> Chargement...</div>;
+  if (isLoading || (!bl && isLoading)) { 
+    return (
+        <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-2 text-muted-foreground">Chargement du connaissement...</p>
+        </div>
+    );
   }
   
   if (!bl) {
     return (
       <div className="text-center py-10">
-        <p className="text-xl text-muted-foreground">Connaissement non trouvé.</p>
+        <p className="text-xl text-muted-foreground">Connaissement non trouvé ou erreur de chargement.</p>
         <Link href="/bls" passHref>
           <Button variant="link" className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste des BLs
@@ -273,6 +308,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteBlReason(''); }}>
+                   {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Trash2 className="mr-2 h-4 w-4" /> Supprimer BL
                 </Button>
               </AlertDialogTrigger>
@@ -283,7 +319,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                   </AlertDialogTitle>
                   {isAdmin ? (
                     <AlertDialogDescription>
-                      Cette action est irréversible et supprimera le BL N° {bl.blNumber} ainsi que toutes ses dépenses associées.
+                      Cette action est irréversible et supprimera le BL N° {bl.blNumber} ainsi que toutes ses dépenses associées (si implémenté).
                     </AlertDialogDescription>
                   ) : (
                     <div className="space-y-2 py-2 text-left">
@@ -300,10 +336,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                   )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setDeleteBlReason('')}>Annuler</AlertDialogCancel>
-                  <AlertDialogAction onClick={isAdmin ? handleDeleteBL : handleSubmitDeleteBlRequest}>
+                  <AlertDialogCancel onClick={() => setDeleteBlReason('')} disabled={isDeleting && isAdmin}>Annuler</AlertDialogCancel>
+                  <Button onClick={isAdmin ? handleDeleteBL : handleSubmitDeleteBlRequest} variant={isAdmin ? "destructive" : "default"} disabled={isDeleting && isAdmin}>
+                    {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
-                  </AlertDialogAction>
+                  </Button>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
@@ -349,7 +386,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Date de création</p>
-                <p className="font-semibold">{format(new Date(bl.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</p>
+                <p className="font-semibold">{bl.createdAt ? format(new Date(bl.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</p>
               </div>
               {createdByUserDisplay && (
                  <div>
@@ -358,11 +395,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                 </div>
               )}
               <div>
-                <p className="text-sm text-muted-foreground">Dépenses Totales</p>
+                <p className="text-sm text-muted-foreground">Dépenses Totales (Mock)</p>
                 <p className="font-semibold text-red-600">{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
               </div>
               <div className="md:col-span-2">
-                <p className="text-sm text-muted-foreground">Solde Actuel</p>
+                <p className="text-sm text-muted-foreground">Solde Actuel (Basé sur Mock Dépenses)</p>
                 <p className={`text-2xl font-bold ${profit ? 'text-green-600' : 'text-red-600'}`}>
                   {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
                 </p>
@@ -392,7 +429,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
 
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle>Dépenses Associées</CardTitle>
+              <CardTitle>Dépenses Associées (Données Mock)</CardTitle>
             </CardHeader>
             <CardContent>
               {expenses.length > 0 ? (
@@ -442,7 +479,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                 </AlertDialogTitle>
                                 {isAdmin ? (
                                   <AlertDialogDescription>
-                                    L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                                    L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible (simulation).
                                   </AlertDialogDescription>
                                 ) : (
                                     <div className="space-y-2 py-2 text-left">
@@ -475,7 +512,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               ) : (
                 <div className="text-center py-6 text-muted-foreground">
                   <DollarSign className="mx-auto h-12 w-12 opacity-50" />
-                  <p className="mt-2">Aucune dépense enregistrée pour ce BL.</p>
+                  <p className="mt-2">Aucune dépense (mock) enregistrée pour ce BL.</p>
                 </div>
               )}
             </CardContent>

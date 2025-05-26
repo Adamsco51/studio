@@ -1,27 +1,48 @@
 
 "use client";
 
+import React from 'react'; // Import React
 import { PageHeader } from '@/components/shared/page-header';
 import { BLForm } from '@/components/bl/bl-form';
-import { MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_WORK_TYPES } from '@/lib/mock-data';
+import { getBLByIdFromFirestore } from '@/lib/mock-data'; // Use Firestore function
 import type { BillOfLading } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
-export default function EditBLPage({ params }: { params: { blId: string } }) {
+export default function EditBLPage({ params: paramsPromise }: { params: Promise<{ blId: string }> }) {
+  const { blId } = React.use(paramsPromise); 
   const [bl, setBl] = useState<BillOfLading | null | undefined>(undefined);
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const foundBl = MOCK_BILLS_OF_LADING.find(b => b.id === params.blId);
-    setBl(foundBl || null);
-  }, [params.blId]);
+    if (!blId) {
+        setIsLoading(false);
+        return;
+    }
+    const fetchBl = async () => {
+      setIsLoading(true);
+      try {
+        const foundBl = await getBLByIdFromFirestore(blId);
+        setBl(foundBl);
+      } catch (error) {
+        console.error("Failed to fetch BL for editing:", error);
+        setBl(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchBl();
+  }, [blId]);
 
-  if (bl === undefined) {
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  if (isLoading || bl === undefined) {
+    return (
+        <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-2 text-muted-foreground">Chargement du BL...</p>
+        </div>
+    );
   }
 
   if (!bl) {
@@ -50,7 +71,7 @@ export default function EditBLPage({ params }: { params: { blId: string } }) {
             </Link>
         }
       />
-      <BLForm initialData={bl} clients={MOCK_CLIENTS} workTypes={MOCK_WORK_TYPES} />
+      <BLForm initialData={bl} />
     </>
   );
 }

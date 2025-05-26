@@ -1,15 +1,21 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, use } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MOCK_EXPENSES, MOCK_BILLS_OF_LADING, MOCK_CLIENTS, MOCK_USERS, deleteExpense as deleteGlobalExpense } from '@/lib/mock-data';
-import type { Expense, BillOfLading, Client } from '@/lib/types'; // Removed User import
-import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit } from 'lucide-react';
+import { 
+    MOCK_EXPENSES, // Expenses are still mock
+    getBLsFromFirestore, // BLs from Firestore
+    getClientsFromFirestore, // Clients from Firestore
+    MOCK_USERS, 
+    deleteExpense as deleteGlobalExpense // Mock expense delete
+} from '@/lib/mock-data';
+import type { Expense, BillOfLading, Client } from '@/lib/types';
+import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -32,16 +38,17 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/auth-context'; // Import useAuth
+import { useAuth } from '@/contexts/auth-context'; 
 
 interface ExpenseWithDetails extends Expense {
   blNumber?: string;
   clientName?: string;
-  employeeName?: string; // Still used for display if old data has mock user ID
+  employeeName?: string; 
 }
 
-export default function ExpensesPage() {
-  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
+export default function ExpensesPage({ params: paramsPromise }: { params: Promise<{}> }) {
+  const params = use(paramsPromise);
+  const { user, isAdmin } = useAuth(); 
   const [expenses, setExpenses] = useState<ExpenseWithDetails[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
@@ -49,6 +56,7 @@ export default function ExpensesPage() {
 
   const [allBls, setAllBls] = useState<BillOfLading[]>([]);
   const [allClients, setAllClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedBlId, setSelectedBlId] = useState<string | undefined>(undefined);
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -57,31 +65,48 @@ export default function ExpensesPage() {
   const [deleteReason, setDeleteReason] = useState('');
 
   useEffect(() => {
-    setAllBls(MOCK_BILLS_OF_LADING);
-    setAllClients(MOCK_CLIENTS);
+    const fetchData = async () => {
+        setIsLoading(true);
+        try {
+            const [fetchedBls, fetchedClients] = await Promise.all([
+                getBLsFromFirestore(),
+                getClientsFromFirestore()
+            ]);
+            setAllBls(fetchedBls);
+            setAllClients(fetchedClients);
 
-    const detailedExpenses = MOCK_EXPENSES.map(exp => {
-      const bl = MOCK_BILLS_OF_LADING.find(b => b.id === exp.blId);
-      const client = bl ? MOCK_CLIENTS.find(c => c.id === bl.clientId) : undefined;
-      // Try to get name from MOCK_USERS if employeeId is a mock ID, 
-      // otherwise, if current user is the employee, use their display name.
-      let empName = 'Inconnu';
-      const mockEmployee = MOCK_USERS.find(u => u.id === exp.employeeId);
-      if (mockEmployee) {
-        empName = mockEmployee.name;
-      } else if (user && user.uid === exp.employeeId) {
-        empName = user.displayName || user.email || 'Utilisateur';
-      }
+            // Expenses are still mock, detail them with fetched BLs and Clients
+            const detailedExpenses = MOCK_EXPENSES.map(exp => {
+                const bl = fetchedBls.find(b => b.id === exp.blId);
+                const client = bl ? fetchedClients.find(c => c.id === bl.clientId) : undefined;
+                let empName = 'Inconnu';
+                const mockEmployee = MOCK_USERS.find(u => u.id === exp.employeeId);
+                if (mockEmployee) {
+                    empName = mockEmployee.name;
+                } else if (user && user.uid === exp.employeeId) {
+                    empName = user.displayName || user.email || 'Utilisateur';
+                }
 
-      return {
-        ...exp,
-        blNumber: bl?.blNumber,
-        clientName: client?.name,
-        employeeName: empName,
-      };
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
-    setExpenses(detailedExpenses);
-  }, [user]); // Add user to dependency array to re-evaluate employeeName
+                return {
+                    ...exp,
+                    blNumber: bl?.blNumber,
+                    clientName: client?.name,
+                    employeeName: empName,
+                };
+            }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
+            setExpenses(detailedExpenses);
+
+        } catch (error) {
+            console.error("Failed to fetch BLs or Clients for expenses page:", error);
+            toast({title: "Erreur de chargement", description: "Impossible de charger les données de base.", variant: "destructive"});
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    if (user) { // Ensure user is loaded before fetching data that might depend on it
+        fetchData();
+    }
+  }, [user, toast]); 
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -98,9 +123,9 @@ export default function ExpensesPage() {
     }
 
     if (selectedClientId) {
-      const clientBlIds = MOCK_BILLS_OF_LADING
-        .filter(bl => bl.clientId === selectedClientId)
-        .map(bl => bl.id);
+      // Find BLs associated with the selected client
+      const clientBls = allBls.filter(bl => bl.clientId === selectedClientId);
+      const clientBlIds = clientBls.map(bl => bl.id);
       tempExpenses = tempExpenses.filter(exp => exp.blId && clientBlIds.includes(exp.blId));
     }
 
@@ -122,13 +147,14 @@ export default function ExpensesPage() {
       (exp.employeeName && exp.employeeName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       exp.amount.toString().includes(searchTerm)
     );
-  }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate]);
+  }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate, allBls]); // added allBls to deps
 
-  const handleDeleteExpenseDirectly = (expenseId: string) => {
+  const handleDeleteExpenseDirectly = (expenseId: string) => { // Mock delete
     deleteGlobalExpense(expenseId);
-    const updatedDetailedExpenses = MOCK_EXPENSES.map(exp => {
-        const bl = MOCK_BILLS_OF_LADING.find(b => b.id === exp.blId);
-        const client = bl ? MOCK_CLIENTS.find(c => c.id === bl.clientId) : undefined;
+    // Re-filter/map expenses after deletion from MOCK_EXPENSES
+     const updatedDetailedExpenses = MOCK_EXPENSES.map(exp => {
+        const bl = allBls.find(b => b.id === exp.blId);
+        const client = bl ? allClients.find(c => c.id === bl.clientId) : undefined;
         let empName = 'Inconnu';
         const mockEmployee = MOCK_USERS.find(u => u.id === exp.employeeId);
         if (mockEmployee) empName = mockEmployee.name;
@@ -144,7 +170,7 @@ export default function ExpensesPage() {
     setExpenses(updatedDetailedExpenses);
     toast({
       title: "Dépense Supprimée",
-      description: "La dépense a été supprimée avec succès.",
+      description: "La dépense a été supprimée avec succès (simulation).",
     });
   };
 
@@ -162,14 +188,14 @@ export default function ExpensesPage() {
     setDeletingExpense(null);
   };
 
-  if (!user) { // Ensure user is loaded
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  if (!user && !isLoading) { 
+    return <div className="flex justify-center items-center h-64">Veuillez vous connecter pour voir cette page.</div>;
   }
 
   return (
     <>
       <PageHeader
-        title="Gestion des Dépenses"
+        title="Gestion des Dépenses (Données Mock)"
         description="Consultez et gérez toutes les dépenses enregistrées."
       />
       <Card className="shadow-lg mb-6">
@@ -188,15 +214,16 @@ export default function ExpensesPage() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full"
+                  disabled={isLoading}
                 />
               </div>
             </div>
 
             <div>
               <label htmlFor="bl-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par N° BL</label>
-              <Select value={selectedBlId} onValueChange={(value) => setSelectedBlId(value === "all" ? undefined : value)}>
+              <Select value={selectedBlId} onValueChange={(value) => setSelectedBlId(value === "all" ? undefined : value)} disabled={isLoading || allBls.length === 0}>
                 <SelectTrigger id="bl-filter">
-                  <SelectValue placeholder="Tous les BLs" />
+                  <SelectValue placeholder={allBls.length === 0 && !isLoading ? "Aucun BL" : "Tous les BLs"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les BLs</SelectItem>
@@ -209,9 +236,9 @@ export default function ExpensesPage() {
 
             <div>
               <label htmlFor="client-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Client</label>
-              <Select value={selectedClientId} onValueChange={(value) => setSelectedClientId(value === "all" ? undefined : value)}>
+              <Select value={selectedClientId} onValueChange={(value) => setSelectedClientId(value === "all" ? undefined : value)} disabled={isLoading || allClients.length === 0}>
                 <SelectTrigger id="client-filter">
-                  <SelectValue placeholder="Tous les Clients" />
+                  <SelectValue placeholder={allClients.length === 0 && !isLoading ? "Aucun client" : "Tous les Clients"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Clients</SelectItem>
@@ -233,6 +260,7 @@ export default function ExpensesPage() {
                       "w-full justify-start text-left font-normal",
                       !selectedDate && "text-muted-foreground"
                     )}
+                    disabled={isLoading}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {selectedDate ? format(selectedDate, "PPP", { locale: fr }) : <span>Choisir une date</span>}
@@ -250,7 +278,7 @@ export default function ExpensesPage() {
               </Popover>
             </div>
 
-            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto">
+            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto" disabled={isLoading}>
               <FilterX className="mr-2 h-4 w-4" /> Réinitialiser
             </Button>
           </div>
@@ -259,13 +287,19 @@ export default function ExpensesPage() {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Liste des Dépenses</CardTitle>
+          <CardTitle>Liste des Dépenses (Données Mock)</CardTitle>
           <CardDescription>
             Aperçu de toutes les dépenses enregistrées, triées par date (plus récentes en premier).
-            Nombre de dépenses affichées: {filteredExpenses.length}
+            Nombre de dépenses affichées: {isLoading ? "Chargement..." : filteredExpenses.length}
           </CardDescription>
         </CardHeader>
         <CardContent>
+         {isLoading ? (
+            <div className="flex justify-center items-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2 text-muted-foreground">Chargement des données...</p>
+            </div>
+         ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -329,7 +363,7 @@ export default function ExpensesPage() {
                             </AlertDialogTitle>
                             {isAdmin ? (
                                 <AlertDialogDescription>
-                                L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                                L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible (simulation).
                                 </AlertDialogDescription>
                             ) : (
                                 <div className="space-y-2 py-2 text-left">
@@ -360,9 +394,10 @@ export default function ExpensesPage() {
               ))}
             </TableBody>
           </Table>
-           {filteredExpenses.length === 0 && (
+         )}
+           {!isLoading && filteredExpenses.length === 0 && (
             <p className="text-center text-muted-foreground py-4">
-              {searchTerm || selectedBlId || selectedClientId || selectedDate ? "Aucune dépense ne correspond à vos filtres." : "Aucune dépense trouvée."}
+              {searchTerm || selectedBlId || selectedClientId || selectedDate ? "Aucune dépense ne correspond à vos filtres." : "Aucune dépense (mock) trouvée."}
             </p>
           )}
         </CardContent>

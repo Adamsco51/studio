@@ -21,9 +21,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import type { BillOfLading, Client, BLStatus, WorkType } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { addBL, updateBL } from "@/lib/mock-data"; // Removed MOCK_USERS
-import { useAuth } from "@/contexts/auth-context";
-
+import { addBLToFirestore, updateBLInFirestore, getClientsFromFirestore, MOCK_WORK_TYPES } from "@/lib/mock-data"; // Using Firestore functions
+import { useAuth } from "@/hooks/use-auth";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 const blStatusOptions: { value: BLStatus; label: string }[] = [
   { value: "en cours", label: "En cours" },
@@ -45,16 +46,28 @@ type BLFormValues = z.infer<typeof blFormSchema>;
 
 interface BLFormProps {
   initialData?: BillOfLading | null;
-  clients: Client[];
-  workTypes: WorkType[];
+  // clients and workTypes will be fetched if not editing, or passed if editing (for consistency)
+  // but for simplicity, we fetch clients here anyway for add form pre-selection
 }
 
-export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
+export function BLForm({ initialData }: BLFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedClientId = searchParams.get('clientId');
   const { toast } = useToast();
-  const { user } = useAuth(); // Get the authenticated user
+  const { user } = useAuth(); 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const workTypes: WorkType[] = MOCK_WORK_TYPES; // Work types are still mock
+
+  useEffect(() => {
+    const fetchClientsData = async () => {
+      const fetchedClients = await getClientsFromFirestore();
+      setClients(fetchedClients);
+    };
+    fetchClientsData();
+  }, []);
+
 
   const defaultCategories = initialData?.categories ? initialData.categories.join(", ") : "";
 
@@ -77,15 +90,16 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
     },
   });
 
-  function onSubmit(data: BLFormValues) {
+  async function onSubmit(data: BLFormValues) {
     if (!user) {
       toast({ title: "Erreur", description: "Vous devez être connecté pour effectuer cette action.", variant: "destructive" });
       return;
     }
+    setIsSubmitting(true);
 
     const processedCategories = data.categories.split(',').map(cat => cat.trim()).filter(cat => cat.length > 0);
     
-    const newOrUpdatedBLData = {
+    const blDataPayload: Omit<BillOfLading, 'id' | 'createdAt'> = {
         blNumber: data.blNumber,
         clientId: data.clientId,
         allocatedAmount: data.allocatedAmount,
@@ -93,32 +107,67 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
         description: data.description || "",
         categories: processedCategories,
         status: data.status,
+        createdByUserId: initialData ? initialData.createdByUserId : user.uid, // Preserve original creator on edit, set on new
     };
 
-    if (initialData) {
-        const updatedBL: BillOfLading = {
-            ...initialData,
-            ...newOrUpdatedBLData,
-            // createdByUserId is not updated on edit
-        };
-        updateBL(updatedBL);
-    } else {
-        const newBL: BillOfLading = {
-            id: `bl-${Date.now()}`,
-            ...newOrUpdatedBLData,
-            createdAt: new Date().toISOString(),
-            createdByUserId: user.uid, 
-        };
-        addBL(newBL);
-    }
+    try {
+      if (initialData && initialData.id) {
+          // For update, we don't send createdByUserId or createdAt as they shouldn't change
+          const updatePayload: Partial<Omit<BillOfLading, 'id' | 'createdAt' | 'createdByUserId'>> = {
+            blNumber: data.blNumber,
+            clientId: data.clientId,
+            allocatedAmount: data.allocatedAmount,
+            workTypeId: data.workTypeId,
+            description: data.description || "",
+            categories: processedCategories,
+            status: data.status,
+          };
+          await updateBLInFirestore(initialData.id, updatePayload);
+      } else {
+          const newBLDataForFirestore = {
+            ...blDataPayload,
+            createdByUserId: user.uid, // Ensure createdByUserId is set for new BL
+          };
+          await addBLToFirestore(newBLDataForFirestore);
+      }
 
-    toast({
-      title: initialData ? "BL Modifié" : "BL Créé",
-      description: `Le BL N° ${data.blNumber} a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
-    });
-    router.push("/bls"); 
-    router.refresh();
+      toast({
+        title: initialData ? "BL Modifié" : "BL Créé",
+        description: `Le BL N° ${data.blNumber} a été ${initialData ? 'modifié' : 'enregistré'} avec succès.`,
+      });
+      router.push("/bls"); 
+      router.refresh();
+    } catch (error) {
+        console.error("Failed to save BL:", error);
+        toast({
+            title: "Erreur de Sauvegarde",
+            description: `Échec de la sauvegarde du BL. ${error instanceof Error ? error.message : ''}`,
+            variant: "destructive",
+        });
+    } finally {
+        setIsSubmitting(false);
+    }
   }
+  
+  // Update defaultValues if preselectedClientId or initialData changes
+  useEffect(() => {
+    if (!initialData && preselectedClientId && clients.length > 0) {
+      form.reset({
+        ...form.getValues(),
+        clientId: preselectedClientId,
+      });
+    }
+    if (initialData) {
+        form.reset({
+            ...initialData,
+            categories: initialData.categories ? initialData.categories.join(", ") : "",
+            allocatedAmount: initialData.allocatedAmount || 0,
+            status: initialData.status || "en cours",
+            workTypeId: initialData.workTypeId || "",
+        });
+    }
+  }, [preselectedClientId, initialData, clients, form]);
+
 
   return (
     <div className="space-y-6">
@@ -139,7 +188,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                   <FormItem>
                     <FormLabel>Numéro de BL</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ex: MEDU824522" {...field} />
+                      <Input placeholder="Ex: MEDU824522" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -151,10 +200,10 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Client Associé</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || clients.length === 0}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Sélectionnez un client" />
+                          <SelectValue placeholder={clients.length === 0 ? "Chargement des clients..." : "Sélectionnez un client"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -175,7 +224,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Type de Travail</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Sélectionnez un type de travail" />
@@ -200,7 +249,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                   <FormItem>
                     <FormLabel>Montant Alloué par le Client (€)</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="Ex: 5000" {...field} />
+                      <Input type="number" placeholder="Ex: 5000" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -213,7 +262,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                   <FormItem>
                     <FormLabel>Catégories (séparées par une virgule)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ex: Urgent, Fragile, Import Asie" {...field} />
+                      <Input placeholder="Ex: Urgent, Fragile, Import Asie" {...field} disabled={isSubmitting} />
                     </FormControl>
                     <FormDescription>Entrez vos propres catégories pour ce BL.</FormDescription>
                     <FormMessage />
@@ -226,7 +275,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Statut du BL</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Sélectionnez un statut" />
@@ -254,6 +303,7 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                       <Textarea
                         placeholder="Notes additionnelles, contexte pour ce BL..."
                         {...field}
+                        disabled={isSubmitting}
                       />
                     </FormControl>
                     <FormMessage />
@@ -261,10 +311,13 @@ export function BLForm({ initialData, clients, workTypes }: BLFormProps) {
                 )}
               />
               <div className="flex justify-end space-x-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => router.back()}>
+                <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
                   Annuler
                 </Button>
-                <Button type="submit">{initialData ? "Sauvegarder les Modifications" : "Ajouter le BL"}</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {initialData ? "Sauvegarder" : "Ajouter le BL"}
+                </Button>
               </div>
             </form>
           </Form>
