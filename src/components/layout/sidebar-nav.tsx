@@ -3,14 +3,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert } from 'lucide-react'; // Added Briefcase for Work Types, MessageSquare for Chat, ShieldAlert for Admin
+import { LayoutDashboard, Users, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered } from 'lucide-react'; // Added ListOrdered
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { useAuth } from '@/contexts/auth-context'; // Import useAuth
+import { useAuth } from '@/contexts/auth-context'; 
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,6 +19,7 @@ const navItems = [
   { href: '/expenses', label: 'Dépenses', icon: DollarSign },
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
   { href: '/chat', label: 'Messagerie', icon: MessageSquare },
+  { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered }, // New Item
   { href: '/reports', label: 'Rapports', icon: Package },
 ];
 
@@ -28,11 +29,14 @@ const adminNavItems = [
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const { isAdmin } = useAuth(); // Get isAdmin status
+  const { isAdmin, user } = useAuth(); // Get isAdmin status and user
+
+  // Filter out 'Mes Demandes' if user is admin, as admins use the 'Approbations' page
+  const visibleNavItems = user && isAdmin ? navItems.filter(item => item.href !== '/my-requests') : navItems;
 
   return (
     <SidebarMenu>
-      {navItems.map((item) => (
+      {visibleNavItems.map((item) => (
         <SidebarMenuItem key={item.href}>
           <Link href={item.href} passHref legacyBehavior>
             <SidebarMenuButton

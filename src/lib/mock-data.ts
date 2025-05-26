@@ -17,7 +17,7 @@ import {
   orderBy, 
   arrayUnion,
   arrayRemove,
-  deleteField // Ensure deleteField is imported
+  deleteField 
 } from "firebase/firestore";
 
 export let MOCK_USERS: User[] = [
@@ -168,13 +168,14 @@ export const updateClientInFirestore = async (clientId: string, updatedData: Par
 export const deleteClientFromFirestore = async (clientId: string) => {
   const clientDoc = doc(db, "clients", clientId);
   try {
-    // Before deleting the client, find all BLs associated with this client
-    const blsQuery = query(blsCollectionRef, where("clientId", "==", clientId));
-    const blsSnapshot = await getDocs(blsQuery);
-    const deleteBLPromises = blsSnapshot.docs.map(blDoc => deleteBLFromFirestore(blDoc.id)); // This will also handle their expenses
-    await Promise.all(deleteBLPromises);
-
-    // Now delete the client
+    const clientSnapshot = await getDoc(clientDoc);
+    if (clientSnapshot.exists()) {
+        const clientData = clientSnapshot.data();
+        if (clientData && clientData.blIds && clientData.blIds.length > 0) {
+            const deleteBLPromises = clientData.blIds.map((blId: string) => deleteBLFromFirestore(blId));
+            await Promise.all(deleteBLPromises);
+        }
+    }
     await deleteDoc(clientDoc);
   } catch (e) {
     console.error("Error deleting document (client and associated BLs/expenses): ", e);
@@ -297,7 +298,6 @@ export const deleteBLFromFirestore = async (blId: string) => {
                 blIds: arrayRemove(blId)
             }).catch(err => console.error("Failed to remove BL ID from client:", err));
         }
-        // Also delete all expenses associated with this BL
         const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
         const expensesSnapshot = await getDocs(expensesQuery);
         const deleteExpensePromises = expensesSnapshot.docs.map(expenseDoc => deleteDoc(doc(db, "expenses", expenseDoc.id)));
@@ -326,7 +326,6 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
-    // Fallback, should ideally not be reached if newDocSnap exists
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -487,7 +486,6 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
-    // Fallback, should ideally not be reached
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -513,8 +511,8 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
         ...reqData,
         id: docSnap.id,
         createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : new Date().toISOString(),
-        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : undefined,
-        pinExpiresAt: reqData.pinExpiresAt ? (reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : reqData.pinExpiresAt) : undefined,
+        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt : undefined),
+        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt : undefined),
       } as ApprovalRequest;
     });
   } catch (e: any) {
@@ -526,6 +524,35 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
     return [];
   }
 };
+
+export const getApprovalRequestsByUserIdFromFirestore = async (userId: string): Promise<ApprovalRequest[]> => {
+  try {
+    const q = query(
+      approvalRequestsCollectionRef, 
+      where("requestedByUserId", "==", userId), 
+      orderBy("createdAt", "desc")
+    );
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const reqData = docSnap.data();
+      return {
+        ...reqData,
+        id: docSnap.id,
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : new Date().toISOString(),
+        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt : undefined),
+        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt : undefined),
+      } as ApprovalRequest;
+    });
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch approval requests for user ${userId}. Check rules for 'approvalRequests' collection.`, e);
+    } else {
+      console.error(`Error getting documents (approval requests for user ${userId}): `, e);
+    }
+    return [];
+  }
+};
+
 
 export const updateApprovalRequestStatusInFirestore = async (
   requestId: string, 
@@ -544,10 +571,13 @@ export const updateApprovalRequestStatusInFirestore = async (
     };
     if (adminNotes !== undefined) { 
       updateData.adminNotes = adminNotes;
+    } else {
+      updateData.adminNotes = deleteField(); // Clear notes if not provided
     }
+
     if (pinCode !== undefined) {
       updateData.pinCode = pinCode;
-    } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') { // Remove pin if not issuing or pending
+    } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') { 
         updateData.pinCode = deleteField();
     }
 
@@ -584,12 +614,12 @@ export const getPinIssuedRequestForEntity = async (
         id: docSnap.id,
         ...requestData,
         createdAt: requestData.createdAt instanceof Timestamp ? requestData.createdAt.toDate().toISOString() : new Date().toISOString(),
-        processedAt: requestData.processedAt instanceof Timestamp ? requestData.processedAt.toDate().toISOString() : undefined,
-        pinExpiresAt: requestData.pinExpiresAt instanceof Timestamp ? requestData.pinExpiresAt.toDate().toISOString() : requestData.pinExpiresAt,
+        processedAt: requestData.processedAt instanceof Timestamp ? requestData.processedAt.toDate().toISOString() : (requestData.processedAt ? requestData.processedAt : undefined),
+        pinExpiresAt: requestData.pinExpiresAt instanceof Timestamp ? requestData.pinExpiresAt.toDate().toISOString() : (requestData.pinExpiresAt ? requestData.pinExpiresAt : undefined),
       } as ApprovalRequest;
 
       if (request.pinCode && request.pinExpiresAt && new Date() < new Date(request.pinExpiresAt)) {
-        return request; // Return the first valid, non-expired PIN_issued request
+        return request; 
       }
     }
     return null;
