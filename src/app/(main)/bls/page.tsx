@@ -11,10 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { 
     getBLsFromFirestore, 
     getClientsFromFirestore, 
-    MOCK_EXPENSES, // Expenses are still mock
+    getExpensesFromFirestore, // Import function to get expenses from Firestore
     MOCK_USERS 
 } from '@/lib/mock-data';
-import type { BLStatus, BillOfLading, Client, User as AppUser } from '@/lib/types';
+import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types'; // Added Expense type
 import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { useToast } from '@/hooks/use-toast';
 
 const getStatusBadgeStyle = (status: BLStatus, type: 'badge' | 'text' | 'icon') => {
   switch (status) {
@@ -55,8 +56,10 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
   const [searchTerm, setSearchTerm] = useState('');
   const [bls, setBls] = useState<BillOfLading[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS); // Users are still mock
+  const [expenses, setExpenses] = useState<Expense[]>([]); // State for expenses
+  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
   const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
@@ -66,22 +69,24 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const [fetchedBls, fetchedClients] = await Promise.all([
+        const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
           getBLsFromFirestore(),
-          getClientsFromFirestore()
+          getClientsFromFirestore(),
+          getExpensesFromFirestore() // Fetch expenses
         ]);
         setBls(fetchedBls);
         setClients(fetchedClients);
+        setExpenses(fetchedExpenses); // Set expenses state
       } catch (error) {
-        console.error("Failed to fetch BLs or Clients:", error);
-        // Optionally, show a toast message to the user
+        console.error("Failed to fetch data for BLs page:", error);
+        toast({ title: "Erreur de chargement", description: "Impossible de charger toutes les données.", variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-    setUsers(MOCK_USERS); // Users are still mock
-  }, []); 
+    setUsers(MOCK_USERS);
+  }, [toast]); 
 
   const getClientName = (clientId: string) => {
     return clients.find(c => c.id === clientId)?.name || 'N/A';
@@ -96,8 +101,7 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
     const bl = bls.find(b => b.id === blId);
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
     
-    // Expenses are still from MOCK_EXPENSES for now
-    const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === blId);
+    const expensesForBl = expenses.filter(exp => exp.blId === blId); // Use fetched expenses
     const totalExpenses = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
     const balance = bl.allocatedAmount - totalExpenses;
     const profitStatus = balance >= 0 ? 'Bénéfice' : 'Perte';
@@ -140,7 +144,7 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
       bl.status.toLowerCase().includes(lowerSearchTerm) ||
       (bl.createdByUserId && getUserName(bl.createdByUserId).toLowerCase().includes(lowerSearchTerm))
     );
-  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate, clients]); // Added clients to dependency array
+  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate, clients]); 
 
   return (
     <>
@@ -199,7 +203,7 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Utilisateurs</SelectItem>
-                  {users.map(user => ( // MOCK_USERS still used for assignee selection
+                  {users.map(user => ( 
                     <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                   ))}
                 </SelectContent>
