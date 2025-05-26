@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest } from './types';
 import { db } from '@/lib/firebase/config';
 import { 
   collection, 
@@ -41,6 +41,7 @@ const clientsCollectionRef = collection(db, "clients");
 const blsCollectionRef = collection(db, "billsOfLading");
 const expensesCollectionRef = collection(db, "expenses");
 const workTypesCollectionRef = collection(db, "workTypes");
+const approvalRequestsCollectionRef = collection(db, "approvalRequests");
 
 // User Profile CRUD with Firestore
 export const createUserProfile = async (uid: string, email: string | null, displayName: string | null, role: 'admin' | 'employee' = 'employee'): Promise<void> => {
@@ -320,6 +321,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
+    // Fallback, should ideally not be reached if getDoc succeeds
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -461,6 +463,39 @@ export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
   }
 };
 
+// Approval Request Service
+export const addApprovalRequestToFirestore = async (
+  requestData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>
+): Promise<ApprovalRequest> => {
+  try {
+    const docRef = await addDoc(approvalRequestsCollectionRef, {
+      ...requestData,
+      status: 'pending',
+      createdAt: serverTimestamp(),
+    });
+    const newDocSnap = await getDoc(docRef); // Fetch the document to get server-generated fields
+    if (newDocSnap.exists()) {
+      const data = newDocSnap.data();
+      return {
+        id: newDocSnap.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as ApprovalRequest;
+    }
+    // This fallback should ideally not be reached if getDoc after addDoc works as expected
+    return { 
+      ...requestData, 
+      id: docRef.id, 
+      status: 'pending', 
+      createdAt: new Date().toISOString() 
+    } as ApprovalRequest;
+  } catch (e) {
+    console.error("Error adding approval request document: ", e);
+    throw e;
+  }
+};
+
+
 export const addChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
   const newMessage: ChatMessage = {
     id: `msg-${Date.now()}`,
@@ -516,15 +551,3 @@ export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (employeeId.startsWith('user-')) return `Mock User (${employeeId.slice(0,6)})`;
     return 'Utilisateur Inconnu'; 
 };
-
-// MOCK_CLIENTS is now managed by Firestore
-// export let MOCK_CLIENTS: Client[] = [ ... ]; 
-
-// MOCK_BILLS_OF_LADING is now managed by Firestore
-// export let MOCK_BILLS_OF_LADING: BillOfLading[] = [ ... ];
-
-// MOCK_EXPENSES is now managed by Firestore
-// export let MOCK_EXPENSES: Expense[] = [ ... ];
-
-// MOCK_WORK_TYPES is now managed by Firestore
-// export let MOCK_WORK_TYPES: WorkType[] = [ ... ];

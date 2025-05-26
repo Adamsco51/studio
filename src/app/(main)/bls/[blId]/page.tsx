@@ -9,13 +9,13 @@ import {
     getBLByIdFromFirestore,
     getClientByIdFromFirestore,
     getExpensesByBlIdFromFirestore,
-    getWorkTypeByIdFromFirestore, // Added
-    MOCK_USERS, 
+    getWorkTypeByIdFromFirestore, 
     deleteBLFromFirestore, 
     deleteExpenseFromFirestore,
-    getEmployeeNameFromMock
+    getEmployeeNameFromMock,
+    addApprovalRequestToFirestore // Import new service function
 } from '@/lib/mock-data';
-import type { BillOfLading, Expense, Client, User as MockUser, BLStatus, WorkType } from '@/lib/types';
+import type { BillOfLading, Expense, Client, BLStatus, WorkType, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
 import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIconLucide, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +26,6 @@ import { fr } from 'date-fns/locale';
 import { ExpenseForm } from '@/components/expense/expense-form';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -72,12 +71,12 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   const { user, isAdmin } = useAuth(); 
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
-  const [workType, setWorkType] = useState<WorkType | null>(null); // Added state for WorkType
+  const [workType, setWorkType] = useState<WorkType | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingExpenses, setIsLoadingExpenses] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
+  const [isProcessingRequest, setIsProcessingRequest] = useState(false);
   const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
@@ -107,7 +106,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                     const foundClient = await getClientByIdFromFirestore(foundBl.clientId);
                     setClient(foundClient);
                 }
-                if (foundBl.workTypeId) { // Fetch WorkType if ID exists
+                if (foundBl.workTypeId) { 
                     const foundWorkType = await getWorkTypeByIdFromFirestore(foundBl.workTypeId);
                     setWorkType(foundWorkType || null);
                 }
@@ -153,7 +152,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   const handleDeleteExpense = async (expenseId: string) => { 
     if (!requestingDeleteExpense && !isAdmin) return; 
     
-    setIsDeletingExpense(true);
+    setIsProcessingRequest(true);
     try {
       await deleteExpenseFromFirestore(expenseId); 
       setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
@@ -167,7 +166,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         console.error("Failed to delete expense:", error);
         toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
     } finally {
-        setIsDeletingExpense(false);
+        setIsProcessingRequest(false);
     }
   };
   
@@ -190,47 +189,96 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
     }
   };
 
-  const handleSubmitEditRequest = () => {
-    if (!editRequestReason.trim()) {
-      toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
+  const handleSubmitEditRequest = async () => {
+    if (!editRequestReason.trim() || !user || !bl) {
+      toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
       return;
     }
-    console.log(`Demande de modification pour BL ${bl?.blNumber} par ${user?.displayName}. Raison: ${editRequestReason}`);
-    toast({
-      title: "Demande Envoyée (Simulation)",
-      description: "Votre demande de modification a été envoyée à l'administrateur pour approbation.",
-    });
-    setEditRequestReason('');
-    setShowEditRequestDialog(false);
+    setIsProcessingRequest(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'bl',
+            entityId: bl.id,
+            entityDescription: `BL N° ${bl.blNumber}`,
+            actionType: 'edit',
+            reason: editRequestReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: "Votre demande de modification a été enregistrée et est en attente d'approbation.",
+        });
+        setEditRequestReason('');
+        setShowEditRequestDialog(false);
+    } catch (error) {
+        console.error("Failed to submit edit request:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de modification.", variant: "destructive" });
+    } finally {
+        setIsProcessingRequest(false);
+    }
   };
 
-  const handleSubmitDeleteBlRequest = () => {
-    if (!deleteBlReason.trim()) {
-        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
+  const handleSubmitDeleteBlRequest = async () => {
+    if (!deleteBlReason.trim() || !user || !bl) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour BL ${bl?.blNumber} par ${user?.displayName}. Raison: ${deleteBlReason}`);
-    toast({
-        title: "Demande Envoyée (Simulation)",
-        description: "Votre demande de suppression de BL a été envoyée à l'administrateur pour approbation.",
-    });
-    setDeleteBlReason('');
+    setIsProcessingRequest(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'bl',
+            entityId: bl.id,
+            entityDescription: `BL N° ${bl.blNumber}`,
+            actionType: 'delete',
+            reason: deleteBlReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: "Votre demande de suppression de BL a été enregistrée et est en attente d'approbation.",
+        });
+        setDeleteBlReason('');
+        // Do not close the AlertDialog here, it will be closed by AlertDialogCancel or by successful admin deletion
+    } catch (error) {
+        console.error("Failed to submit delete BL request:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
+    } finally {
+        setIsProcessingRequest(false);
+    }
   };
 
-  const handleSubmitDeleteExpenseRequest = () => {
-    if (!requestingDeleteExpense) return;
-    if (!deleteExpenseReason.trim()) {
-        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression de la dépense.", variant: "destructive" });
+  const handleSubmitDeleteExpenseRequest = async () => {
+    if (!requestingDeleteExpense || !deleteExpenseReason.trim() || !user || !bl) {
+        toast({ title: "Erreur", description: "Veuillez sélectionner une dépense, fournir une raison et être connecté.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour la dépense "${requestingDeleteExpense.label}" (BL ${bl?.blNumber}) par ${user?.displayName}. Raison: ${deleteExpenseReason}`);
-    toast({
-        title: "Demande Envoyée (Simulation)",
-        description: `Votre demande de suppression pour la dépense "${requestingDeleteExpense.label}" a été envoyée.`,
-    });
-    setDeleteExpenseReason('');
-    setRequestingDeleteExpense(null);
+    setIsProcessingRequest(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'expense',
+            entityId: requestingDeleteExpense.id,
+            entityDescription: `Dépense: ${requestingDeleteExpense.label} (BL N° ${bl.blNumber})`,
+            actionType: 'delete',
+            reason: deleteExpenseReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: `Votre demande de suppression pour la dépense "${requestingDeleteExpense.label}" a été enregistrée.`,
+        });
+        setDeleteExpenseReason('');
+        setRequestingDeleteExpense(null); // Close the dialog for expense delete request
+    } catch (error) {
+        console.error("Failed to submit delete expense request:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression de dépense.", variant: "destructive" });
+    } finally {
+        setIsProcessingRequest(false);
+    }
   };
+
 
   if (isLoading || (!bl && isLoading)) { 
     return (
@@ -295,13 +343,17 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                       value={editRequestReason}
                       onChange={(e) => setEditRequestReason(e.target.value)}
                       className="min-h-[100px]"
+                      disabled={isProcessingRequest}
                     />
                   </div>
                   <DialogFooter>
                     <DialogClose asChild>
-                       <Button type="button" variant="outline">Annuler</Button>
+                       <Button type="button" variant="outline" disabled={isProcessingRequest}>Annuler</Button>
                     </DialogClose>
-                    <Button type="button" onClick={handleSubmitEditRequest}>Soumettre la Demande</Button>
+                    <Button type="button" onClick={handleSubmitEditRequest} disabled={isProcessingRequest}>
+                        {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Soumettre la Demande
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -310,7 +362,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteBlReason(''); }}>
-                   {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                   {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Trash2 className="mr-2 h-4 w-4" /> Supprimer BL
                 </Button>
               </AlertDialogTrigger>
@@ -332,15 +384,16 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                         value={deleteBlReason}
                         onChange={(e) => setDeleteBlReason(e.target.value)}
                         className="min-h-[100px]"
+                        disabled={isProcessingRequest}
                       />
                        <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
                     </div>
                   )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setDeleteBlReason('')} disabled={isDeleting && isAdmin}>Annuler</AlertDialogCancel>
-                  <Button onClick={isAdmin ? handleDeleteBL : handleSubmitDeleteBlRequest} variant={isAdmin ? "destructive" : "default"} disabled={isDeleting && isAdmin}>
-                    {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <AlertDialogCancel onClick={() => setDeleteBlReason('')} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)}>Annuler</AlertDialogCancel>
+                  <Button onClick={isAdmin ? handleDeleteBL : handleSubmitDeleteBlRequest} variant={isAdmin ? "destructive" : "default"} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)}>
+                    {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
                   </Button>
                 </AlertDialogFooter>
@@ -458,8 +511,8 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                         <TableCell>{getEmployeeNameFromMock(exp.employeeId)}</TableCell>
                         <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
                         <TableCell className="text-right">
-                           <AlertDialog open={requestingDeleteExpense?.id === exp.id && !isDeletingExpense} onOpenChange={(open) => {
-                                if (!open && !isDeletingExpense) { 
+                           <AlertDialog open={requestingDeleteExpense?.id === exp.id && !isProcessingRequest} onOpenChange={(open) => {
+                                if (!open && !isProcessingRequest) { 
                                     setRequestingDeleteExpense(null);
                                     setDeleteExpenseReason('');
                                 }
@@ -473,9 +526,9 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                     setRequestingDeleteExpense(exp); 
                                     setDeleteExpenseReason(''); 
                                 }}
-                                disabled={isDeletingExpense && requestingDeleteExpense?.id === exp.id}
+                                disabled={isProcessingRequest && requestingDeleteExpense?.id === exp.id}
                               >
-                                {isDeletingExpense && requestingDeleteExpense?.id === exp.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                                {isProcessingRequest && requestingDeleteExpense?.id === exp.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -497,19 +550,20 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                             value={deleteExpenseReason}
                                             onChange={(e) => setDeleteExpenseReason(e.target.value)}
                                             className="min-h-[100px]"
+                                            disabled={isProcessingRequest}
                                         />
                                         <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
                                     </div>
                                 )}
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => { setRequestingDeleteExpense(null); setDeleteExpenseReason('');}} disabled={isDeletingExpense}>Annuler</AlertDialogCancel>
+                                <AlertDialogCancel onClick={() => { setRequestingDeleteExpense(null); setDeleteExpenseReason('');}} disabled={isProcessingRequest}>Annuler</AlertDialogCancel>
                                 <Button 
                                   onClick={isAdmin ? () => handleDeleteExpense(exp.id) : handleSubmitDeleteExpenseRequest} 
                                   variant={isAdmin ? "destructive" : "default"}
-                                  disabled={isDeletingExpense}
+                                  disabled={isProcessingRequest}
                                 >
-                                  {isDeletingExpense && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                  {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                   {isAdmin ? "Confirmer" : "Soumettre la Demande"}
                                 </Button>
                               </AlertDialogFooter>
