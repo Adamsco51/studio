@@ -17,7 +17,7 @@ import {
   orderBy,
   arrayUnion,
   arrayRemove,
-  deleteField, // Ensure this is imported
+  deleteField,
   onSnapshot,
   limit,
   writeBatch
@@ -216,13 +216,16 @@ export const deleteClientFromFirestore = async (clientId: string) => {
         if (clientData && clientData.blIds && clientData.blIds.length > 0) {
             for (const blId of clientData.blIds) {
                 const blDocRef = doc(db, "billsOfLading", blId);
+                // Fetch the BL to delete its expenses
+                const blSnapshot = await getDoc(blDocRef);
+                if (blSnapshot.exists()) {
+                    const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
+                    const expensesSnapshot = await getDocs(expensesQuery);
+                    expensesSnapshot.forEach(expenseDoc => {
+                        batch.delete(expenseDoc.ref);
+                    });
+                }
                 batch.delete(blDocRef);
-                // Also delete expenses associated with this BL
-                const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
-                const expensesSnapshot = await getDocs(expensesQuery);
-                expensesSnapshot.forEach(expenseDoc => {
-                    batch.delete(expenseDoc.ref);
-                });
             }
         }
     }
@@ -653,7 +656,7 @@ export const updateApprovalRequestStatusInFirestore = async (
   adminNotes?: string,
   processedByUserId?: string,
   pinCode?: string,
-  pinExpiresAt?: Date | string // Accept Date or ISO string
+  pinExpiresAt?: Date | string | Timestamp // Accept Date or ISO string or Timestamp
 ): Promise<void> => {
   const requestDoc = doc(db, "approvalRequests", requestId);
   try {
@@ -667,7 +670,7 @@ export const updateApprovalRequestStatusInFirestore = async (
 
     if (adminNotes !== undefined && adminNotes !== null && adminNotes.trim() !== "") {
       updateData.adminNotes = adminNotes;
-    } else if (newStatus !== 'pending') { // Only clear if not pending and no new notes
+    } else if (newStatus !== 'pending') { 
       updateData.adminNotes = deleteField();
     }
 
@@ -679,8 +682,13 @@ export const updateApprovalRequestStatusInFirestore = async (
     }
 
     if (pinExpiresAt !== undefined) {
-      // Convert to Firestore Timestamp if it's a Date object or valid ISO string
-      updateData.pinExpiresAt = pinExpiresAt instanceof Date ? Timestamp.fromDate(pinExpiresAt) : Timestamp.fromDate(parseISO(pinExpiresAt as string));
+      if (pinExpiresAt instanceof Date) {
+        updateData.pinExpiresAt = Timestamp.fromDate(pinExpiresAt);
+      } else if (typeof pinExpiresAt === 'string') {
+        updateData.pinExpiresAt = Timestamp.fromDate(parseISO(pinExpiresAt));
+      } else { // Assuming it's already a Timestamp
+        updateData.pinExpiresAt = pinExpiresAt;
+      }
     } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') {
         updateData.pinExpiresAt = deleteField();
     }
@@ -736,9 +744,9 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
   try {
     await updateDoc(requestDoc, {
       status: 'completed',
-      pinCode: deleteField(), // Clear the PIN
-      pinExpiresAt: deleteField(), // Clear PIN expiry
-      processedAt: serverTimestamp() // Mark as processed now
+      pinCode: deleteField(), 
+      pinExpiresAt: deleteField(), 
+      processedAt: serverTimestamp() 
     });
   } catch (e) {
     console.error(`Error completing approval request ${requestId} with PIN: `, e);
@@ -919,9 +927,13 @@ export const getCompanyProfileFromFirestore = async (): Promise<CompanyProfile |
       return docSnap.data() as CompanyProfile;
     }
     return null; // No profile set yet
-  } catch (error) {
-    console.error("Error fetching company profile:", error);
-    throw error; // Or return a default profile
+  } catch (error: any) {
+    if (error.code === 'permission-denied') {
+        console.error("Firestore permission denied while trying to fetch company profile. Check rules for 'companySettings/main'.", error);
+    } else {
+        console.error("Error fetching company profile:", error);
+    }
+    throw error; 
   }
 };
 
@@ -934,4 +946,3 @@ export const updateCompanyProfileInFirestore = async (data: Partial<CompanyProfi
     throw error;
   }
 };
-
