@@ -12,15 +12,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { 
-    MOCK_USERS, 
     addChatMessageToFirestore,
     getChatMessagesFromFirestore,
     addTodoItemToFirestore,
     getTodoItemsFromFirestore,
     updateTodoItemInFirestore,
-    deleteTodoItemFromFirestore
+    deleteTodoItemFromFirestore,
+    getAllUserProfiles // Import to get real users
 } from '@/lib/mock-data';
-import type { ChatMessage, TodoItem, User as MockUser } from '@/lib/types'; 
+import type { ChatMessage, TodoItem, UserProfile } from '@/lib/types'; 
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -47,8 +47,10 @@ export default function ChatPage() {
   const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [appUsers, setAppUsers] = useState<UserProfile[]>([]); // State for real users
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [isLoadingTodos, setIsLoadingTodos] = useState(true);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true); // Loading state for users
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +72,7 @@ export default function ChatPage() {
     if (!user) {
         setIsLoadingMessages(false);
         setIsLoadingTodos(false);
+        setIsLoadingUsers(false);
         return;
     }
 
@@ -77,8 +80,7 @@ export default function ChatPage() {
     const unsubscribeMessages = getChatMessagesFromFirestore((fetchedMessages) => {
       setMessages(fetchedMessages);
       setIsLoadingMessages(false);
-      // Scroll to bottom when new messages arrive or on initial load
-      setTimeout(() => { // Timeout to allow DOM to update
+      setTimeout(() => {
         const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
         if (viewport) {
           viewport.scrollTop = viewport.scrollHeight;
@@ -91,12 +93,23 @@ export default function ChatPage() {
       setTodos(fetchedTodos);
       setIsLoadingTodos(false);
     });
+
+    setIsLoadingUsers(true);
+    getAllUserProfiles()
+      .then(profiles => {
+        setAppUsers(profiles);
+      })
+      .catch(error => {
+        console.error("Error fetching user profiles for chat assignees:", error);
+        toast({ title: "Erreur", description: "Impossible de charger les utilisateurs pour l'assignation.", variant: "destructive" });
+      })
+      .finally(() => setIsLoadingUsers(false));
     
     return () => {
       unsubscribeMessages();
       unsubscribeTodos();
     };
-  }, [user]);
+  }, [user, toast]);
 
 
   const handleSendMessage = async (data: ChatMessageFormValues) => {
@@ -112,7 +125,6 @@ export default function ChatPage() {
     try {
       await addChatMessageToFirestore(messagePayload);
       chatForm.reset();
-       // Optimistic update not strictly needed due to real-time listener, but can clear form faster
     } catch (error) {
         console.error("Error sending message:", error);
         toast({title: "Erreur d'envoi", description: "Impossible d'envoyer le message.", variant: "destructive"});
@@ -124,13 +136,13 @@ export default function ChatPage() {
         toast({title: "Erreur", description: "Vous devez être connecté pour ajouter une tâche.", variant: "destructive"});
         return;
     }
-    const assignedUser = MOCK_USERS.find(u => u.id === data.assignedToUserId);
+    const assignedUser = appUsers.find(u => u.uid === data.assignedToUserId);
     const todoPayload = {
         text: data.text,
         createdByUserId: user.uid,
         createdByName: user.displayName || user.email || "Utilisateur Inconnu",
         assignedToUserId: data.assignedToUserId === NO_ASSIGNEE_VALUE ? undefined : data.assignedToUserId,
-        assignedToUserName: data.assignedToUserId === NO_ASSIGNEE_VALUE ? undefined : assignedUser?.name,
+        assignedToUserName: data.assignedToUserId === NO_ASSIGNEE_VALUE ? undefined : (assignedUser?.displayName || assignedUser?.email),
     };
     try {
         await addTodoItemToFirestore(todoPayload);
@@ -153,6 +165,7 @@ export default function ChatPage() {
           title: "Tâche mise à jour",
           description: `"${todoToUpdate.text}" marquée comme ${newCompletedStatus ? 'terminée' : 'non terminée'}.`,
         });
+        // Firestore listener will update the local state
     } catch (error) {
         console.error("Error toggling todo:", error);
         toast({title: "Erreur de mise à jour", description: "Impossible de mettre à jour la tâche.", variant: "destructive"});
@@ -163,13 +176,14 @@ export default function ChatPage() {
     try {
         await deleteTodoItemFromFirestore(todoId);
         toast({ title: "Tâche supprimée", description: `"${todoText}" a été supprimée.`, variant: "destructive" });
+        // Firestore listener will update the local state
     } catch (error) {
         console.error("Error deleting todo:", error);
         toast({title: "Erreur de suppression", description: "Impossible de supprimer la tâche.", variant: "destructive"});
     }
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name: string | null | undefined) => {
     if (!name) return "??";
     const names = name.split(' ');
     if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
@@ -230,8 +244,8 @@ export default function ChatPage() {
                   </div>
                    {msg.senderId === CURRENT_USER_ID && (
                      <Avatar className="h-8 w-8 border">
-                       <AvatarImage src={`https://placehold.co/40x40.png?text=${getInitials(user.displayName || user.email || "Moi")}`} alt={user.displayName || "Moi"} data-ai-hint="user initial"/>
-                       <AvatarFallback>{getInitials(user.displayName || user.email || "Moi")}</AvatarFallback>
+                       <AvatarImage src={`https://placehold.co/40x40.png?text=${getInitials(user.displayName || user.email)}`} alt={user.displayName || "Moi"} data-ai-hint="user initial"/>
+                       <AvatarFallback>{getInitials(user.displayName || user.email)}</AvatarFallback>
                     </Avatar>
                   )}
                 </div>
@@ -257,7 +271,7 @@ export default function ChatPage() {
           <CardContent>
             <form onSubmit={todoForm.handleSubmit(handleAddTodo)} className="space-y-3 mb-6">
               <div>
-                <Input {...todoForm.register("text")} placeholder="Nouvelle tâche..." disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos} />
+                <Input {...todoForm.register("text")} placeholder="Nouvelle tâche..." disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos || isLoadingUsers} />
                  {todoForm.formState.errors.text && <p className="text-xs text-destructive mt-1">{todoForm.formState.errors.text.message}</p>}
               </div>
               <div>
@@ -268,22 +282,22 @@ export default function ChatPage() {
                     <Select 
                       onValueChange={(value) => field.onChange(value === NO_ASSIGNEE_VALUE ? undefined : value)} 
                       value={field.value ?? NO_ASSIGNEE_VALUE}
-                      disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos}
+                      disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos || isLoadingUsers}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Assigner à (optionnel)" />
+                        <SelectValue placeholder={isLoadingUsers ? "Chargement utilisateurs..." : "Assigner à (optionnel)"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_ASSIGNEE_VALUE}>Non assigné</SelectItem>
-                        {MOCK_USERS.map((mockUser) => ( 
-                          <SelectItem key={mockUser.id} value={mockUser.id}>{mockUser.name}</SelectItem>
+                        {appUsers.map((profile) => ( 
+                          <SelectItem key={profile.uid} value={profile.uid}>{profile.displayName || profile.email || 'Utilisateur Inconnu'}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   )}
                 />
               </div>
-              <Button type="submit" className="w-full" size="sm" disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos}>
+              <Button type="submit" className="w-full" size="sm" disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos || isLoadingUsers}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Ajouter la Tâche
               </Button>
             </form>
