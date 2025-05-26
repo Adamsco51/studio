@@ -463,4 +463,3 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     </>
   );
 }
-```

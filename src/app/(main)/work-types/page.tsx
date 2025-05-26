@@ -56,12 +56,15 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
 
 
   useEffect(() => {
-    if (!user) return; 
+    if (!user) {
+      setIsLoading(false); // Stop loading if no user
+      return;
+    }
     const fetchWorkTypes = async () => {
       setIsLoading(true);
       try {
         const fetchedWorkTypes = await getWorkTypesFromFirestore();
-        setWorkTypes(fetchedWorkTypes);
+        setWorkTypes(fetchedWorkTypes.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       } catch (error) {
         console.error("Failed to fetch work types:", error);
         toast({ title: "Erreur", description: "Impossible de charger les types de travail.", variant: "destructive" });
@@ -91,7 +94,6 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
         description: "Le type de travail a été supprimé avec succès.",
       });
       setDeletingWorkType(null);
-      router.refresh(); 
     } catch (error) {
       console.error("Failed to delete work type:", error);
       toast({ title: "Erreur", description: "Échec de la suppression.", variant: "destructive" });
@@ -242,8 +244,14 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
                         </Button>
                       </Link>
                     ) : (
-                       <Dialog open={editingWorkType?.id === wt.id} onOpenChange={(isOpen) => {
-                        if (!isOpen) {setEditingWorkType(null); setEditReason('');} else {setEditingWorkType(wt); setEditReason('');}
+                       <Dialog open={editingWorkType?.id === wt.id && !isProcessingAction} onOpenChange={(isOpen) => {
+                        if (!isOpen && !isProcessingAction) {
+                            setEditingWorkType(null); 
+                            setEditReason('');
+                        } else if (isOpen && !isProcessingAction) {
+                            setEditingWorkType(wt); 
+                            setEditReason('');
+                        }
                         
                       }}>
                         <DialogTrigger asChild>
@@ -274,7 +282,10 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
                     )}
                    
                     <AlertDialog open={deletingWorkType?.id === wt.id && !isProcessingAction} onOpenChange={(isOpen) => {
-                        if (!isOpen && !isProcessingAction) {setDeletingWorkType(null); setDeleteReason('');}
+                         if (!isOpen && !isProcessingAction) {
+                            setDeletingWorkType(null); 
+                            setDeleteReason('');
+                        }
                     }}>
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive" size="sm" onClick={() => {setDeletingWorkType(wt); setDeleteReason('');}} disabled={isProcessingAction}>
@@ -326,4 +337,3 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
     </>
   );
 }
-```
