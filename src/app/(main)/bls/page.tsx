@@ -11,12 +11,12 @@ import { Badge } from '@/components/ui/badge';
 import { 
     getBLsFromFirestore, 
     getClientsFromFirestore, 
-    getExpensesFromFirestore, // Import function to get expenses from Firestore
+    getExpensesFromFirestore, 
     MOCK_USERS 
 } from '@/lib/mock-data';
-import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types'; // Added Expense type
+import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types';
 import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -56,7 +56,7 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
   const [searchTerm, setSearchTerm] = useState('');
   const [bls, setBls] = useState<BillOfLading[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]); // State for expenses
+  const [expenses, setExpenses] = useState<Expense[]>([]); 
   const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -72,11 +72,11 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
         const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
           getBLsFromFirestore(),
           getClientsFromFirestore(),
-          getExpensesFromFirestore() // Fetch expenses
+          getExpensesFromFirestore() 
         ]);
         setBls(fetchedBls);
         setClients(fetchedClients);
-        setExpenses(fetchedExpenses); // Set expenses state
+        setExpenses(fetchedExpenses); 
       } catch (error) {
         console.error("Failed to fetch data for BLs page:", error);
         toast({ title: "Erreur de chargement", description: "Impossible de charger toutes les données.", variant: "destructive" });
@@ -101,7 +101,7 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
     const bl = bls.find(b => b.id === blId);
     if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
     
-    const expensesForBl = expenses.filter(exp => exp.blId === blId); // Use fetched expenses
+    const expensesForBl = expenses.filter(exp => exp.blId === blId); 
     const totalExpenses = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
     const balance = bl.allocatedAmount - totalExpenses;
     const profitStatus = balance >= 0 ? 'Bénéfice' : 'Perte';
@@ -128,7 +128,8 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
 
     if (selectedDate) {
       tempBLs = tempBLs.filter(bl => {
-        const blCreationDate = new Date(bl.createdAt);
+        if (!bl.createdAt) return false;
+        const blCreationDate = parseISO(bl.createdAt);
         return blCreationDate.getFullYear() === selectedDate.getFullYear() &&
                blCreationDate.getMonth() === selectedDate.getMonth() &&
                blCreationDate.getDate() === selectedDate.getDate();
@@ -283,17 +284,17 @@ export default function BillsOfLadingPage({ params: paramsPromise }: { params: P
                       <TableCell className="font-medium">{bl.blNumber}</TableCell>
                       <TableCell>{getClientName(bl.clientId)}</TableCell>
                       <TableCell>{getUserName(bl.createdByUserId)}</TableCell>
-                      <TableCell>{format(new Date(bl.createdAt), 'dd MMM yyyy', { locale: fr })}</TableCell>
+                      <TableCell>{bl.createdAt ? format(parseISO(bl.createdAt), 'dd MMM yyyy', { locale: fr }) : 'N/A'}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={cn("capitalize flex items-center w-fit", getStatusBadgeStyle(bl.status, 'badge'))}>
                           <StatusIcon status={bl.status} />
                           {bl.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
-                      <TableCell>{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
+                      <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
+                      <TableCell>{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                       <TableCell className={profit ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                        {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                        {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
                       </TableCell>
                       <TableCell>
                         <Badge variant={profit ? 'default' : 'destructive'} className={profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{profitStatus}</Badge>

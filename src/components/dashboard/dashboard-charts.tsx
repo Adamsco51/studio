@@ -12,7 +12,7 @@ import {
   type ChartConfig
 } from "@/components/ui/chart";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PieChart as PieChartIcon, Activity } from 'lucide-react'; // Added Activity
+import { PieChart as PieChartIcon, Activity } from 'lucide-react'; 
 
 // Define the props for this component
 interface DashboardChartsProps {
@@ -108,7 +108,7 @@ export default function DashboardCharts({
                 accessibilityLayer
                 data={monthlyExpensesChartData}
                 margin={{
-                  left: 0, // Adjusted margin
+                  left: 0, 
                   right: 12,
                   top: 5,
                   bottom: 5,
@@ -120,13 +120,12 @@ export default function DashboardCharts({
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  // tickFormatter={(value) => value.slice(0, 3)} // Optional: shorten month labels
                 />
                 <RechartsPrimitive.YAxis
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  tickFormatter={(value) => `${value.toLocaleString('fr-FR', { notation: 'compact', compactDisplay: 'short' })} €`}
+                  tickFormatter={(value) => value.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF', notation: 'compact', compactDisplay: 'short', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   domain={['auto', 'auto']}
                 />
                 <ChartTooltip
@@ -136,7 +135,7 @@ export default function DashboardCharts({
                 <RechartsPrimitive.Line
                   dataKey="totalExpenses"
                   type="monotone"
-                  stroke="var(--color-totalExpenses)" // Uses color from expensesChartConfig
+                  stroke="var(--color-totalExpenses)" 
                   strokeWidth={2.5}
                   dot={{
                     r: 4,

@@ -13,16 +13,18 @@ import {
     deleteBLFromFirestore, 
     deleteExpenseFromFirestore,
     getEmployeeNameFromMock,
-    addApprovalRequestToFirestore, // Import new service function
-    getUserProfile
+    addApprovalRequestToFirestore, 
+    getUserProfile,
+    getPinIssuedRequestForEntity,
+    completeApprovalRequestWithPin
 } from '@/lib/mock-data';
 import type { BillOfLading, Expense, Client, BLStatus, WorkType, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
-import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIconLucide, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, PlusCircle, DollarSign, FileText, Package, ShoppingCart, Users as ClientIcon, User as EmployeeIconLucide, Tag, CheckCircle, AlertCircle, Clock, Briefcase, UserCircle2, Loader2, KeyRound } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { ExpenseForm } from '@/components/expense/expense-form';
 import {
@@ -90,6 +92,12 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   const [showDeleteExpenseDialog, setShowDeleteExpenseDialog] = useState(false);
   const [requestingDeleteExpense, setRequestingDeleteExpense] = useState<Expense | null>(null);
   const [deleteExpenseReason, setDeleteExpenseReason] = useState('');
+  
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pinEntry, setPinEntry] = useState('');
+  const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
+  const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
+  const [pinEntityType, setPinEntityType] = useState<'bl' | 'expense' | null>(null);
 
 
   useEffect(() => {
@@ -153,8 +161,136 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   const handleExpenseAdded = (newExpense: Expense) => { 
     setExpenses(prevExpenses => [newExpense, ...prevExpenses].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   };
+  
+  const handleEditBlAction = async () => {
+    if (!bl || !user) return;
+    if (isAdmin) {
+      router.push(`/bls/${bl.id}/edit`);
+    } else {
+      setIsProcessingRequest(true);
+      try {
+        const pinRequest = await getPinIssuedRequestForEntity('bl', bl.id, 'edit');
+        if (pinRequest) {
+          setActivePinRequest(pinRequest);
+          setPinActionType('edit');
+          setPinEntityType('bl');
+          setShowPinDialog(true);
+        } else {
+          setEditRequestReason('');
+          setShowEditRequestDialog(true);
+        }
+      } catch (error) {
+         toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    }
+  };
 
-  const handleDeleteExpense = async (expenseId: string) => { 
+  const handleDeleteBlAction = async () => {
+    if (!bl || !user) return;
+     if (isAdmin) {
+      setShowDeleteBlDialog(true);
+    } else {
+      setIsProcessingRequest(true);
+      try {
+        const pinRequest = await getPinIssuedRequestForEntity('bl', bl.id, 'delete');
+        if (pinRequest) {
+          setActivePinRequest(pinRequest);
+          setPinActionType('delete');
+          setPinEntityType('bl');
+          setShowPinDialog(true);
+        } else {
+          setDeleteBlReason('');
+          setShowDeleteBlDialog(true);
+        }
+      } catch (error) {
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    }
+  };
+  
+  const handleDeleteExpenseAction = async (expense: Expense) => {
+    if(!user || !bl) return;
+    setRequestingDeleteExpense(expense);
+    if (isAdmin) {
+      setShowDeleteExpenseDialog(true);
+    } else {
+       setIsProcessingRequest(true);
+      try {
+        const pinRequest = await getPinIssuedRequestForEntity('expense', expense.id, 'delete');
+        if (pinRequest) {
+          setActivePinRequest(pinRequest);
+          setPinActionType('delete');
+          setPinEntityType('expense');
+          setShowPinDialog(true);
+        } else {
+          setDeleteExpenseReason('');
+          setShowDeleteExpenseDialog(true);
+        }
+      } catch (error) {
+        toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
+      } finally {
+        setIsProcessingRequest(false);
+      }
+    }
+  };
+
+  const handlePinSubmit = async () => {
+    if (!pinEntry.trim() || !activePinRequest || !pinActionType || !pinEntityType || !bl) {
+      toast({ title: "Erreur", description: "PIN requis ou informations manquantes.", variant: "destructive" });
+      return;
+    }
+    if (pinEntry !== activePinRequest.pinCode) {
+      toast({ title: "Erreur PIN", description: "Le PIN saisi est incorrect.", variant: "destructive" });
+      return;
+    }
+    if (activePinRequest.pinExpiresAt && new Date() > new Date(activePinRequest.pinExpiresAt)) {
+        toast({ title: "Erreur PIN", description: "Le PIN a expiré.", variant: "destructive" });
+        setShowPinDialog(false);
+        setPinEntry('');
+        setActivePinRequest(null);
+        return;
+    }
+
+    setIsProcessingRequest(true);
+    try {
+      if (pinEntityType === 'bl') {
+        if (pinActionType === 'edit') {
+          await completeApprovalRequestWithPin(activePinRequest.id);
+          toast({ title: "PIN Validé", description: "Redirection vers la page de modification." });
+          router.push(`/bls/${bl.id}/edit`);
+        } else if (pinActionType === 'delete') {
+          await deleteBLFromFirestore(bl.id);
+          await completeApprovalRequestWithPin(activePinRequest.id);
+          toast({ title: "BL Supprimé", description: `Le BL N° ${bl.blNumber} a été supprimé avec succès via PIN.` });
+          router.push('/bls');
+          router.refresh();
+        }
+      } else if (pinEntityType === 'expense' && requestingDeleteExpense) {
+         if (pinActionType === 'delete') {
+            await deleteExpenseFromFirestore(requestingDeleteExpense.id);
+            setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== requestingDeleteExpense.id));
+            await completeApprovalRequestWithPin(activePinRequest.id);
+            toast({ title: "Dépense Supprimée", description: `La dépense "${requestingDeleteExpense.label}" a été supprimée via PIN.` });
+         }
+      }
+      setShowPinDialog(false);
+      setPinEntry('');
+      setActivePinRequest(null);
+      setRequestingDeleteExpense(null);
+    } catch (error) {
+      console.error(`Erreur lors de l'action ${pinActionType} avec PIN:`, error);
+      toast({ title: "Erreur", description: `Échec de l'action ${pinActionType} avec PIN.`, variant: "destructive" });
+    } finally {
+      setIsProcessingRequest(false);
+    }
+  };
+
+
+  const handleDeleteExpenseDirectly = async (expenseId: string) => { 
     if (!isAdmin) return; 
     
     setIsDeleting(true); 
@@ -165,17 +301,17 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         title: "Dépense Supprimée",
         description: "La dépense a été supprimée avec succès.",
       });
-      setShowDeleteExpenseDialog(false); 
-      setRequestingDeleteExpense(null);
     } catch (error) {
         console.error("Failed to delete expense:", error);
         toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
     } finally {
         setIsDeleting(false);
+        setShowDeleteExpenseDialog(false); 
+        setRequestingDeleteExpense(null);
     }
   };
   
-  const handleDeleteBL = async () => {
+  const handleDeleteBLDirectly = async () => {
     if (!bl || !bl.id || !isAdmin) return;
     setIsDeleting(true);
     try {
@@ -191,6 +327,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         toast({ title: "Erreur", description: "Échec de la suppression du BL.", variant: "destructive"});
     } finally {
         setIsDeleting(false);
+        setShowDeleteBlDialog(false);
     }
   };
 
@@ -321,98 +458,15 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               </Button>
             </Link>
 
-            {isAdmin ? (
-              <Link href={`/bls/${bl.id}/edit`} passHref>
-                <Button variant="outline" disabled={isProcessingRequest || isDeleting}>
-                  <Edit className="mr-2 h-4 w-4" /> Modifier
-                </Button>
-              </Link>
-            ) : (
-              <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" onClick={() => setEditRequestReason('')} disabled={isProcessingRequest || isDeleting}>
-                    {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Edit className="mr-2 h-4 w-4" /> Modifier
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Demande de Modification du BL</DialogTitle>
-                    <DialogDescription>
-                      Veuillez expliquer pourquoi vous souhaitez modifier ce BL. Votre demande sera examinée par un administrateur.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-2 py-2">
-                    <Label htmlFor="editReasonBl">Raison de la demande :</Label>
-                    <Textarea
-                      id="editReasonBl"
-                      placeholder="Ex: Correction du montant alloué, mise à jour de la description..."
-                      value={editRequestReason}
-                      onChange={(e) => setEditRequestReason(e.target.value)}
-                      className="min-h-[100px]"
-                      disabled={isProcessingRequest}
-                    />
-                  </div>
-                  <DialogFooter>
-                    <DialogClose asChild>
-                       <Button type="button" variant="outline" disabled={isProcessingRequest}>Annuler</Button>
-                    </DialogClose>
-                    <Button type="button" onClick={handleSubmitEditRequest} disabled={isProcessingRequest || !editRequestReason.trim()}>
-                        {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Soumettre la Demande
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-
-            <AlertDialog open={showDeleteBlDialog} onOpenChange={(isOpen) => {
-                if (!isOpen) {
-                    setDeleteBlReason(''); 
-                    setShowDeleteBlDialog(false);
-                } else {
-                    setShowDeleteBlDialog(true);
-                }
-            }}>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteBlReason(''); setShowDeleteBlDialog(true);}} disabled={isProcessingRequest || isDeleting}>
-                   {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  <Trash2 className="mr-2 h-4 w-4" /> Supprimer BL
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {isAdmin ? "Êtes-vous sûr de vouloir supprimer ce BL ?" : "Demande de Suppression de BL"}
-                  </AlertDialogTitle>
-                  {isAdmin ? (
-                    <AlertDialogDescription>
-                      Cette action est irréversible et supprimera le BL N° {bl.blNumber} ainsi que toutes ses dépenses associées.
-                    </AlertDialogDescription>
-                  ) : (
-                    <div className="space-y-2 py-2 text-left">
-                      <Label htmlFor="deleteBlReason">Raison de la demande de suppression :</Label>
-                      <Textarea
-                        id="deleteBlReason"
-                        placeholder="Expliquez pourquoi vous souhaitez supprimer ce BL..."
-                        value={deleteBlReason}
-                        onChange={(e) => setDeleteBlReason(e.target.value)}
-                        className="min-h-[100px]"
-                        disabled={isProcessingRequest}
-                      />
-                       <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
-                    </div>
-                  )}
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => {setDeleteBlReason(''); setShowDeleteBlDialog(false);}} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)}>Annuler</AlertDialogCancel>
-                  <Button onClick={isAdmin ? handleDeleteBL : handleSubmitDeleteBlRequest} variant={isAdmin ? "destructive" : "default"} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) || (!isAdmin && !deleteBlReason.trim())}>
-                    {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
-                  </Button>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <Button variant="outline" onClick={handleEditBlAction} disabled={isProcessingRequest || isDeleting}>
+              {(isProcessingRequest && pinActionType === 'edit' && pinEntityType === 'bl') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Edit className="mr-2 h-4 w-4" /> Modifier
+            </Button>
+            
+            <Button variant="destructive" onClick={handleDeleteBlAction} disabled={isProcessingRequest || isDeleting}>
+              {(isDeleting && isAdmin) || (isProcessingRequest && pinActionType === 'delete' && pinEntityType === 'bl') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Trash2 className="mr-2 h-4 w-4" /> Supprimer BL
+            </Button>
           </div>
         }
       />
@@ -451,11 +505,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Montant Alloué</p>
-                <p className="font-semibold text-green-600">{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                <p className="font-semibold text-green-600">{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Date de création</p>
-                <p className="font-semibold">{bl.createdAt ? format(new Date(bl.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</p>
+                <p className="font-semibold">{bl.createdAt ? format(parseISO(bl.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</p>
               </div>
               {createdByUserDisplay && (
                  <div>
@@ -465,12 +519,12 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               )}
               <div>
                 <p className="text-sm text-muted-foreground">Dépenses Totales</p>
-                <p className="font-semibold text-red-600">{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                <p className="font-semibold text-red-600">{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</p>
               </div>
               <div className="md:col-span-2">
                 <p className="text-sm text-muted-foreground">Solde Actuel</p>
                 <p className={`text-2xl font-bold ${profit ? 'text-green-600' : 'text-red-600'}`}>
-                  {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                  {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
                 </p>
               </div>
               <div>
@@ -521,15 +575,17 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                     {expenses.map((exp) => (
                       <TableRow key={exp.id}>
                         <TableCell className="font-medium">{exp.label}</TableCell>
-                        <TableCell>{format(new Date(exp.date), 'dd/MM/yy HH:mm', { locale: fr })}</TableCell>
+                        <TableCell>{format(parseISO(exp.date), 'dd/MM/yy HH:mm', { locale: fr })}</TableCell>
                         <TableCell>{getEmployeeNameFromMock(exp.employeeId)}</TableCell>
-                        <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
+                        <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                         <TableCell className="text-right">
                            <AlertDialog open={showDeleteExpenseDialog && requestingDeleteExpense?.id === exp.id} onOpenChange={(open) => {
                                 if (!open) { 
                                     setShowDeleteExpenseDialog(false);
                                     setRequestingDeleteExpense(null);
                                     setDeleteExpenseReason('');
+                                } else {
+                                  setShowDeleteExpenseDialog(true);
                                 }
                             }}>
                             <AlertDialogTrigger asChild>
@@ -537,14 +593,10 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                 variant="ghost" 
                                 size="sm" 
                                 className="text-muted-foreground hover:text-destructive"
-                                onClick={() => {
-                                    setRequestingDeleteExpense(exp); 
-                                    setDeleteExpenseReason(''); 
-                                    setShowDeleteExpenseDialog(true);
-                                }}
-                                disabled={(isProcessingRequest && requestingDeleteExpense?.id === exp.id) || isDeleting}
+                                onClick={() => handleDeleteExpenseAction(exp)}
+                                disabled={(isProcessingRequest && requestingDeleteExpense?.id === exp.id && pinEntityType === 'expense') || (isDeleting && isAdmin && requestingDeleteExpense?.id === exp.id)}
                               >
-                                {(isProcessingRequest && requestingDeleteExpense?.id === exp.id) || (isDeleting && isAdmin && requestingDeleteExpense?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                                {((isProcessingRequest && requestingDeleteExpense?.id === exp.id && pinEntityType === 'expense') || (isDeleting && isAdmin && requestingDeleteExpense?.id === exp.id)) ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -554,11 +606,11 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                 </AlertDialogTitle>
                                 {isAdmin ? (
                                   <AlertDialogDescription>
-                                    L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                                    L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })} est irréversible.
                                   </AlertDialogDescription>
                                 ) : (
                                     <div className="space-y-2 py-2 text-left">
-                                        <p className="text-sm text-muted-foreground">Montant : {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                                        <p className="text-sm text-muted-foreground">Montant : {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</p>
                                         <Label htmlFor={`deleteExpenseReason-${exp.id}`}>Raison de la demande :</Label>
                                         <Textarea
                                             id={`deleteExpenseReason-${exp.id}`}
@@ -575,7 +627,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                               <AlertDialogFooter>
                                 <AlertDialogCancel onClick={() => { setShowDeleteExpenseDialog(false); setRequestingDeleteExpense(null); setDeleteExpenseReason('');}} disabled={isProcessingRequest || isDeleting}>Annuler</AlertDialogCancel>
                                 <Button 
-                                  onClick={isAdmin ? () => handleDeleteExpense(exp.id) : handleSubmitDeleteExpenseRequest} 
+                                  onClick={isAdmin ? () => handleDeleteExpenseDirectly(exp.id) : handleSubmitDeleteExpenseRequest} 
                                   variant={isAdmin ? "destructive" : "default"}
                                   disabled={isProcessingRequest || isDeleting || (!isAdmin && !deleteExpenseReason.trim())}
                                 >
@@ -632,6 +684,127 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
             </Card>
         </div>
       </div>
+
+      {/* Edit Request Dialog (for non-admins) */}
+      <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Demande de Modification du BL</DialogTitle>
+            <DialogDescription>
+              Veuillez expliquer pourquoi vous souhaitez modifier ce BL. Votre demande sera examinée par un administrateur.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="editReasonBl">Raison de la demande :</Label>
+            <Textarea
+              id="editReasonBl"
+              placeholder="Ex: Correction du montant alloué, mise à jour de la description..."
+              value={editRequestReason}
+              onChange={(e) => setEditRequestReason(e.target.value)}
+              className="min-h-[100px]"
+              disabled={isProcessingRequest}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={isProcessingRequest}>Annuler</Button>
+            </DialogClose>
+            <Button type="button" onClick={handleSubmitEditRequest} disabled={isProcessingRequest || !editRequestReason.trim()}>
+                {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Soumettre la Demande
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete BL Confirmation / Request Dialog */}
+      <AlertDialog open={showDeleteBlDialog} onOpenChange={(isOpen) => {
+          if (!isOpen) {
+              setDeleteBlReason(''); 
+          }
+          setShowDeleteBlDialog(isOpen);
+      }}>
+        <AlertDialogTrigger asChild>
+            {/* This button is now in page header actions */}
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {isAdmin ? "Êtes-vous sûr de vouloir supprimer ce BL ?" : "Demande de Suppression de BL"}
+            </AlertDialogTitle>
+            {isAdmin ? (
+              <AlertDialogDescription>
+                Cette action est irréversible et supprimera le BL N° {bl.blNumber} ainsi que toutes ses dépenses associées.
+              </AlertDialogDescription>
+            ) : (
+              <div className="space-y-2 py-2 text-left">
+                <Label htmlFor="deleteBlReason">Raison de la demande de suppression :</Label>
+                <Textarea
+                  id="deleteBlReason"
+                  placeholder="Expliquez pourquoi vous souhaitez supprimer ce BL..."
+                  value={deleteBlReason}
+                  onChange={(e) => setDeleteBlReason(e.target.value)}
+                  className="min-h-[100px]"
+                  disabled={isProcessingRequest}
+                />
+                  <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {setDeleteBlReason(''); setShowDeleteBlDialog(false);}} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)}>Annuler</AlertDialogCancel>
+            <Button onClick={isAdmin ? handleDeleteBLDirectly : handleSubmitDeleteBlRequest} variant={isAdmin ? "destructive" : "default"} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) || (!isAdmin && !deleteBlReason.trim())}>
+              {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isAdmin ? "Confirmer la Suppression" : "Soumettre la Demande"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* PIN Entry Dialog */}
+      <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setPinEntry('');
+          setActivePinRequest(null);
+          setPinActionType(null);
+          setPinEntityType(null);
+        }
+        setShowPinDialog(isOpen);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
+            </DialogTitle>
+            <DialogDescription>
+              Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} {pinEntityType === 'bl' ? `le BL N° ${bl?.blNumber}` : `la dépense "${requestingDeleteExpense?.label}"`}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="pinCode">Code PIN (6 chiffres)</Label>
+            <Input
+              id="pinCode"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={pinEntry}
+              onChange={(e) => setPinEntry(e.target.value.replace(/\D/g, '').substring(0,6))}
+              placeholder="123456"
+              disabled={isProcessingRequest}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isProcessingRequest}>Annuler</Button>
+            </DialogClose>
+            <Button onClick={handlePinSubmit} disabled={isProcessingRequest || pinEntry.length !== 6}>
+              {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Valider le PIN
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

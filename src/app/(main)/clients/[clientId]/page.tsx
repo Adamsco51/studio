@@ -13,8 +13,8 @@ import {
   getEmployeeNameFromMock,
   addApprovalRequestToFirestore,
   getUserProfile,
-  getPinIssuedRequestForEntity, // Added
-  completeApprovalRequestWithPin // Added
+  getPinIssuedRequestForEntity, 
+  completeApprovalRequestWithPin 
 } from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
@@ -47,7 +47,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/auth-context'; 
@@ -178,7 +178,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const handleDeleteClientAction = async () => {
     if (!client || !user) return;
     if (isAdmin) {
-      setShowDeleteClientDialog(true); // Open direct delete confirmation for admin
+      setShowDeleteClientDialog(true); 
     } else {
       setIsProcessingRequest(true);
       try {
@@ -189,7 +189,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           setShowPinDialog(true);
         } else {
           setDeleteClientReason('');
-          setShowDeleteClientDialog(true); // This dialog will now show reason input for non-admins
+          setShowDeleteClientDialog(true); 
         }
       } catch (error) {
         toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive"});
@@ -205,11 +205,11 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       return;
     }
     if (pinEntry !== activePinRequest.pinCode) {
-      toast({ title: "Erreur", description: "PIN incorrect.", variant: "destructive" });
+      toast({ title: "Erreur PIN", description: "Le PIN saisi est incorrect.", variant: "destructive" });
       return;
     }
     if (activePinRequest.pinExpiresAt && new Date() > new Date(activePinRequest.pinExpiresAt)) {
-        toast({ title: "Erreur", description: "Le PIN a expiré.", variant: "destructive" });
+        toast({ title: "Erreur PIN", description: "Le PIN a expiré.", variant: "destructive" });
         setShowPinDialog(false);
         setPinEntry('');
         setActivePinRequest(null);
@@ -403,7 +403,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                 <h4 className="font-semibold text-sm text-muted-foreground mb-2">Informations de création</h4>
                 <div className="flex items-center text-sm text-muted-foreground mb-1">
                     <CalendarDays className="mr-2 h-4 w-4" />
-                    <span>Créé le: {client.createdAt ? format(new Date(client.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</span>
+                    <span>Créé le: {client.createdAt ? format(parseISO(client.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</span>
                 </div>
                 {createdByUserDisplay && (
                     <div className="flex items-center text-sm text-muted-foreground">
@@ -452,9 +452,9 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                       <React.Fragment key={bl.id}>
                         <TableRow onClick={() => toggleBlExpansion(bl.id)} className="cursor-pointer hover:bg-muted/50 dark:hover:bg-muted/20">
                           <TableCell className="font-medium">{bl.blNumber}</TableCell>
-                          <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
+                          <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                           <TableCell className={bl.profit ? 'text-green-600' : 'text-red-600'}>
-                            {bl.balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                            {bl.balance.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
                           </TableCell>
                           <TableCell>
                             <Badge variant={bl.profit ? 'default' : 'destructive'} className={bl.profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{bl.financialStatus}</Badge>
@@ -489,9 +489,9 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                                       {bl.expenses.map(exp => (
                                         <TableRow key={exp.id} className="hover:bg-muted/5 dark:hover:bg-muted/10">
                                           <TableCell>{exp.label}</TableCell>
-                                          <TableCell>{format(new Date(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                                          <TableCell>{format(parseISO(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
                                           <TableCell>{getEmployeeNameFromMock(exp.employeeId)}</TableCell>
-                                          <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
+                                          <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                                         </TableRow>
                                       ))}
                                     </TableBody>
@@ -642,5 +642,3 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     </>
   );
 }
-
-    

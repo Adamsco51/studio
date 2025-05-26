@@ -14,12 +14,12 @@ import {
     deleteExpenseFromFirestore,
     getEmployeeNameFromMock,
     addApprovalRequestToFirestore,
-    getPinIssuedRequestForEntity, // Added
-    completeApprovalRequestWithPin // Added
+    getPinIssuedRequestForEntity, 
+    completeApprovalRequestWithPin 
 } from '@/lib/mock-data';
 import type { Expense, BillOfLading, Client, ApprovalRequest } from '@/lib/types';
 import { PlusCircle, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit, Loader2, KeyRound } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
 import {
@@ -118,8 +118,10 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     };
     if (user) { 
         fetchData();
+    } else if (!user && !isLoading) { // If not logged in and not already loading, stop loading.
+        setIsLoading(false);
     }
-  }, [user, toast]); 
+  }, [user, toast, isLoading]); // Added isLoading to dependencies to prevent re-fetch if already loading
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -143,7 +145,8 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
 
     if (selectedDate) {
       tempExpenses = tempExpenses.filter(exp => {
-        const expenseDate = new Date(exp.date);
+        if (!exp.date) return false;
+        const expenseDate = parseISO(exp.date);
         return expenseDate.getFullYear() === selectedDate.getFullYear() &&
                expenseDate.getMonth() === selectedDate.getMonth() &&
                expenseDate.getDate() === selectedDate.getDate();
@@ -192,11 +195,11 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         return;
     }
     if (pinEntry !== activePinRequest.pinCode) {
-        toast({ title: "Erreur", description: "PIN incorrect.", variant: "destructive" });
+        toast({ title: "Erreur PIN", description: "Le PIN saisi est incorrect.", variant: "destructive" });
         return;
     }
     if (activePinRequest.pinExpiresAt && new Date() > new Date(activePinRequest.pinExpiresAt)) {
-        toast({ title: "Erreur", description: "Le PIN a expiré.", variant: "destructive" });
+        toast({ title: "Erreur PIN", description: "Le PIN a expiré.", variant: "destructive" });
         setShowPinDialog(false);
         setPinEntry('');
         setActivePinRequest(null);
@@ -207,7 +210,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     try {
         await deleteExpenseFromFirestore(expenseTargetedForAction.id);
         await completeApprovalRequestWithPin(activePinRequest.id);
-        setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseTargetedForAction.id));
+        setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseTargetedForAction!.id));
         toast({ title: "Dépense Supprimée", description: `La dépense "${expenseTargetedForAction.label}" a été supprimée via PIN.` });
         setShowPinDialog(false);
         setPinEntry('');
@@ -437,7 +440,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
               {filteredExpenses.map((exp) => (
                 <TableRow key={exp.id}>
                   <TableCell className="font-medium">{exp.label}</TableCell>
-                  <TableCell>{format(new Date(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                  <TableCell>{exp.date ? format(parseISO(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                   <TableCell>
                     {exp.blNumber && exp.blId ? (
                       <Link href={`/bls/${exp.blId}`} className="text-primary hover:underline flex items-center gap-1">
@@ -449,7 +452,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                   <TableCell className="flex items-center gap-1 pt-4"> 
                     <UserIconLucide className="h-4 w-4 text-muted-foreground" /> {exp.employeeName || 'N/A'}
                   </TableCell>
-                  <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
+                  <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end space-x-1">
                       {exp.blId && (
@@ -502,11 +505,11 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
             </AlertDialogTitle>
             {isAdmin ? (
                 <AlertDialogDescription>
-                L'action de supprimer la dépense "{expenseTargetedForAction?.label}" d'un montant de {expenseTargetedForAction?.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
+                L'action de supprimer la dépense "{expenseTargetedForAction?.label}" d'un montant de {expenseTargetedForAction?.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })} est irréversible.
                 </AlertDialogDescription>
             ) : (
                 <div className="space-y-2 py-2 text-left">
-                    <p className="text-sm text-muted-foreground">Montant : {expenseTargetedForAction?.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                    <p className="text-sm text-muted-foreground">Montant : {expenseTargetedForAction?.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</p>
                     <Label htmlFor={`deleteExpenseReason-${expenseTargetedForAction?.id}`}>Raison de la demande :</Label>
                     <Textarea
                         id={`deleteExpenseReason-${expenseTargetedForAction?.id}`}
@@ -580,5 +583,3 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     </>
   );
 }
-
-    

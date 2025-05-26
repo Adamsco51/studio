@@ -1,5 +1,5 @@
 
-"use client"; // Make DashboardPage a client component
+"use client"; 
 
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { ChartConfig } from "@/components/ui/chart";
-import DashboardCharts from '@/components/dashboard/dashboard-charts'; // Import directly
+import DashboardCharts from '@/components/dashboard/dashboard-charts'; 
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { RecentChatCard } from '@/components/dashboard/recent-chat-card';
@@ -25,7 +25,10 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return; // Don't fetch if user is not logged in
+    if (!user) {
+      setIsLoading(false); // Stop loading if no user
+      return; 
+    }
 
     const fetchData = async () => {
       setIsLoading(true);
@@ -73,8 +76,8 @@ export default function DashboardPage() {
   );
 
   const stats = [
-    { title: 'Rentabilité Globale', value: `${overallProfitability.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: isOverallProfit ? TrendingUp : TrendingDown, color: isOverallProfit ? 'text-green-500' : 'text-red-500' },
-    { title: 'Total Dépenses', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: DollarSign, color: 'text-red-500' },
+    { title: 'Rentabilité Globale', value: `${overallProfitability.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}`, icon: isOverallProfit ? TrendingUp : TrendingDown, color: isOverallProfit ? 'text-green-500' : 'text-red-500' },
+    { title: 'Total Dépenses', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}`, icon: DollarSign, color: 'text-red-500' },
     { title: 'Total Clients', value: totalClients, icon: Users, color: 'text-primary' },
     { title: 'BLs en Cours', value: blsByStatus['en cours'] || 0, icon: Clock, color: 'text-blue-500' },
     { title: 'BLs Terminés', value: blsByStatus['terminé'] || 0, icon: CheckCircle, color: 'text-green-600' },
@@ -118,6 +121,7 @@ export default function DashboardPage() {
 
   const expensesByMonthAggregated: Record<string, number> = {};
   expensesData.forEach(expense => {
+    if (!expense.date) return;
     const monthKey = format(parseISO(expense.date), 'yyyy-MM'); 
     expensesByMonthAggregated[monthKey] = (expensesByMonthAggregated[monthKey] || 0) + expense.amount;
   });
