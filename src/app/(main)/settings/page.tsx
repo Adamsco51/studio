@@ -20,6 +20,7 @@ import { auth } from '@/lib/firebase/config';
 import { updateUserProfileInFirestore, getCompanyProfileFromFirestore, updateCompanyProfileInFirestore } from '@/lib/mock-data';
 import type { CompanyProfile } from '@/lib/types';
 import Link from 'next/link';
+import { Form, FormField, FormItem, FormControl, FormMessage } from "@/components/ui/form"; // Added Form, FormField, FormItem
 
 const profileFormSchema = z.object({
   displayName: z.string().min(1, { message: "Le nom d'affichage ne peut pas être vide." }),
@@ -113,7 +114,7 @@ export default function SettingsPage() {
     try {
       await updateCompanyProfileInFirestore(data);
       toast({ title: "Informations de l'Entreprise Mises à Jour", description: "Les détails ont été sauvegardés." });
-      fetchCompanyProfile(); // Re-fetch to update initial state if needed or confirm save
+      fetchCompanyProfile(); 
     } catch (error) {
       console.error("Error updating company profile:", error);
       toast({ title: "Erreur de Sauvegarde", description: "Impossible de sauvegarder les informations de l'entreprise.", variant: "destructive" });
@@ -146,33 +147,37 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             {user ? (
-              <form onSubmit={userProfileForm.handleSubmit(onUserProfileSubmit)} className="space-y-4">
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={user.email || ''} disabled className="mt-1" />
-                </div>
-                <Controller
-                  name="displayName"
-                  control={userProfileForm.control}
-                  render={({ field, fieldState }) => (
-                    <div>
-                      <Label htmlFor="displayName">Nom d'affichage</Label>
-                      <Input
-                        id="displayName"
-                        {...field}
-                        placeholder="Votre nom complet"
-                        disabled={isSubmittingProfile}
-                        className="mt-1"
-                      />
-                      {fieldState.error && <p className="text-sm text-destructive mt-1">{fieldState.error.message}</p>}
-                    </div>
-                  )}
-                />
-                <Button type="submit" disabled={isSubmittingProfile}>
-                  {isSubmittingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Sauvegarder le Profil
-                </Button>
-              </form>
+              <Form {...userProfileForm}>
+                <form onSubmit={userProfileForm.handleSubmit(onUserProfileSubmit)} className="space-y-4">
+                  <div>
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" type="email" value={user.email || ''} disabled className="mt-1" />
+                  </div>
+                  <FormField
+                    control={userProfileForm.control}
+                    name="displayName"
+                    render={({ field, fieldState }) => (
+                      <FormItem>
+                        <Label htmlFor="displayName">Nom d'affichage</Label>
+                        <FormControl>
+                          <Input
+                            id="displayName"
+                            {...field}
+                            placeholder="Votre nom complet"
+                            disabled={isSubmittingProfile}
+                            className="mt-1"
+                          />
+                        </FormControl>
+                        {fieldState.error && <FormMessage>{fieldState.error.message}</FormMessage>}
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" disabled={isSubmittingProfile}>
+                    {isSubmittingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Sauvegarder le Profil
+                  </Button>
+                </form>
+              </Form>
             ) : (
               <p className="text-muted-foreground">Chargement du profil utilisateur...</p>
             )}
@@ -186,62 +191,79 @@ export default function SettingsPage() {
               <CardDescription>Modifiez les informations générales de l'application et de l'entreprise.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={companyForm.handleSubmit(onCompanyProfileSubmit)} className="space-y-4">
-                <FormField
-                  control={companyForm.control}
-                  name="appName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label htmlFor="appName">Nom de l'Application</Label>
-                      <Input id="appName" placeholder="Ex: TransitFlow" {...field} disabled={isSubmittingCompanyProfile} />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={companyForm.control}
-                  name="companyName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label htmlFor="companyName">Nom de l'Entreprise</Label>
-                      <Input id="companyName" placeholder="Ex: Votre Entreprise SARL" {...field} disabled={isSubmittingCompanyProfile} />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={companyForm.control}
-                  name="companyAddress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label htmlFor="companyAddress">Adresse de l'Entreprise</Label>
-                      <Input id="companyAddress" placeholder="Ex: 123 Rue Principale, Ville" {...field} disabled={isSubmittingCompanyProfile} />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={companyForm.control}
-                  name="companyEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label htmlFor="companyEmail">Email de l'Entreprise</Label>
-                      <Input id="companyEmail" type="email" placeholder="Ex: contact@entreprise.com" {...field} disabled={isSubmittingCompanyProfile} />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={companyForm.control}
-                  name="companyPhone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Label htmlFor="companyPhone">Téléphone de l'Entreprise</Label>
-                      <Input id="companyPhone" type="tel" placeholder="Ex: +221 33 800 00 00" {...field} disabled={isSubmittingCompanyProfile} />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" disabled={isSubmittingCompanyProfile}>
-                  {isSubmittingCompanyProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Sauvegarder les Informations
-                </Button>
-              </form>
+              <Form {...companyForm}>
+                <form onSubmit={companyForm.handleSubmit(onCompanyProfileSubmit)} className="space-y-4">
+                  <FormField
+                    control={companyForm.control}
+                    name="appName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="appName">Nom de l'Application</Label>
+                        <FormControl>
+                           <Input id="appName" placeholder="Ex: TransitFlow" {...field} disabled={isSubmittingCompanyProfile} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={companyForm.control}
+                    name="companyName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="companyName">Nom de l'Entreprise</Label>
+                         <FormControl>
+                           <Input id="companyName" placeholder="Ex: Votre Entreprise SARL" {...field} disabled={isSubmittingCompanyProfile} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <FormField
+                    control={companyForm.control}
+                    name="companyAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="companyAddress">Adresse de l'Entreprise</Label>
+                        <FormControl>
+                           <Input id="companyAddress" placeholder="Ex: 123 Rue Principale, Ville" {...field} disabled={isSubmittingCompanyProfile} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <FormField
+                    control={companyForm.control}
+                    name="companyEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="companyEmail">Email de l'Entreprise</Label>
+                        <FormControl>
+                           <Input id="companyEmail" type="email" placeholder="Ex: contact@entreprise.com" {...field} disabled={isSubmittingCompanyProfile} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <FormField
+                    control={companyForm.control}
+                    name="companyPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Label htmlFor="companyPhone">Téléphone de l'Entreprise</Label>
+                        <FormControl>
+                           <Input id="companyPhone" type="tel" placeholder="Ex: +221 33 800 00 00" {...field} disabled={isSubmittingCompanyProfile} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" disabled={isSubmittingCompanyProfile}>
+                    {isSubmittingCompanyProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Sauvegarder les Informations
+                  </Button>
+                </form>
+              </Form>
             </CardContent>
           </Card>
         )}
