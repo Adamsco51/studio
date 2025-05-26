@@ -119,17 +119,8 @@ export const getClientsFromFirestore = async (): Promise<Client[]> => {
       console.error(
         "Firestore permission denied while trying to fetch clients. " +
         "Please check your Firestore security rules in the Firebase console. " +
-        "For development, if you require users to be authenticated, your rules might look like: \n" +
-        "rules_version = '2';\n" +
-        "service cloud.firestore {\n" +
-        "  match /databases/{database}/documents {\n" +
-        "    match /{document=**} {\n" +
-        "      allow read, write: if request.auth != null;\n" +
-        "    }\n" +
-        "  }\n" +
-        "}\n" +
-        "For more open access during initial development (less secure), use: 'allow read, write: if true;'. " +
-        "Remember to secure your rules before production. Also ensure Server Components can satisfy auth requirements if applicable.",
+        "Rule suggestion for authenticated users: `service cloud.firestore { match /databases/{database}/documents { match /clients/{document=**} { allow read: if request.auth != null; } } }` " +
+        "Ensure your rules allow reads on the 'clients' collection for authenticated users.",
         e
       );
     } else {
@@ -157,8 +148,9 @@ export const getClientByIdFromFirestore = async (clientId: string): Promise<Clie
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error(
-        `Firestore permission denied while trying to fetch client ${clientId}. ` +
-        "Please check your Firestore security rules.",
+        `Firestore permission denied while trying to fetch client with ID: ${clientId}. ` +
+        "Please check your Firestore security rules in the Firebase console. " +
+        "Ensure rules allow reads on individual client documents (e.g., `match /clients/{clientId} { allow read: if request.auth != null; }`).",
         e
       );
     } else {
