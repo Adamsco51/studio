@@ -218,7 +218,7 @@ export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'create
         const clientDocRef = doc(db, "clients", blData.clientId);
         const clientSnap = await getDoc(clientDocRef);
         if (clientSnap.exists()) {
-            const clientData = clientSnap.data() as Client;
+            const clientData = clientSnap.data() as Client; // We need to cast here
             const updatedBlIds = [...(clientData.blIds || []), docRef.id];
             await updateDoc(clientDocRef, { blIds: updatedBlIds });
         }
@@ -243,7 +243,13 @@ export const getBLsFromFirestore = async (): Promise<BillOfLading[]> => {
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Sort by newest first
   } catch (e: any) {
      if (e.code === 'permission-denied') {
-      console.error("Firestore permission denied while trying to fetch BLs.", e);
+      console.error(
+        "Firestore permission denied while trying to fetch Bills of Lading. " +
+        "Please check your Firestore security rules in the Firebase console. " +
+        "Rule suggestion for authenticated users: `service cloud.firestore { match /databases/{database}/documents { match /billsOfLading/{document=**} { allow read: if request.auth != null; } } }` " +
+        "Ensure your rules allow reads on the 'billsOfLading' collection for authenticated users.",
+        e
+      );
     } else {
       console.error("Error getting documents (BLs): ", e);
     }
@@ -290,7 +296,7 @@ export const getBLsByClientIdFromFirestore = async (clientId: string): Promise<B
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error(`Firestore permission denied while trying to fetch BLs for client ID: ${clientId}.`, e);
+      console.error(`Firestore permission denied while trying to fetch BLs for client ID: ${clientId}. Check rules for 'billsOfLading' collection.`, e);
     } else {
       console.error(`Error getting documents (BLs for client ${clientId}): `, e);
     }
@@ -314,13 +320,13 @@ export const deleteBLFromFirestore = async (blId: string) => {
   try {
     const blSnap = await getDoc(blDocRef);
     if (blSnap.exists()) {
-        const blData = blSnap.data() as BillOfLading;
+        const blData = blSnap.data() as BillOfLading; // Cast here
         // Remove BL ID from client's blIds array
         if (blData.clientId) {
             const clientDocRef = doc(db, "clients", blData.clientId);
             const clientSnap = await getDoc(clientDocRef);
             if (clientSnap.exists()) {
-                const clientData = clientSnap.data() as Client;
+                const clientData = clientSnap.data() as Client; // Cast here
                 const updatedBlIds = (clientData.blIds || []).filter(id => id !== blId);
                 await updateDoc(clientDocRef, { blIds: updatedBlIds });
             }
@@ -408,3 +414,4 @@ export const toggleTodoItemCompletion = (todoId: string): void => {
 export const deleteTodoItem = (todoId: string): void => {
   MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.filter(todo => todo.id !== todoId);
 };
+
