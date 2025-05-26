@@ -114,8 +114,27 @@ export const getClientsFromFirestore = async (): Promise<Client[]> => {
         createdAt: clientData.createdAt instanceof Timestamp ? clientData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as Client;
     });
-  } catch (e) {
-    console.error("Error getting documents: ", e);
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(
+        "Firestore permission denied while trying to fetch clients. " +
+        "Please check your Firestore security rules in the Firebase console. " +
+        "For development, if you require users to be authenticated, your rules might look like: \n" +
+        "rules_version = '2';\n" +
+        "service cloud.firestore {\n" +
+        "  match /databases/{database}/documents {\n" +
+        "    match /{document=**} {\n" +
+        "      allow read, write: if request.auth != null;\n" +
+        "    }\n" +
+        "  }\n" +
+        "}\n" +
+        "For more open access during initial development (less secure), use: 'allow read, write: if true;'. " +
+        "Remember to secure your rules before production. Also ensure Server Components can satisfy auth requirements if applicable.",
+        e
+      );
+    } else {
+      console.error("Error getting documents (clients): ", e);
+    }
     return [];
   }
 };
@@ -132,11 +151,19 @@ export const getClientByIdFromFirestore = async (clientId: string): Promise<Clie
         createdAt: clientData.createdAt instanceof Timestamp ? clientData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as Client;
     } else {
-      console.log("No such document!");
+      console.log("No such document for client ID:", clientId);
       return null;
     }
-  } catch (e) {
-    console.error("Error getting document: ", e);
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(
+        `Firestore permission denied while trying to fetch client ${clientId}. ` +
+        "Please check your Firestore security rules.",
+        e
+      );
+    } else {
+      console.error(`Error getting document (client ${clientId}): `, e);
+    }
     return null;
   }
 };
@@ -251,3 +278,6 @@ export const toggleTodoItemCompletion = (todoId: string): void => {
 export const deleteTodoItem = (todoId: string): void => {
   MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.filter(todo => todo.id !== todoId);
 };
+
+
+    

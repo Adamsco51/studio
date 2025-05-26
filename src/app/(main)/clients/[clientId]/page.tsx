@@ -9,8 +9,8 @@ import {
   MOCK_BILLS_OF_LADING, 
   MOCK_EXPENSES, 
   MOCK_USERS, 
-  deleteClientFromFirestore, // Use Firestore function
-  getClientByIdFromFirestore // Use Firestore function
+  deleteClientFromFirestore, 
+  getClientByIdFromFirestore 
 } from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, User as MockUser } from '@/lib/types';
 import Link from 'next/link';
@@ -55,7 +55,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
-  const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]); // Still from mock for now
+  const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]); 
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const router = useRouter();
@@ -76,7 +76,6 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         const foundClient = await getClientByIdFromFirestore(clientId);
         setClient(foundClient);
         if (foundClient) {
-          // BLs are still from mock, filter them based on the fetched client's ID
           const bls = MOCK_BILLS_OF_LADING.filter(bl => bl.clientId === foundClient.id);
           setClientBLs(bls);
           if (foundClient.createdByUserId) {
@@ -91,14 +90,19 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           }
         }
       } catch (error) {
-        console.error("Failed to fetch client details:", error);
-        setClient(null);
+        console.error("Failed to fetch client details for ID:", clientId, error);
+        setClient(null); 
+        toast({
+          title: "Erreur de Chargement",
+          description: "Impossible de charger les détails du client. Vérifiez la console pour plus d'informations.",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
     };
     fetchClientDetails();
-  }, [clientId, user]);
+  }, [clientId, user, toast]); // Added toast to dependency array
 
   const toggleBlExpansion = (blId: string) => {
     setExpandedBls(prev => {
@@ -129,7 +133,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         description: `Le client ${client.name} a été supprimé.`,
       });
       router.push('/clients');
-      router.refresh(); // Important to re-fetch on clients list page
+      router.refresh(); 
     } catch (error) {
       console.error("Failed to delete client:", error);
       toast({ title: "Erreur", description: "Échec de la suppression du client.", variant: "destructive"});
@@ -157,19 +161,16 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
         return;
     }
-    // This is a simulation, no actual backend call for request
     console.log(`Demande de suppression pour Client ${client?.name} par ${user?.displayName}. Raison: ${deleteClientReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
         description: "Votre demande de suppression de client a été envoyée à l'administrateur pour approbation.",
     });
     setDeleteClientReason('');
-    // Close the dialog manually if it's an AlertDialog that doesn't auto-close on action
-    // For simplicity, the AlertDialog will close via its Cancel or Action buttons.
   };
 
 
-  if (isLoading || (!client && !user)) { 
+  if (isLoading || (!client && isLoading)) { 
     return (
       <div className="flex justify-center items-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -181,7 +182,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   if (!client) {
     return (
       <div className="text-center py-10">
-        <p className="text-xl text-muted-foreground">Client non trouvé.</p>
+        <p className="text-xl text-muted-foreground">Client non trouvé ou erreur de chargement.</p>
         <Link href="/clients" passHref>
           <Button variant="link" className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste des clients
@@ -335,7 +336,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                 <h4 className="font-semibold text-sm text-muted-foreground mb-2">Informations de création</h4>
                 <div className="flex items-center text-sm text-muted-foreground mb-1">
                     <CalendarDays className="mr-2 h-4 w-4" />
-                    <span>Créé le: {format(new Date(client.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr })}</span>
+                    <span>Créé le: {client.createdAt ? format(new Date(client.createdAt), 'dd MMMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</span>
                 </div>
                 {createdByUserDisplay && (
                     <div className="flex items-center text-sm text-muted-foreground">
@@ -453,3 +454,6 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     </>
   );
 }
+
+
+    
