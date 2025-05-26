@@ -1,19 +1,18 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, use } from 'react'; // Added use
+import { useState, useEffect, useMemo, use } from 'react'; 
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getWorkTypesFromFirestore, deleteWorkTypeFromFirestore } from '@/lib/mock-data'; // Firestore functions
-import type { WorkType } from '@/lib/types';
-import { PlusCircle, Edit, Trash2, Search, Loader2 } from 'lucide-react'; // Added Loader2
+import { getWorkTypesFromFirestore, deleteWorkTypeFromFirestore, addApprovalRequestToFirestore } from '@/lib/mock-data'; 
+import type { WorkType, ApprovalRequest } from '@/lib/types';
+import { PlusCircle, Edit, Trash2, Search, Loader2 } from 'lucide-react'; 
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -40,8 +39,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '@/contexts/auth-context';
 
-export default function WorkTypesPage({ params: paramsPromise }: { params: Promise<{}> }) { // Added paramsPromise
-  const params = use(paramsPromise); // Resolve params using React.use
+export default function WorkTypesPage({ params: paramsPromise }: { params: Promise<{}> }) { 
+  const params = use(paramsPromise); 
   const { user, isAdmin } = useAuth();
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,7 +56,7 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
 
 
   useEffect(() => {
-    if (!user) return; // Wait for user to be loaded
+    if (!user) return; 
     const fetchWorkTypes = async () => {
       setIsLoading(true);
       try {
@@ -101,34 +100,64 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
     }
   };
 
-  const handleSubmitEditRequest = () => {
-    if (!editingWorkType || !editReason.trim()) {
-      toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
+  const handleSubmitEditRequest = async () => {
+    if (!editingWorkType || !editReason.trim() || !user) {
+      toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
       return;
     }
-    // Simulate sending request
-    console.log(`Demande de modification pour Type de Travail ${editingWorkType.name} par ${user?.displayName}. Raison: ${editReason}`);
-    toast({
-      title: "Demande Envoyée (Simulation)",
-      description: `Votre demande de modification pour "${editingWorkType.name}" a été envoyée.`,
-    });
-    setEditReason('');
-    setEditingWorkType(null);
+    setIsProcessingAction(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'workType',
+            entityId: editingWorkType.id,
+            entityDescription: `Type de Travail: ${editingWorkType.name}`,
+            actionType: 'edit',
+            reason: editReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: `Votre demande de modification pour "${editingWorkType.name}" a été enregistrée.`,
+        });
+        setEditReason('');
+        setEditingWorkType(null); 
+    } catch (error) {
+        console.error("Failed to submit edit request for work type:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de modification.", variant: "destructive" });
+    } finally {
+        setIsProcessingAction(false);
+    }
   };
 
-  const handleSubmitDeleteRequest = () => {
-    if (!deletingWorkType || !deleteReason.trim()) {
-        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
+  const handleSubmitDeleteRequest = async () => {
+    if (!deletingWorkType || !deleteReason.trim() || !user) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
         return;
     }
-    // Simulate sending request
-    console.log(`Demande de suppression pour Type de Travail ${deletingWorkType.name} par ${user?.displayName}. Raison: ${deleteReason}`);
-    toast({
-        title: "Demande Envoyée (Simulation)",
-        description: `Votre demande de suppression pour "${deletingWorkType.name}" a été envoyée.`,
-    });
-    setDeleteReason('');
-    setDeletingWorkType(null);
+    setIsProcessingAction(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'workType',
+            entityId: deletingWorkType.id,
+            entityDescription: `Type de Travail: ${deletingWorkType.name}`,
+            actionType: 'delete',
+            reason: deleteReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: `Votre demande de suppression pour "${deletingWorkType.name}" a été enregistrée.`,
+        });
+        setDeleteReason('');
+        setDeletingWorkType(null); 
+    } catch (error) {
+        console.error("Failed to submit delete request for work type:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
+    } finally {
+        setIsProcessingAction(false);
+    }
   };
 
   if (!user && isLoading) { 
@@ -151,7 +180,7 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
         description="Configurez les différents types de services ou de travaux que vous proposez."
         actions={
           <Link href="/work-types/add" passHref>
-            <Button>
+            <Button disabled={isProcessingAction}>
               <PlusCircle className="mr-2 h-4 w-4" /> Ajouter un Type
             </Button>
           </Link>
@@ -208,18 +237,18 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
                   <TableCell className="text-right space-x-1">
                     {isAdmin ? (
                        <Link href={`/work-types/${wt.id}/edit`} passHref>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" disabled={isProcessingAction}>
                           <Edit className="mr-1 h-4 w-4" /> Modifier
                         </Button>
                       </Link>
                     ) : (
                        <Dialog open={editingWorkType?.id === wt.id} onOpenChange={(isOpen) => {
-                        if (!isOpen) setEditingWorkType(null); else setEditingWorkType(wt);
-                        setEditReason('');
+                        if (!isOpen) {setEditingWorkType(null); setEditReason('');} else {setEditingWorkType(wt); setEditReason('');}
+                        
                       }}>
                         <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" onClick={() => {setEditingWorkType(wt); setEditReason('');}}>
-                            <Edit className="mr-1 h-4 w-4" /> Modifier
+                          <Button variant="outline" size="sm" onClick={() => {setEditingWorkType(wt); setEditReason('');}} disabled={isProcessingAction}>
+                           {isProcessingAction && editingWorkType?.id === wt.id ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Edit className="mr-1 h-4 w-4" />} Modifier
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
@@ -231,19 +260,21 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
                           </DialogHeader>
                           <div className="space-y-2 py-2">
                             <Label htmlFor={`editReason-${wt.id}`}>Raison :</Label>
-                            <Textarea id={`editReason-${wt.id}`} value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Raison de la demande..."/>
+                            <Textarea id={`editReason-${wt.id}`} value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Raison de la demande..." disabled={isProcessingAction}/>
                           </div>
                           <DialogFooter>
-                            <DialogClose asChild><Button variant="outline">Annuler</Button></DialogClose>
-                            <Button onClick={handleSubmitEditRequest}>Soumettre</Button>
+                            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction}>Annuler</Button></DialogClose>
+                            <Button onClick={handleSubmitEditRequest} disabled={isProcessingAction || !editReason.trim()}>
+                                {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                Soumettre
+                            </Button>
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
                     )}
                    
                     <AlertDialog open={deletingWorkType?.id === wt.id && !isProcessingAction} onOpenChange={(isOpen) => {
-                        if (!isOpen && !isProcessingAction) setDeletingWorkType(null);
-                        setDeleteReason('');
+                        if (!isOpen && !isProcessingAction) {setDeletingWorkType(null); setDeleteReason('');}
                     }}>
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive" size="sm" onClick={() => {setDeletingWorkType(wt); setDeleteReason('');}} disabled={isProcessingAction}>
@@ -261,7 +292,7 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
                            ) : (
                              <div className="space-y-2 py-2 text-left">
                                 <Label htmlFor={`deleteReason-${wt.id}`}>Raison :</Label>
-                                <Textarea id={`deleteReason-${wt.id}`} value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} placeholder="Raison de la demande de suppression..."/>
+                                <Textarea id={`deleteReason-${wt.id}`} value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} placeholder="Raison de la demande de suppression..." disabled={isProcessingAction}/>
                                 <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
                              </div>
                            )}
@@ -271,7 +302,7 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
                           <Button 
                             onClick={isAdmin ? () => handleDeleteWorkTypeDirectly(wt.id) : handleSubmitDeleteRequest}
                             variant={isAdmin ? "destructive" : "default"}
-                            disabled={isProcessingAction}
+                            disabled={isProcessingAction || (!isAdmin && !deleteReason.trim())}
                           >
                             {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {isAdmin ? "Confirmer" : "Soumettre"}
@@ -295,3 +326,4 @@ export default function WorkTypesPage({ params: paramsPromise }: { params: Promi
     </>
   );
 }
+```

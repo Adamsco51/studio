@@ -12,9 +12,10 @@ import {
     getBLsFromFirestore, 
     getClientsFromFirestore, 
     deleteExpenseFromFirestore,
-    getEmployeeNameFromMock
+    getEmployeeNameFromMock,
+    addApprovalRequestToFirestore // Import
 } from '@/lib/mock-data';
-import type { Expense, BillOfLading, Client } from '@/lib/types';
+import type { Expense, BillOfLading, Client, ApprovalRequest } from '@/lib/types';
 import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -39,7 +40,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { ExpenseForm } from '@/components/expense/expense-form'; // Import ExpenseForm
+import { ExpenseForm } from '@/components/expense/expense-form'; 
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
@@ -67,7 +68,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   const [allBls, setAllBls] = useState<BillOfLading[]>([]);
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
+  const [isProcessingAction, setIsProcessingAction] = useState(false); 
   const [selectedBlId, setSelectedBlId] = useState<string | undefined>(undefined);
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -153,7 +154,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate, allBls]);
 
   const handleDeleteExpenseDirectly = async (expenseId: string) => {
-    setIsDeletingExpense(true);
+    setIsProcessingAction(true);
     try {
       await deleteExpenseFromFirestore(expenseId);
       setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
@@ -166,22 +167,38 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         console.error("Failed to delete expense:", error);
         toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
     } finally {
-        setIsDeletingExpense(false);
+        setIsProcessingAction(false);
     }
   };
 
-  const handleSubmitDeleteRequest = () => {
-    if (!deletingExpense || !deleteReason.trim()) {
-        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression de la dépense.", variant: "destructive" });
+  const handleSubmitDeleteRequest = async () => {
+    if (!deletingExpense || !deleteReason.trim() || !user) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour la dépense "${deletingExpense.label}" (BL ${deletingExpense.blNumber}) par ${user?.displayName}. Raison: ${deleteReason}`);
-    toast({
-        title: "Demande Envoyée (Simulation)",
-        description: `Votre demande de suppression pour la dépense "${deletingExpense.label}" a été envoyée.`,
-    });
-    setDeleteReason('');
-    setDeletingExpense(null);
+    setIsProcessingAction(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'expense',
+            entityId: deletingExpense.id,
+            entityDescription: `Dépense: ${deletingExpense.label} (BL N° ${deletingExpense.blNumber || 'N/A'})`,
+            actionType: 'delete',
+            reason: deleteReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: `Votre demande de suppression pour la dépense "${deletingExpense.label}" a été enregistrée.`,
+        });
+        setDeleteReason('');
+        setDeletingExpense(null); 
+    } catch (error) {
+        console.error("Failed to submit delete expense request:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
+    } finally {
+        setIsProcessingAction(false);
+    }
   };
 
   const handleExpenseAddedFromDialog = (newExpense: Expense) => {
@@ -194,7 +211,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         employeeName: getEmployeeNameFromMock(newExpense.employeeId),
     };
     setExpenses(prevExpenses => [detailedNewExpense, ...prevExpenses].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setShowAddExpenseDialog(false); // Close the dialog
+    setShowAddExpenseDialog(false); 
   };
 
 
@@ -210,7 +227,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         actions={
           <Dialog open={showAddExpenseDialog} onOpenChange={setShowAddExpenseDialog}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={isProcessingAction}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Ajouter une Dépense
               </Button>
             </DialogTrigger>
@@ -365,7 +382,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                     <div className="flex items-center justify-end space-x-1">
                       {exp.blId && (
                         <Link href={`/bls/${exp.blId}`} passHref>
-                          <Button variant="ghost" size="sm" title="Voir BL">
+                          <Button variant="ghost" size="sm" title="Voir BL" disabled={isProcessingAction}>
                             <Eye className="h-4 w-4" />
                           </Button>
                         </Link>
@@ -373,9 +390,11 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                       <Button variant="ghost" size="sm" title="Modifier Dépense" disabled> 
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <AlertDialog open={deletingExpense?.id === exp.id && !isDeletingExpense} onOpenChange={(isOpen) => {
-                          if(!isOpen && !isDeletingExpense) setDeletingExpense(null);
-                          setDeleteReason('');
+                      <AlertDialog open={deletingExpense?.id === exp.id && !isProcessingAction} onOpenChange={(isOpen) => {
+                          if(!isOpen && !isProcessingAction) {
+                            setDeletingExpense(null);
+                            setDeleteReason('');
+                          }
                       }}>
                         <AlertDialogTrigger asChild>
                           <Button 
@@ -384,9 +403,9 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                             className="text-muted-foreground hover:text-destructive" 
                             title="Supprimer Dépense"
                             onClick={() => {setDeletingExpense(exp); setDeleteReason('');}}
-                            disabled={isDeletingExpense && deletingExpense?.id === exp.id}
+                            disabled={isProcessingAction && deletingExpense?.id === exp.id}
                           >
-                            {isDeletingExpense && deletingExpense?.id === exp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                            {isProcessingAction && deletingExpense?.id === exp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
@@ -408,19 +427,20 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                                         value={deleteReason}
                                         onChange={(e) => setDeleteReason(e.target.value)}
                                         className="min-h-[100px]"
+                                        disabled={isProcessingAction}
                                     />
                                     <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
                                 </div>
                             )}
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => {setDeletingExpense(null); setDeleteReason('');}} disabled={isDeletingExpense}>Annuler</AlertDialogCancel>
+                            <AlertDialogCancel onClick={() => {setDeletingExpense(null); setDeleteReason('');}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
                             <Button 
                                 onClick={isAdmin ? () => handleDeleteExpenseDirectly(exp.id) : handleSubmitDeleteRequest}
                                 variant={isAdmin ? "destructive" : "default"}
-                                disabled={isDeletingExpense}
+                                disabled={isProcessingAction || (!isAdmin && !deleteReason.trim())}
                             >
-                              {isDeletingExpense && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                               {isAdmin ? "Confirmer" : "Soumettre la Demande"}
                             </Button>
                           </AlertDialogFooter>
@@ -443,3 +463,4 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     </>
   );
 }
+```

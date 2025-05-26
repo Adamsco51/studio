@@ -13,7 +13,8 @@ import {
     deleteBLFromFirestore, 
     deleteExpenseFromFirestore,
     getEmployeeNameFromMock,
-    addApprovalRequestToFirestore // Import new service function
+    addApprovalRequestToFirestore, // Import new service function
+    getUserProfile
 } from '@/lib/mock-data';
 import type { BillOfLading, Expense, Client, BLStatus, WorkType, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
@@ -119,8 +120,8 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                 setIsLoadingExpenses(false);
 
                 if (foundBl.createdByUserId) {
-                    // In a real app, fetch user profile from Firestore
-                    setCreatedByUserDisplay(getEmployeeNameFromMock(foundBl.createdByUserId));
+                    const creatorProfile = await getUserProfile(foundBl.createdByUserId);
+                    setCreatedByUserDisplay(creatorProfile?.displayName || getEmployeeNameFromMock(foundBl.createdByUserId));
                 }
             } else {
                 toast({ title: "Erreur", description: "Connaissement non trouvé.", variant: "destructive" });
@@ -154,9 +155,9 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   };
 
   const handleDeleteExpense = async (expenseId: string) => { 
-    if (!isAdmin) return; // This should be handled by UI, but double check
+    if (!isAdmin) return; 
     
-    setIsDeleting(true); // Use general deleting flag for admin actions
+    setIsDeleting(true); 
     try {
       await deleteExpenseFromFirestore(expenseId); 
       setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
@@ -322,14 +323,14 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
 
             {isAdmin ? (
               <Link href={`/bls/${bl.id}/edit`} passHref>
-                <Button variant="outline" disabled={isProcessingRequest}>
+                <Button variant="outline" disabled={isProcessingRequest || isDeleting}>
                   <Edit className="mr-2 h-4 w-4" /> Modifier
                 </Button>
               </Link>
             ) : (
               <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" onClick={() => setEditRequestReason('')} disabled={isProcessingRequest}>
+                  <Button variant="outline" onClick={() => setEditRequestReason('')} disabled={isProcessingRequest || isDeleting}>
                     {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     <Edit className="mr-2 h-4 w-4" /> Modifier
                   </Button>
@@ -365,7 +366,14 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
               </Dialog>
             )}
 
-            <AlertDialog open={showDeleteBlDialog} onOpenChange={setShowDeleteBlDialog}>
+            <AlertDialog open={showDeleteBlDialog} onOpenChange={(isOpen) => {
+                if (!isOpen) {
+                    setDeleteBlReason(''); 
+                    setShowDeleteBlDialog(false);
+                } else {
+                    setShowDeleteBlDialog(true);
+                }
+            }}>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteBlReason(''); setShowDeleteBlDialog(true);}} disabled={isProcessingRequest || isDeleting}>
                    {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -623,7 +631,6 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                 </CardContent>
             </Card>
         </div>
-
       </div>
     </>
   );

@@ -7,13 +7,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { 
   getBLsByClientIdFromFirestore, 
-  getExpensesByBlIdFromFirestore, // Use Firestore for expenses
-  MOCK_USERS, 
+  getExpensesByBlIdFromFirestore, 
   deleteClientFromFirestore, 
   getClientByIdFromFirestore,
-  getEmployeeNameFromMock
+  getEmployeeNameFromMock,
+  addApprovalRequestToFirestore, // Import new service function
+  getUserProfile // Import getUserProfile
 } from '@/lib/mock-data';
-import type { Client, BillOfLading, Expense, User as MockUser } from '@/lib/types';
+import type { Client, BillOfLading, Expense, User as MockUser, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
 import { ArrowLeft, Edit, FileText, PlusCircle, DollarSign, Trash2, ArrowRight, ChevronDown, ChevronUp, UserCircle2, CalendarDays, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +22,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Image from 'next/image';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -71,8 +71,10 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
 
   const [showEditRequestDialog, setShowEditRequestDialog] = useState(false);
   const [editRequestReason, setEditRequestReason] = useState('');
+  const [showDeleteClientDialog, setShowDeleteClientDialog] = useState(false);
   const [deleteClientReason, setDeleteClientReason] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isProcessingRequest, setIsProcessingRequest] = useState(false);
 
   useEffect(() => {
     if (!clientId || !user) { 
@@ -106,7 +108,8 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           setIsLoadingBls(false);
 
           if (foundClient.createdByUserId) {
-            setCreatedByUserDisplay(getEmployeeNameFromMock(foundClient.createdByUserId));
+            const creatorProfile = await getUserProfile(foundClient.createdByUserId); 
+            setCreatedByUserDisplay(creatorProfile?.displayName || getEmployeeNameFromMock(foundClient.createdByUserId));
           }
         } else {
           setIsLoadingBls(false); 
@@ -117,7 +120,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         setIsLoadingBls(false);
         toast({
           title: "Erreur de Chargement",
-          description: "Impossible de charger les détails du client. Vérifiez la console pour plus d'informations.",
+          description: "Impossible de charger les détails du client.",
           variant: "destructive",
         });
       } finally {
@@ -140,7 +143,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   };
 
   const handleDeleteClient = async () => {
-    if (!client || !client.id) return;
+    if (!client || !client.id || !isAdmin) return;
     setIsDeleting(true);
     try {
       await deleteClientFromFirestore(client.id); 
@@ -158,31 +161,64 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     }
   };
 
-  const handleSubmitEditRequest = () => {
-    if (!editRequestReason.trim()) {
-      toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
+  const handleSubmitEditRequest = async () => {
+    if (!editRequestReason.trim() || !user || !client) {
+      toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
       return;
     }
-    console.log(`Demande de modification pour Client ${client?.name} par ${user?.displayName}. Raison: ${editRequestReason}`);
-    toast({
-      title: "Demande Envoyée (Simulation)",
-      description: "Votre demande de modification du client a été envoyée à l'administrateur pour approbation.",
-    });
-    setEditRequestReason('');
-    setShowEditRequestDialog(false);
+    setIsProcessingRequest(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'client',
+            entityId: client.id,
+            entityDescription: `Client: ${client.name}`,
+            actionType: 'edit',
+            reason: editRequestReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: "Votre demande de modification du client a été enregistrée et est en attente d'approbation.",
+        });
+        setEditRequestReason('');
+        setShowEditRequestDialog(false);
+    } catch (error) {
+        console.error("Failed to submit edit request for client:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de modification.", variant: "destructive" });
+    } finally {
+        setIsProcessingRequest(false);
+    }
   };
 
-  const handleSubmitDeleteClientRequest = () => {
-    if (!deleteClientReason.trim()) {
-        toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
+  const handleSubmitDeleteClientRequest = async () => {
+    if (!deleteClientReason.trim() || !user || !client) {
+        toast({ title: "Erreur", description: "Veuillez fournir une raison et être connecté.", variant: "destructive" });
         return;
     }
-    console.log(`Demande de suppression pour Client ${client?.name} par ${user?.displayName}. Raison: ${deleteClientReason}`);
-    toast({
-        title: "Demande Envoyée (Simulation)",
-        description: "Votre demande de suppression de client a été envoyée à l'administrateur pour approbation.",
-    });
-    setDeleteClientReason('');
+    setIsProcessingRequest(true);
+    try {
+        await addApprovalRequestToFirestore({
+            requestedByUserId: user.uid,
+            requestedByUserName: user.displayName || user.email || "Utilisateur inconnu",
+            entityType: 'client',
+            entityId: client.id,
+            entityDescription: `Client: ${client.name}`,
+            actionType: 'delete',
+            reason: deleteClientReason,
+        });
+        toast({
+            title: "Demande Enregistrée",
+            description: "Votre demande de suppression de client a été enregistrée et est en attente d'approbation.",
+        });
+        setDeleteClientReason('');
+        setShowDeleteClientDialog(false);
+    } catch (error) {
+        console.error("Failed to submit delete client request:", error);
+        toast({ title: "Erreur", description: "Échec de l'envoi de la demande de suppression.", variant: "destructive" });
+    } finally {
+        setIsProcessingRequest(false);
+    }
   };
 
 
@@ -223,14 +259,15 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
 
             {isAdmin ? (
               <Link href={`/clients/${client.id}/edit`} passHref>
-                <Button variant="outline">
+                <Button variant="outline" disabled={isProcessingRequest || isDeleting}>
                   <Edit className="mr-2 h-4 w-4" /> Modifier
                 </Button>
               </Link>
             ) : (
               <Dialog open={showEditRequestDialog} onOpenChange={setShowEditRequestDialog}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" onClick={() => setEditRequestReason('')}>
+                  <Button variant="outline" onClick={() => setEditRequestReason('')} disabled={isProcessingRequest || isDeleting}>
+                    {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     <Edit className="mr-2 h-4 w-4" /> Modifier
                   </Button>
                 </DialogTrigger>
@@ -249,22 +286,26 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                       value={editRequestReason}
                       onChange={(e) => setEditRequestReason(e.target.value)}
                       className="min-h-[100px]"
+                      disabled={isProcessingRequest}
                     />
                   </div>
                   <DialogFooter>
                      <DialogClose asChild>
-                       <Button type="button" variant="outline">Annuler</Button>
+                       <Button type="button" variant="outline" disabled={isProcessingRequest}>Annuler</Button>
                     </DialogClose>
-                    <Button type="button" onClick={handleSubmitEditRequest}>Soumettre la Demande</Button>
+                    <Button type="button" onClick={handleSubmitEditRequest} disabled={isProcessingRequest || !editRequestReason.trim()}>
+                        {isProcessingRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Soumettre la Demande
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             )}
 
-            <AlertDialog>
+            <AlertDialog open={showDeleteClientDialog} onOpenChange={setShowDeleteClientDialog}>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteClientReason(''); }}>
-                  {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button variant="destructive" onClick={() => { if(!isAdmin) setDeleteClientReason(''); setShowDeleteClientDialog(true);}} disabled={isProcessingRequest || isDeleting}>
+                  {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <Trash2 className="mr-2 h-4 w-4" /> Supprimer
                 </Button>
               </AlertDialogTrigger>
@@ -286,19 +327,20 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                         value={deleteClientReason}
                         onChange={(e) => setDeleteClientReason(e.target.value)}
                         className="min-h-[100px]"
+                        disabled={isProcessingRequest}
                       />
                        <p className="text-xs text-muted-foreground">Votre demande sera examinée par un administrateur.</p>
                     </div>
                   )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setDeleteClientReason('')} disabled={isDeleting && isAdmin}>Annuler</AlertDialogCancel>
+                  <AlertDialogCancel onClick={() => {setDeleteClientReason(''); setShowDeleteClientDialog(false);}} disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin)}>Annuler</AlertDialogCancel>
                   <Button 
                     onClick={isAdmin ? handleDeleteClient : handleSubmitDeleteClientRequest} 
-                    disabled={isDeleting && isAdmin}
+                    disabled={(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) || (!isAdmin && !deleteClientReason.trim())}
                     variant={isAdmin ? "destructive" : "default"}
                   >
-                    {isDeleting && isAdmin && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {(isDeleting && isAdmin) || (isProcessingRequest && !isAdmin) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {isAdmin ? "Confirmer Suppression" : "Soumettre la Demande"}
                   </Button>
                 </AlertDialogFooter>
@@ -462,3 +504,4 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     </>
   );
 }
+```
