@@ -114,3 +114,12 @@ export interface SessionAuditEvent {
   action: 'login' | 'logout';
   timestamp: string; // ISO Date string, Firestore will store as Timestamp
 }
+
+export interface CompanyProfile {
+  appName?: string;
+  companyName?: string;
+  companyAddress?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  // companyLogoUrl?: string; // For future use
+}
