@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     ],
   },
   output: 'standalone', // Ajouté pour optimiser le build pour les déploiements conteneurisés
+  }
 };
 
 export default nextConfig;
