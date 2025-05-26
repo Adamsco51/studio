@@ -21,8 +21,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import type { BillOfLading, Client, BLStatus, WorkType } from "@/lib/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { addBLToFirestore, updateBLInFirestore, getClientsFromFirestore, MOCK_WORK_TYPES } from "@/lib/mock-data"; // Using Firestore functions
-import { useAuth } from "@/contexts/auth-context"; // Corrected import path
+import { addBLToFirestore, updateBLInFirestore, getClientsFromFirestore, getWorkTypesFromFirestore } from "@/lib/mock-data"; 
+import { useAuth } from "@/contexts/auth-context"; 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -38,7 +38,7 @@ const blFormSchema = z.object({
   allocatedAmount: z.coerce.number().positive({ message: "Le montant alloué doit être positif." }),
   workTypeId: z.string({ required_error: "Veuillez sélectionner un type de travail." }),
   description: z.string().optional(),
-  categories: z.string().min(1, { message: "Veuillez entrer au moins une catégorie."}), // Comma-separated string
+  categories: z.string().min(1, { message: "Veuillez entrer au moins une catégorie."}), 
   status: z.enum(["en cours", "terminé", "inactif"], { required_error: "Veuillez sélectionner un statut." }),
 });
 
@@ -46,8 +46,6 @@ type BLFormValues = z.infer<typeof blFormSchema>;
 
 interface BLFormProps {
   initialData?: BillOfLading | null;
-  // clients and workTypes will be fetched if not editing, or passed if editing (for consistency)
-  // but for simplicity, we fetch clients here anyway for add form pre-selection
 }
 
 export function BLForm({ initialData }: BLFormProps) {
@@ -58,15 +56,28 @@ export function BLForm({ initialData }: BLFormProps) {
   const { user } = useAuth(); 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
-  const workTypes: WorkType[] = MOCK_WORK_TYPES; // Work types are still mock
+  const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
+  const [isLoadingDropdownData, setIsLoadingDropdownData] = useState(true);
 
   useEffect(() => {
-    const fetchClientsData = async () => {
-      const fetchedClients = await getClientsFromFirestore();
-      setClients(fetchedClients);
+    const fetchDropdownData = async () => {
+      setIsLoadingDropdownData(true);
+      try {
+        const [fetchedClients, fetchedWorkTypes] = await Promise.all([
+          getClientsFromFirestore(),
+          getWorkTypesFromFirestore()
+        ]);
+        setClients(fetchedClients);
+        setWorkTypes(fetchedWorkTypes);
+      } catch (error) {
+        console.error("Failed to fetch clients or work types for BL form:", error);
+        toast({title: "Erreur de chargement", description: "Impossible de charger les clients ou types de travail.", variant: "destructive"});
+      } finally {
+        setIsLoadingDropdownData(false);
+      }
     };
-    fetchClientsData();
-  }, []);
+    fetchDropdownData();
+  }, [toast]);
 
 
   const defaultCategories = initialData?.categories ? initialData.categories.join(", ") : "";
@@ -107,12 +118,11 @@ export function BLForm({ initialData }: BLFormProps) {
         description: data.description || "",
         categories: processedCategories,
         status: data.status,
-        createdByUserId: initialData ? initialData.createdByUserId : user.uid, // Preserve original creator on edit, set on new
+        createdByUserId: initialData ? initialData.createdByUserId : user.uid, 
     };
 
     try {
       if (initialData && initialData.id) {
-          // For update, we don't send createdByUserId or createdAt as they shouldn't change
           const updatePayload: Partial<Omit<BillOfLading, 'id' | 'createdAt' | 'createdByUserId'>> = {
             blNumber: data.blNumber,
             clientId: data.clientId,
@@ -126,7 +136,7 @@ export function BLForm({ initialData }: BLFormProps) {
       } else {
           const newBLDataForFirestore = {
             ...blDataPayload,
-            createdByUserId: user.uid, // Ensure createdByUserId is set for new BL
+            createdByUserId: user.uid, 
           };
           await addBLToFirestore(newBLDataForFirestore);
       }
@@ -149,7 +159,6 @@ export function BLForm({ initialData }: BLFormProps) {
     }
   }
   
-  // Update defaultValues if preselectedClientId or initialData changes
   useEffect(() => {
     if (!initialData && preselectedClientId && clients.length > 0) {
       form.reset({
@@ -200,10 +209,10 @@ export function BLForm({ initialData }: BLFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Client Associé</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || clients.length === 0}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || isLoadingDropdownData || clients.length === 0}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={clients.length === 0 ? "Chargement des clients..." : "Sélectionnez un client"} />
+                          <SelectValue placeholder={isLoadingDropdownData ? "Chargement..." : (clients.length === 0 ? "Aucun client" : "Sélectionnez un client")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -224,10 +233,10 @@ export function BLForm({ initialData }: BLFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Type de Travail</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting || isLoadingDropdownData || workTypes.length === 0}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Sélectionnez un type de travail" />
+                          <SelectValue placeholder={isLoadingDropdownData ? "Chargement..." : (workTypes.length === 0 ? "Aucun type" : "Sélectionnez un type")} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -314,8 +323,8 @@ export function BLForm({ initialData }: BLFormProps) {
                 <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
                   Annuler
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button type="submit" disabled={isSubmitting || isLoadingDropdownData}>
+                  {(isSubmitting || isLoadingDropdownData) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {initialData ? "Sauvegarder" : "Ajouter le BL"}
                 </Button>
               </div>

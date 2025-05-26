@@ -21,6 +21,8 @@ export let MOCK_USERS: User[] = [
   { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee'},
 ];
 
+// MOCK_WORK_TYPES is now managed by Firestore
+/*
 export let MOCK_WORK_TYPES: WorkType[] = [
   { id: 'wt-1', name: 'Transit Standard', description: 'Service de transit de base.', createdAt: new Date('2023-01-01T10:00:00Z').toISOString(), createdByUserId: 'user-2-mock' },
   { id: 'wt-2', name: 'Transport Routier', description: 'Acheminement par camion.', createdAt: new Date('2023-01-05T11:00:00Z').toISOString(), createdByUserId: 'user-1-mock' },
@@ -28,42 +30,6 @@ export let MOCK_WORK_TYPES: WorkType[] = [
   { id: 'wt-4', name: 'Dédouanement Import', description: 'Formalités douanières pour importation.', createdAt: new Date('2023-02-01T13:00:00Z').toISOString(), createdByUserId: 'user-1-mock' },
   { id: 'wt-5', name: 'Dédouanement Export', description: 'Formalités douanières pour exportation.', createdAt: new Date('2023-02-05T14:00:00Z').toISOString(), createdByUserId: 'user-2-mock' },
   { id: 'wt-6', name: 'Projet Spécial', description: 'Gestion de projets logistiques complexes.', createdAt: new Date('2023-03-01T15:00:00Z').toISOString(), createdByUserId: 'user-1-mock' },
-];
-
-// MOCK_CLIENTS is now managed by Firestore
-// export let MOCK_CLIENTS: Client[] = [ ... ]; 
-
-// MOCK_BILLS_OF_LADING is now managed by Firestore
-// export let MOCK_BILLS_OF_LADING: BillOfLading[] = [ ... ];
-
-// MOCK_EXPENSES is now managed by Firestore
-/*
-export let MOCK_EXPENSES: Expense[] = [
-  {
-    id: 'exp-1',
-    blId: 'bl-1', // This ID would need to match a Firestore BL ID once expenses are migrated
-    label: 'Ocean Freight Charges',
-    amount: 2500,
-    date: new Date('2023-10-20T11:00:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  },
-   {
-    id: 'exp-2',
-    blId: 'bl-1',
-    label: 'Local Transport',
-    amount: 300,
-    date: new Date('2023-10-22T09:00:00Z').toISOString(),
-    employeeId: 'user-1-mock',
-  },
-  {
-    id: 'exp-3',
-    blId: 'bl-2', // This ID would need to match a Firestore BL ID
-    label: 'Customs Clearance',
-    amount: 1200,
-    date: new Date('2023-11-05T16:00:00Z').toISOString(),
-    employeeId: 'user-2-mock',
-  },
-  // ... other expenses
 ];
 */
 
@@ -82,6 +48,7 @@ export let MOCK_TODO_ITEMS: TodoItem[] = [
 const clientsCollectionRef = collection(db, "clients");
 const blsCollectionRef = collection(db, "billsOfLading");
 const expensesCollectionRef = collection(db, "expenses");
+const workTypesCollectionRef = collection(db, "workTypes");
 
 
 // Client CRUD with Firestore
@@ -89,7 +56,7 @@ export const addClientToFirestore = async (clientData: Omit<Client, 'id' | 'crea
   try {
     const docRef = await addDoc(clientsCollectionRef, {
       ...clientData,
-      blIds: [], // Initialize with empty array
+      blIds: [], 
       createdAt: serverTimestamp() 
     });
     return docRef.id;
@@ -114,9 +81,7 @@ export const getClientsFromFirestore = async (): Promise<Client[]> => {
     if (e.code === 'permission-denied') {
       console.error(
         "Firestore permission denied while trying to fetch clients. " +
-        "Please check your Firestore security rules in the Firebase console. " +
-        "Rule suggestion for authenticated users: `service cloud.firestore { match /databases/{database}/documents { match /clients/{document=**} { allow read: if request.auth != null; } } }` " +
-        "Ensure your rules allow reads on the 'clients' collection for authenticated users.",
+        "Please check your Firestore security rules in the Firebase console. ",
         e
       );
     } else {
@@ -144,9 +109,7 @@ export const getClientByIdFromFirestore = async (clientId: string): Promise<Clie
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error(
-        `Firestore permission denied while trying to fetch client with ID: ${clientId}. ` +
-        "Please check your Firestore security rules in the Firebase console. " +
-        "Ensure rules allow reads on individual client documents (e.g., `match /clients/{clientId} { allow read: if request.auth != null; }`).",
+        `Firestore permission denied while trying to fetch client with ID: ${clientId}. `,
         e
       );
     } else {
@@ -169,12 +132,10 @@ export const updateClientInFirestore = async (clientId: string, updatedData: Par
 export const deleteClientFromFirestore = async (clientId: string) => {
   const clientDoc = doc(db, "clients", clientId);
   try {
-    // TODO: In a real app, handle deletion of associated BLs and Expenses, or use Firestore Functions for cascading deletes.
-    // For now, just delete the client.
-    // Consider deleting BLs associated with this client:
-    // const blsSnapshot = await getDocs(query(blsCollectionRef, where("clientId", "==", clientId)));
-    // const deletePromises = blsSnapshot.docs.map(blDoc => deleteBLFromFirestore(blDoc.id));
-    // await Promise.all(deletePromises);
+    // Delete BLs associated with this client
+    const blsSnapshot = await getDocs(query(blsCollectionRef, where("clientId", "==", clientId)));
+    const deleteBLPromises = blsSnapshot.docs.map(blDoc => deleteBLFromFirestore(blDoc.id));
+    await Promise.all(deleteBLPromises);
     await deleteDoc(clientDoc);
   } catch (e) {
     console.error("Error deleting document (client): ", e);
@@ -189,12 +150,11 @@ export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'create
       ...blData,
       createdAt: serverTimestamp()
     });
-    // Optionally update client's blIds array
     if (blData.clientId) {
         const clientDocRef = doc(db, "clients", blData.clientId);
         const clientSnap = await getDoc(clientDocRef);
         if (clientSnap.exists()) {
-            const clientData = clientSnap.data() as Client; // We need to cast here
+            const clientData = clientSnap.data() as Client; 
             const updatedBlIds = [...(clientData.blIds || []), docRef.id];
             await updateDoc(clientDocRef, { blIds: updatedBlIds });
         }
@@ -216,14 +176,12 @@ export const getBLsFromFirestore = async (): Promise<BillOfLading[]> => {
         id: doc.id,
         createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as BillOfLading;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Sort by newest first
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (e: any) {
      if (e.code === 'permission-denied') {
       console.error(
         "Firestore permission denied while trying to fetch Bills of Lading. " +
-        "Please check your Firestore security rules in the Firebase console. " +
-        "Rule suggestion for authenticated users: `service cloud.firestore { match /databases/{database}/documents { match /billsOfLading/{document=**} { allow read: if request.auth != null; } } }` " +
-        "Ensure your rules allow reads on the 'billsOfLading' collection for authenticated users.",
+        "Please check your Firestore security rules.",
         e
       );
     } else {
@@ -296,18 +254,16 @@ export const deleteBLFromFirestore = async (blId: string) => {
   try {
     const blSnap = await getDoc(blDocRef);
     if (blSnap.exists()) {
-        const blData = blSnap.data() as BillOfLading; // Cast here
-        // Remove BL ID from client's blIds array
+        const blData = blSnap.data() as BillOfLading; 
         if (blData.clientId) {
             const clientDocRef = doc(db, "clients", blData.clientId);
             const clientSnap = await getDoc(clientDocRef);
             if (clientSnap.exists()) {
-                const clientData = clientSnap.data() as Client; // Cast here
+                const clientData = clientSnap.data() as Client; 
                 const updatedBlIds = (clientData.blIds || []).filter(id => id !== blId);
                 await updateDoc(clientDocRef, { blIds: updatedBlIds });
             }
         }
-        // Delete associated expenses
         const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
         const expensesSnapshot = await getDocs(expensesQuery);
         const deleteExpensePromises = expensesSnapshot.docs.map(expenseDoc => deleteExpenseFromFirestore(expenseDoc.id));
@@ -327,7 +283,18 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
       ...expenseData,
       date: serverTimestamp() 
     });
-    return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense; // Return the full expense object with new ID and approximate date
+    // Fetch the document to get the server-generated timestamp
+    const newDocSnap = await getDoc(docRef);
+    if (newDocSnap.exists()) {
+      const newExpenseData = newDocSnap.data();
+      return { 
+        ...newExpenseData,
+        id: newDocSnap.id, 
+        date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
+      } as Expense;
+    }
+    // Fallback if getDoc fails, though unlikely immediately after addDoc
+    return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
     throw e;
@@ -388,26 +355,91 @@ export const deleteExpenseFromFirestore = async (expenseId: string) => {
 };
 
 
-// --- Legacy Mock Data Functions (to be phased out or adapted for other entities) ---
-/*
-export const addBL = (bl: BillOfLading) => {
-  MOCK_BILLS_OF_LADING.push(bl);
+// WorkType CRUD with Firestore
+export const addWorkTypeToFirestore = async (workTypeData: Omit<WorkType, 'id' | 'createdAt'> & { createdByUserId: string }) => {
+  try {
+    const docRef = await addDoc(workTypesCollectionRef, {
+      ...workTypeData,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (e) {
+    console.error("Error adding document (work type): ", e);
+    throw e;
+  }
 };
-export const updateBL = (updatedBL: BillOfLading) => {
-  MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.map(bl => bl.id === updatedBL.id ? { ...bl, ...updatedBL } : bl);
-};
-export const deleteBL = (blId: string) => {
-  MOCK_BILLS_OF_LADING = MOCK_BILLS_OF_LADING.filter(bl => bl.id !== blId);
-  MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.blId !== blId); 
-};
-*/
-// export const addExpense = (expense: Expense) => {
-//   MOCK_EXPENSES.push(expense);
-// };
-// export const deleteExpense = (expenseId: string) => {
-//   MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.id !== expenseId);
-// };
 
+export const getWorkTypesFromFirestore = async (): Promise<WorkType[]> => {
+  try {
+    const data = await getDocs(workTypesCollectionRef);
+    return data.docs.map(doc => {
+      const workTypeData = doc.data();
+      return {
+        ...workTypeData,
+        id: doc.id,
+        createdAt: workTypeData.createdAt instanceof Timestamp ? workTypeData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as WorkType;
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch work types.", e);
+    } else {
+      console.error("Error getting documents (work types): ", e);
+    }
+    return [];
+  }
+};
+
+export const getWorkTypeByIdFromFirestore = async (workTypeId: string): Promise<WorkType | null> => {
+  try {
+    const workTypeDocRef = doc(db, "workTypes", workTypeId);
+    const workTypeSnap = await getDoc(workTypeDocRef);
+    if (workTypeSnap.exists()) {
+      const workTypeData = workTypeSnap.data();
+      return {
+        ...workTypeData,
+        id: workTypeSnap.id,
+        createdAt: workTypeData.createdAt instanceof Timestamp ? workTypeData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as WorkType;
+    } else {
+      console.log("No such document for work type ID:", workTypeId);
+      return null;
+    }
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch work type with ID: ${workTypeId}.`, e);
+    } else {
+      console.error(`Error getting document (work type ${workTypeId}): `, e);
+    }
+    return null;
+  }
+};
+
+export const updateWorkTypeInFirestore = async (workTypeId: string, updatedData: Partial<Omit<WorkType, 'id' | 'createdAt' | 'createdByUserId'>>) => {
+  const workTypeDoc = doc(db, "workTypes", workTypeId);
+  try {
+    await updateDoc(workTypeDoc, updatedData);
+  } catch (e) {
+    console.error("Error updating document (work type): ", e);
+    throw e;
+  }
+};
+
+export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
+  const workTypeDoc = doc(db, "workTypes", workTypeId);
+  try {
+    // Consider implications: What happens to BLs using this work type?
+    // For now, just delete the work type. A real app might require setting workTypeId on BLs to null or a default.
+    await deleteDoc(workTypeDoc);
+  } catch (e) {
+    console.error("Error deleting document (work type): ", e);
+    throw e;
+  }
+};
+
+
+// --- Legacy Mock Data Functions ---
+/*
 export const addWorkType = (workType: WorkType) => {
   MOCK_WORK_TYPES.push(workType);
 };
@@ -417,6 +449,7 @@ export const updateWorkType = (updatedWorkType: WorkType) => {
 export const deleteWorkType = (workTypeId: string) => {
   MOCK_WORK_TYPES = MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId);
 };
+*/
 
 export const addChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
   const newMessage: ChatMessage = {
@@ -461,14 +494,18 @@ export const deleteTodoItem = (todoId: string): void => {
   MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.filter(todo => todo.id !== todoId);
 };
 
-// Helper to get employee name (can be adapted to fetch from a 'users' collection in Firestore later)
 export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (!employeeId) return 'N/A';
-    // Check mock users first
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
-    // Fallback for cases where employeeId might be a Firebase UID during transition
-    // In a full system, you'd fetch the user profile from a 'users' collection in Firestore
-    // For now, we can't reliably get a name if it's a real UID not in MOCK_USERS
     return 'Utilisateur Inconnu'; 
 };
+
+// MOCK_CLIENTS is now managed by Firestore
+// export let MOCK_CLIENTS: Client[] = [ ... ]; 
+
+// MOCK_BILLS_OF_LADING is now managed by Firestore
+// export let MOCK_BILLS_OF_LADING: BillOfLading[] = [ ... ];
+
+// MOCK_EXPENSES is now managed by Firestore
+// export let MOCK_EXPENSES: Expense[] = [ ... ];

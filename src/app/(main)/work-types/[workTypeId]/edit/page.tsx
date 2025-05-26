@@ -1,28 +1,48 @@
 
 "use client";
 
-import React from 'react'; // Import React
+import React from 'react'; 
 import { PageHeader } from '@/components/shared/page-header';
 import { WorkTypeForm } from '@/components/work-type/work-type-form';
-import { MOCK_WORK_TYPES } from '@/lib/mock-data';
+import { getWorkTypeByIdFromFirestore } from '@/lib/mock-data'; // Firestore function
 import type { WorkType } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function EditWorkTypePage({ params: paramsPromise }: { params: Promise<{ workTypeId: string }> }) {
-  const { workTypeId } = React.use(paramsPromise); // Resolve params using React.use
-  const [workType, setWorkType] = useState<WorkType | null | undefined>(undefined); // undefined for loading state
+  const { workTypeId } = React.use(paramsPromise); 
+  const [workType, setWorkType] = useState<WorkType | null | undefined>(undefined);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!workTypeId) return; // Ensure workTypeId is resolved
-    const found = MOCK_WORK_TYPES.find(wt => wt.id === workTypeId);
-    setWorkType(found || null);
+    if (!workTypeId) {
+        setIsLoading(false);
+        return;
+    }
+    const fetchWorkType = async () => {
+      setIsLoading(true);
+      try {
+        const found = await getWorkTypeByIdFromFirestore(workTypeId);
+        setWorkType(found);
+      } catch (error) {
+        console.error("Failed to fetch work type for editing:", error);
+        setWorkType(null); 
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchWorkType();
   }, [workTypeId]);
 
-  if (workType === undefined) {
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  if (isLoading || workType === undefined) {
+    return (
+        <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-2 text-muted-foreground">Chargement du type de travail...</p>
+        </div>
+    );
   }
 
   if (!workType) {

@@ -1,15 +1,15 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, use } from 'react'; // Added use
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MOCK_WORK_TYPES, deleteWorkType } from '@/lib/mock-data';
+import { getWorkTypesFromFirestore, deleteWorkTypeFromFirestore } from '@/lib/mock-data'; // Firestore functions
 import type { WorkType } from '@/lib/types';
-import { PlusCircle, ArrowRight, Edit, Trash2, Search } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Search, Loader2 } from 'lucide-react'; // Added Loader2
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -38,14 +38,17 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { useAuth } from '@/contexts/auth-context'; // Import useAuth
+import { useAuth } from '@/contexts/auth-context';
 
-export default function WorkTypesPage() {
-  const { user, isAdmin } = useAuth(); // Use real auth state and isAdmin flag
+export default function WorkTypesPage({ params: paramsPromise }: { params: Promise<{}> }) { // Added paramsPromise
+  const params = use(paramsPromise); // Resolve params using React.use
+  const { user, isAdmin } = useAuth();
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const { toast } = useToast();
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   const [editingWorkType, setEditingWorkType] = useState<WorkType | null>(null);
   const [editReason, setEditReason] = useState('');
@@ -54,9 +57,21 @@ export default function WorkTypesPage() {
 
 
   useEffect(() => {
-    const sortedWorkTypes = MOCK_WORK_TYPES.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    setWorkTypes(sortedWorkTypes);
-  }, []);
+    if (!user) return; // Wait for user to be loaded
+    const fetchWorkTypes = async () => {
+      setIsLoading(true);
+      try {
+        const fetchedWorkTypes = await getWorkTypesFromFirestore();
+        setWorkTypes(fetchedWorkTypes);
+      } catch (error) {
+        console.error("Failed to fetch work types:", error);
+        toast({ title: "Erreur", description: "Impossible de charger les types de travail.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchWorkTypes();
+  }, [user, toast]);
 
   const filteredWorkTypes = useMemo(() => {
     if (!searchTerm) return workTypes;
@@ -66,15 +81,24 @@ export default function WorkTypesPage() {
     );
   }, [workTypes, searchTerm]);
 
-  const handleDeleteWorkTypeDirectly = (workTypeId: string) => {
-    deleteWorkType(workTypeId);
-    const updatedWorkTypes = MOCK_WORK_TYPES.filter(wt => wt.id !== workTypeId).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    setWorkTypes(updatedWorkTypes); 
-    toast({
-      title: "Type de Travail Supprimé",
-      description: "Le type de travail a été supprimé avec succès.",
-    });
-    router.refresh(); 
+  const handleDeleteWorkTypeDirectly = async (workTypeId: string) => {
+    if (!isAdmin) return;
+    setIsProcessingAction(true);
+    try {
+      await deleteWorkTypeFromFirestore(workTypeId);
+      setWorkTypes(prev => prev.filter(wt => wt.id !== workTypeId));
+      toast({
+        title: "Type de Travail Supprimé",
+        description: "Le type de travail a été supprimé avec succès.",
+      });
+      setDeletingWorkType(null);
+      router.refresh(); 
+    } catch (error) {
+      console.error("Failed to delete work type:", error);
+      toast({ title: "Erreur", description: "Échec de la suppression.", variant: "destructive" });
+    } finally {
+        setIsProcessingAction(false);
+    }
   };
 
   const handleSubmitEditRequest = () => {
@@ -82,6 +106,7 @@ export default function WorkTypesPage() {
       toast({ title: "Erreur", description: "Veuillez fournir une raison pour la modification.", variant: "destructive" });
       return;
     }
+    // Simulate sending request
     console.log(`Demande de modification pour Type de Travail ${editingWorkType.name} par ${user?.displayName}. Raison: ${editReason}`);
     toast({
       title: "Demande Envoyée (Simulation)",
@@ -96,6 +121,7 @@ export default function WorkTypesPage() {
         toast({ title: "Erreur", description: "Veuillez fournir une raison pour la suppression.", variant: "destructive" });
         return;
     }
+    // Simulate sending request
     console.log(`Demande de suppression pour Type de Travail ${deletingWorkType.name} par ${user?.displayName}. Raison: ${deleteReason}`);
     toast({
         title: "Demande Envoyée (Simulation)",
@@ -105,9 +131,18 @@ export default function WorkTypesPage() {
     setDeletingWorkType(null);
   };
 
-  if (!user) { // Ensure user is loaded
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  if (!user && isLoading) { 
+    return (
+        <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-2 text-muted-foreground">Chargement...</p>
+        </div>
+    );
   }
+  if (!user && !isLoading) {
+    return <div className="flex justify-center items-center h-64">Veuillez vous connecter pour voir cette page.</div>;
+  }
+
 
   return (
     <>
@@ -134,6 +169,7 @@ export default function WorkTypesPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-sm"
+              disabled={isLoading}
             />
           </div>
         </CardContent>
@@ -144,10 +180,16 @@ export default function WorkTypesPage() {
           <CardTitle>Liste des Types de Travail</CardTitle>
           <CardDescription>
             Aperçu de tous les types de travail enregistrés, triés par date de création (plus récents en premier).
-            Nombre de types affichés: {filteredWorkTypes.length}
+            Nombre de types affichés: {isLoading ? "Chargement..." : filteredWorkTypes.length}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center items-center py-10">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2 text-muted-foreground">Chargement des types de travail...</p>
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -199,13 +241,13 @@ export default function WorkTypesPage() {
                       </Dialog>
                     )}
                    
-                    <AlertDialog open={deletingWorkType?.id === wt.id} onOpenChange={(isOpen) => {
-                        if (!isOpen) setDeletingWorkType(null);
+                    <AlertDialog open={deletingWorkType?.id === wt.id && !isProcessingAction} onOpenChange={(isOpen) => {
+                        if (!isOpen && !isProcessingAction) setDeletingWorkType(null);
                         setDeleteReason('');
                     }}>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" onClick={() => {setDeletingWorkType(wt); setDeleteReason('');}}>
-                          <Trash2 className="mr-1 h-4 w-4" /> Supprimer
+                        <Button variant="destructive" size="sm" onClick={() => {setDeletingWorkType(wt); setDeleteReason('');}} disabled={isProcessingAction}>
+                          {isProcessingAction && deletingWorkType?.id === wt.id ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Trash2 className="mr-1 h-4 w-4" />} Supprimer
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -225,10 +267,15 @@ export default function WorkTypesPage() {
                            )}
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel onClick={() => {setDeletingWorkType(null); setDeleteReason('');}}>Annuler</AlertDialogCancel>
-                          <AlertDialogAction onClick={isAdmin ? () => handleDeleteWorkTypeDirectly(wt.id) : handleSubmitDeleteRequest}>
+                          <AlertDialogCancel onClick={() => {setDeletingWorkType(null); setDeleteReason('');}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
+                          <Button 
+                            onClick={isAdmin ? () => handleDeleteWorkTypeDirectly(wt.id) : handleSubmitDeleteRequest}
+                            variant={isAdmin ? "destructive" : "default"}
+                            disabled={isProcessingAction}
+                          >
+                            {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {isAdmin ? "Confirmer" : "Soumettre"}
-                          </AlertDialogAction>
+                          </Button>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -237,7 +284,8 @@ export default function WorkTypesPage() {
               ))}
             </TableBody>
           </Table>
-           {filteredWorkTypes.length === 0 && (
+          )}
+           {!isLoading && filteredWorkTypes.length === 0 && (
             <p className="text-center text-muted-foreground py-4">
                 {searchTerm ? "Aucun type de travail ne correspond à votre recherche." : "Aucun type de travail trouvé."}
             </p>

@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button';
 import { 
     getBLByIdFromFirestore,
     getClientByIdFromFirestore,
-    getExpensesByBlIdFromFirestore, // Use Firestore function for expenses
+    getExpensesByBlIdFromFirestore,
+    getWorkTypeByIdFromFirestore, // Added
     MOCK_USERS, 
-    MOCK_WORK_TYPES,
     deleteBLFromFirestore, 
-    deleteExpenseFromFirestore, // Use Firestore function for deleting expense
+    deleteExpenseFromFirestore,
     getEmployeeNameFromMock
 } from '@/lib/mock-data';
 import type { BillOfLading, Expense, Client, User as MockUser, BLStatus, WorkType } from '@/lib/types';
@@ -72,7 +72,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   const { user, isAdmin } = useAuth(); 
   const [bl, setBl] = useState<BillOfLading | null>(null);
   const [client, setClient] = useState<Client | null>(null);
-  const [workType, setWorkType] = useState<WorkType | null>(null);
+  const [workType, setWorkType] = useState<WorkType | null>(null); // Added state for WorkType
   const [expenses, setExpenses] = useState<Expense[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingExpenses, setIsLoadingExpenses] = useState(true);
@@ -107,8 +107,10 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                     const foundClient = await getClientByIdFromFirestore(foundBl.clientId);
                     setClient(foundClient);
                 }
-                const foundWorkType = MOCK_WORK_TYPES.find(wt => wt.id === foundBl.workTypeId);
-                setWorkType(foundWorkType || null);
+                if (foundBl.workTypeId) { // Fetch WorkType if ID exists
+                    const foundWorkType = await getWorkTypeByIdFromFirestore(foundBl.workTypeId);
+                    setWorkType(foundWorkType || null);
+                }
                 
                 const blExpenses = await getExpensesByBlIdFromFirestore(blId);
                 setExpenses(blExpenses);
@@ -149,7 +151,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
   };
 
   const handleDeleteExpense = async (expenseId: string) => { 
-    if (!requestingDeleteExpense && !isAdmin) return; // Should not happen if dialog controls it
+    if (!requestingDeleteExpense && !isAdmin) return; 
     
     setIsDeletingExpense(true);
     try {
@@ -159,8 +161,8 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
         title: "Dépense Supprimée",
         description: "La dépense a été supprimée avec succès.",
       });
-      setRequestingDeleteExpense(null); // Close dialog
-      setDeleteExpenseReason(''); // Clear reason
+      setRequestingDeleteExpense(null); 
+      setDeleteExpenseReason(''); 
     } catch (error) {
         console.error("Failed to delete expense:", error);
         toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
@@ -457,7 +459,7 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                         <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
                         <TableCell className="text-right">
                            <AlertDialog open={requestingDeleteExpense?.id === exp.id && !isDeletingExpense} onOpenChange={(open) => {
-                                if (!open && !isDeletingExpense) { // Prevent closing while delete is in progress
+                                if (!open && !isDeletingExpense) { 
                                     setRequestingDeleteExpense(null);
                                     setDeleteExpenseReason('');
                                 }
@@ -468,8 +470,8 @@ export default function BLDetailPage({ params: paramsPromise }: { params: Promis
                                 size="sm" 
                                 className="text-muted-foreground hover:text-destructive"
                                 onClick={() => {
-                                    setRequestingDeleteExpense(exp); // Always set for both admin and non-admin to populate dialog
-                                    setDeleteExpenseReason(''); // Clear reason
+                                    setRequestingDeleteExpense(exp); 
+                                    setDeleteExpenseReason(''); 
                                 }}
                                 disabled={isDeletingExpense && requestingDeleteExpense?.id === exp.id}
                               >

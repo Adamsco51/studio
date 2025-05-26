@@ -1,11 +1,9 @@
 
 import { PageHeader } from '@/components/shared/page-header';
 import { BLForm } from '@/components/bl/bl-form';
-import { MOCK_WORK_TYPES } from '@/lib/mock-data'; // MOCK_WORK_TYPES is still used
 
 export default function AddBLPage() {
-  // Clients are now fetched directly within BLForm from Firestore
-  const workTypes = MOCK_WORK_TYPES; // Fetch work types (still mock)
+  // Clients and WorkTypes are now fetched directly within BLForm from Firestore
 
   return (
     <>
@@ -13,8 +11,8 @@ export default function AddBLPage() {
         title="Ajouter un Nouveau Connaissement (BL)"
         description="Remplissez les informations ci-dessous pour enregistrer un nouveau BL."
       />
-      {/* BLForm will fetch clients from Firestore. workTypes is still passed as mock. */}
-      <BLForm workTypes={workTypes} /> 
+      {/* BLForm will fetch clients and work types from Firestore. */}
+      <BLForm /> 
     </>
   );
 }
