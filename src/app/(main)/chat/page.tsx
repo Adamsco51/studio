@@ -1,9 +1,9 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,11 +12,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { 
-    INITIAL_MOCK_CHAT_MESSAGES, 
-    INITIAL_MOCK_TODO_ITEMS, 
     MOCK_USERS, 
-    createNewChatMessage, 
-    createNewTodoItem 
+    addChatMessageToFirestore,
+    getChatMessagesFromFirestore,
+    addTodoItemToFirestore,
+    getTodoItemsFromFirestore,
+    updateTodoItemInFirestore,
+    deleteTodoItemFromFirestore
 } from '@/lib/mock-data';
 import type { ChatMessage, TodoItem, User as MockUser } from '@/lib/types'; 
 import { useForm, Controller } from "react-hook-form";
@@ -45,7 +47,11 @@ export default function ChatPage() {
   const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
+  const [isLoadingTodos, setIsLoadingTodos] = useState(true);
   const { toast } = useToast();
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
 
   const chatForm = useForm<ChatMessageFormValues>({
     resolver: zodResolver(chatMessageSchema),
@@ -61,57 +67,106 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
-    // Initialize with copies of the initial mock data to prevent issues with global array mutations
-    // and ensure component owns its state.
-    setMessages([...INITIAL_MOCK_CHAT_MESSAGES].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
-    setTodos([...INITIAL_MOCK_TODO_ITEMS].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-  }, []);
+    if (!user) {
+        setIsLoadingMessages(false);
+        setIsLoadingTodos(false);
+        return;
+    }
+
+    setIsLoadingMessages(true);
+    const unsubscribeMessages = getChatMessagesFromFirestore((fetchedMessages) => {
+      setMessages(fetchedMessages);
+      setIsLoadingMessages(false);
+      // Scroll to bottom when new messages arrive or on initial load
+      setTimeout(() => { // Timeout to allow DOM to update
+        const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
+      }, 0);
+    });
+
+    setIsLoadingTodos(true);
+    const unsubscribeTodos = getTodoItemsFromFirestore((fetchedTodos) => {
+      setTodos(fetchedTodos);
+      setIsLoadingTodos(false);
+    });
+    
+    return () => {
+      unsubscribeMessages();
+      unsubscribeTodos();
+    };
+  }, [user]);
 
 
-  const handleSendMessage = (data: ChatMessageFormValues) => {
+  const handleSendMessage = async (data: ChatMessageFormValues) => {
     if (!user) {
         toast({title: "Erreur", description: "Vous devez être connecté pour envoyer un message.", variant: "destructive"});
         return;
     }
-    const newMessage = createNewChatMessage(data.text, user.uid, user.displayName || user.email || "Utilisateur Inconnu");
-    setMessages(prev => [...prev, newMessage].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
-    chatForm.reset();
+    const messagePayload = {
+        senderId: user.uid,
+        senderName: user.displayName || user.email || "Utilisateur Inconnu",
+        text: data.text,
+    };
+    try {
+      await addChatMessageToFirestore(messagePayload);
+      chatForm.reset();
+       // Optimistic update not strictly needed due to real-time listener, but can clear form faster
+    } catch (error) {
+        console.error("Error sending message:", error);
+        toast({title: "Erreur d'envoi", description: "Impossible d'envoyer le message.", variant: "destructive"});
+    }
   };
 
-  const handleAddTodo = (data: TodoItemFormValues) => {
+  const handleAddTodo = async (data: TodoItemFormValues) => {
      if (!user) {
         toast({title: "Erreur", description: "Vous devez être connecté pour ajouter une tâche.", variant: "destructive"});
         return;
     }
     const assignedUser = MOCK_USERS.find(u => u.id === data.assignedToUserId);
-    const newTodo = createNewTodoItem(
-        data.text, 
-        user.uid, 
-        user.displayName || user.email || "Utilisateur Inconnu", 
-        data.assignedToUserId, 
-        assignedUser?.name
-    );
-    setTodos(prev => [...prev, newTodo].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-    todoForm.reset({ text: "", assignedToUserId: undefined });
-    toast({ title: "Tâche ajoutée", description: `"${newTodo.text}" a été ajoutée.` });
+    const todoPayload = {
+        text: data.text,
+        createdByUserId: user.uid,
+        createdByName: user.displayName || user.email || "Utilisateur Inconnu",
+        assignedToUserId: data.assignedToUserId === NO_ASSIGNEE_VALUE ? undefined : data.assignedToUserId,
+        assignedToUserName: data.assignedToUserId === NO_ASSIGNEE_VALUE ? undefined : assignedUser?.name,
+    };
+    try {
+        await addTodoItemToFirestore(todoPayload);
+        todoForm.reset({ text: "", assignedToUserId: undefined });
+        toast({ title: "Tâche ajoutée", description: `"${data.text}" a été ajoutée.` });
+    } catch (error) {
+        console.error("Error adding todo:", error);
+        toast({title: "Erreur d'ajout", description: "Impossible d'ajouter la tâche.", variant: "destructive"});
+    }
   };
 
-  const handleToggleTodo = (todoId: string) => {
+  const handleToggleTodo = async (todoId: string) => {
     const todoToUpdate = todos.find(t => t.id === todoId);
     if (!todoToUpdate) return;
 
     const newCompletedStatus = !todoToUpdate.completed;
-    
-    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, completed: newCompletedStatus } : t));
-    toast({
-      title: "Tâche mise à jour",
-      description: `"${todoToUpdate.text}" marquée comme ${newCompletedStatus ? 'terminée' : 'non terminée'}.`,
-    });
+    try {
+        await updateTodoItemInFirestore(todoId, { completed: newCompletedStatus });
+        toast({
+          title: "Tâche mise à jour",
+          description: `"${todoToUpdate.text}" marquée comme ${newCompletedStatus ? 'terminée' : 'non terminée'}.`,
+        });
+    } catch (error) {
+        console.error("Error toggling todo:", error);
+        toast({title: "Erreur de mise à jour", description: "Impossible de mettre à jour la tâche.", variant: "destructive"});
+    }
   };
   
-  const handleDeleteTodo = (todoId: string, todoText: string) => {
-    setTodos(prev => prev.filter(t => t.id !== todoId));
-    toast({ title: "Tâche supprimée", description: `"${todoText}" a été supprimée.`, variant: "destructive" });
+  const handleDeleteTodo = async (todoId: string, todoText: string) => {
+    try {
+        await deleteTodoItemFromFirestore(todoId);
+        toast({ title: "Tâche supprimée", description: `"${todoText}" a été supprimée.`, variant: "destructive" });
+    } catch (error) {
+        console.error("Error deleting todo:", error);
+        toast({title: "Erreur de suppression", description: "Impossible de supprimer la tâche.", variant: "destructive"});
+    }
   };
 
   const getInitials = (name: string) => {
@@ -153,8 +208,14 @@ export default function ChatPage() {
             <CardTitle className="flex items-center gap-2"><MessageCircle className="h-6 w-6 text-primary" /> Fil de Discussion</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <ScrollArea className="h-[400px] w-full p-4 border rounded-md bg-muted/20">
-              {messages.map((msg) => (
+            <ScrollArea className="h-[400px] w-full p-4 border rounded-md bg-muted/20" ref={scrollAreaRef}>
+              {isLoadingMessages && (
+                <div className="flex justify-center items-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="ml-2 text-muted-foreground">Chargement des messages...</p>
+                </div>
+              )}
+              {!isLoadingMessages && messages.map((msg) => (
                 <div key={msg.id} className={`flex items-start gap-3 mb-4 ${msg.senderId === CURRENT_USER_ID ? 'justify-end' : ''}`}>
                   {msg.senderId !== CURRENT_USER_ID && (
                     <Avatar className="h-8 w-8 border">
@@ -175,13 +236,13 @@ export default function ChatPage() {
                   )}
                 </div>
               ))}
-              {messages.length === 0 && <p className="text-muted-foreground text-center">Aucun message pour le moment.</p>}
+              {!isLoadingMessages && messages.length === 0 && <p className="text-muted-foreground text-center">Aucun message pour le moment.</p>}
             </ScrollArea>
           </CardContent>
           <CardFooter>
             <form onSubmit={chatForm.handleSubmit(handleSendMessage)} className="flex w-full items-center gap-2">
-              <Input {...chatForm.register("text")} placeholder="Écrivez un message..." className="flex-grow" disabled={chatForm.formState.isSubmitting || !user} />
-              <Button type="submit" size="icon" disabled={chatForm.formState.isSubmitting || !user}>
+              <Input {...chatForm.register("text")} placeholder="Écrivez un message..." className="flex-grow" disabled={chatForm.formState.isSubmitting || !user || isLoadingMessages} />
+              <Button type="submit" size="icon" disabled={chatForm.formState.isSubmitting || !user || isLoadingMessages}>
                 <Send className="h-5 w-5" />
               </Button>
             </form>
@@ -196,7 +257,7 @@ export default function ChatPage() {
           <CardContent>
             <form onSubmit={todoForm.handleSubmit(handleAddTodo)} className="space-y-3 mb-6">
               <div>
-                <Input {...todoForm.register("text")} placeholder="Nouvelle tâche..." disabled={todoForm.formState.isSubmitting || !user} />
+                <Input {...todoForm.register("text")} placeholder="Nouvelle tâche..." disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos} />
                  {todoForm.formState.errors.text && <p className="text-xs text-destructive mt-1">{todoForm.formState.errors.text.message}</p>}
               </div>
               <div>
@@ -207,7 +268,7 @@ export default function ChatPage() {
                     <Select 
                       onValueChange={(value) => field.onChange(value === NO_ASSIGNEE_VALUE ? undefined : value)} 
                       value={field.value ?? NO_ASSIGNEE_VALUE}
-                      disabled={todoForm.formState.isSubmitting || !user}
+                      disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Assigner à (optionnel)" />
@@ -222,13 +283,19 @@ export default function ChatPage() {
                   )}
                 />
               </div>
-              <Button type="submit" className="w-full" size="sm" disabled={todoForm.formState.isSubmitting || !user}>
+              <Button type="submit" className="w-full" size="sm" disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Ajouter la Tâche
               </Button>
             </form>
             <Separator className="my-4"/>
             <ScrollArea className="h-[300px] w-full pr-3">
-              {todos.length > 0 ? todos.map((todo) => (
+              {isLoadingTodos && (
+                <div className="flex justify-center items-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="ml-2 text-muted-foreground">Chargement des tâches...</p>
+                </div>
+              )}
+              {!isLoadingTodos && todos.length > 0 ? todos.map((todo) => (
                 <div key={todo.id} className="flex items-center justify-between gap-2 py-2 border-b border-border/50 last:border-b-0">
                   <div className="flex items-center gap-3">
                     <Checkbox
@@ -253,7 +320,7 @@ export default function ChatPage() {
                      </Button>
                   </div>
                 </div>
-              )) : <p className="text-muted-foreground text-sm text-center py-4">Aucune tâche pour le moment.</p>}
+              )) : (!isLoadingTodos && <p className="text-muted-foreground text-sm text-center py-4">Aucune tâche pour le moment.</p>)}
             </ScrollArea>
           </CardContent>
         </Card>

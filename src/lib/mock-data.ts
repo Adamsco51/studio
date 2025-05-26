@@ -17,7 +17,9 @@ import {
   orderBy, 
   arrayUnion,
   arrayRemove,
-  deleteField 
+  deleteField,
+  onSnapshot, // For real-time updates
+  limit // For limiting results
 } from "firebase/firestore";
 
 // MOCK_USERS is still used for things like assignee selection in chat or creator name display.
@@ -27,19 +29,6 @@ export let MOCK_USERS: User[] = [
   { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee'},
 ];
 
-// These are initial values. The ChatPage component will manage its own state.
-export const INITIAL_MOCK_CHAT_MESSAGES: ChatMessage[] = [
-    { id: 'msg-1', senderId: 'user-1-mock', senderName: 'Alice Employee (Mock)', text: 'Bonjour l\'équipe, n\'oubliez pas la réunion de 14h.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
-    { id: 'msg-2', senderId: 'user-2-mock', senderName: 'Bob Admin (Mock)', text: 'Bien noté Alice. J\'ai ajouté une tâche pour la préparation du rapport BL-2.', timestamp: new Date(Date.now() - 1000 * 60 * 55).toISOString() },
-    { id: 'msg-3', senderId: 'user-3-mock', senderName: 'Charlie Collaborator (Mock)', text: 'Je peux m\'occuper de contacter le client Global Imports Inc. pour le BL-3.', timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
-];
-
-export const INITIAL_MOCK_TODO_ITEMS: TodoItem[] = [
-    { id: 'todo-1', text: 'Préparer le rapport financier pour BL-2', assignedToUserId: 'user-1-mock', assignedToUserName: 'Alice Employee (Mock)', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(), createdByUserId: 'user-2-mock', createdByName: 'Bob Admin (Mock)' },
-    { id: 'todo-2', text: 'Contacter le client Global Imports Inc. (BL-3)', assignedToUserId: 'user-3-mock', assignedToUserName: 'Charlie Collaborator (Mock)', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(), createdByUserId: 'user-3-mock', createdByName: 'Charlie Collaborator (Mock)' },
-    { id: 'todo-3', text: 'Vérifier les documents douaniers pour BL-1', completed: true, createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(), createdByUserId: 'user-2-mock', createdByName: 'Bob Admin (Mock)' },
-];
-
 
 const usersCollectionRef = collection(db, "users");
 const clientsCollectionRef = collection(db, "clients");
@@ -47,6 +36,9 @@ const blsCollectionRef = collection(db, "billsOfLading");
 const expensesCollectionRef = collection(db, "expenses");
 const workTypesCollectionRef = collection(db, "workTypes");
 const approvalRequestsCollectionRef = collection(db, "approvalRequests");
+const chatMessagesCollectionRef = collection(db, "chatMessages");
+const todoItemsCollectionRef = collection(db, "todoItems");
+
 
 // User Profile CRUD with Firestore
 export const createUserProfile = async (uid: string, email: string | null, displayName: string | null, role: 'admin' | 'employee' = 'employee'): Promise<void> => {
@@ -329,7 +321,6 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
-    // Fallback, should ideally not be reached if doc creation is successful
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -490,7 +481,6 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
-    // Fallback, should not be hit if doc created
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -515,9 +505,9 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
       return {
         ...reqData,
         id: docSnap.id,
-        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt : new Date().toISOString()),
-        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt : undefined),
-        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt : undefined),
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt.toString() : new Date().toISOString()),
+        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt.toString() : undefined),
+        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt.toString() : undefined),
       } as ApprovalRequest;
     });
   } catch (e: any) {
@@ -543,9 +533,9 @@ export const getApprovalRequestsByUserIdFromFirestore = async (userId: string): 
       return {
         ...reqData,
         id: docSnap.id,
-        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt : new Date().toISOString()),
-        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt : undefined),
-        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt : undefined),
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt.toString() : new Date().toISOString()),
+        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt.toString() : undefined),
+        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt.toString() : undefined),
       } as ApprovalRequest;
     });
   } catch (e: any) {
@@ -572,9 +562,11 @@ export const updateApprovalRequestStatusInFirestore = async (
     const updateData: any = { 
       status: newStatus, 
       processedAt: serverTimestamp(), 
-      processedByUserId: processedByUserId,
     };
-    if (adminNotes !== undefined && adminNotes !== null) { 
+    if (processedByUserId) {
+        updateData.processedByUserId = processedByUserId;
+    }
+    if (adminNotes !== undefined && adminNotes !== null && adminNotes.trim() !== "") { 
       updateData.adminNotes = adminNotes;
     } else {
       updateData.adminNotes = deleteField();
@@ -619,8 +611,8 @@ export const getPinIssuedRequestForEntity = async (
         id: docSnap.id,
         ...requestData,
         createdAt: requestData.createdAt instanceof Timestamp ? requestData.createdAt.toDate().toISOString() : new Date().toISOString(),
-        processedAt: requestData.processedAt instanceof Timestamp ? requestData.processedAt.toDate().toISOString() : (requestData.processedAt ? requestData.processedAt : undefined),
-        pinExpiresAt: requestData.pinExpiresAt instanceof Timestamp ? requestData.pinExpiresAt.toDate().toISOString() : (requestData.pinExpiresAt ? requestData.pinExpiresAt : undefined),
+        processedAt: requestData.processedAt instanceof Timestamp ? requestData.processedAt.toDate().toISOString() : (requestData.processedAt ? requestData.processedAt.toString() : undefined),
+        pinExpiresAt: requestData.pinExpiresAt instanceof Timestamp ? requestData.pinExpiresAt.toDate().toISOString() : (requestData.pinExpiresAt ? requestData.pinExpiresAt.toString() : undefined),
       } as ApprovalRequest;
 
       if (request.pinCode && request.pinExpiresAt && new Date() < new Date(request.pinExpiresAt)) {
@@ -645,7 +637,7 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
       status: 'completed',
       pinCode: deleteField(), 
       pinExpiresAt: deleteField(),
-      processedAt: serverTimestamp() 
+      processedAt: serverTimestamp()
     });
   } catch (e) {
     console.error(`Error completing approval request ${requestId} with PIN: `, e);
@@ -654,37 +646,93 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
 };
 
 
-// Mock Chat & Todo (kept for now, could be migrated to Firestore too)
-// These functions now DO NOT MUTATE the global arrays.
-// The ChatPage component is responsible for managing its own state.
-
-export const createNewChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
-  return {
-    id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Longer random suffix
-    senderId,
-    senderName,
-    text,
-    timestamp: new Date().toISOString(),
-  };
+// Chat & Todo with Firestore
+export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, 'id' | 'timestamp'>): Promise<ChatMessage> => {
+  try {
+    const docRef = await addDoc(chatMessagesCollectionRef, {
+      ...messageData,
+      timestamp: serverTimestamp()
+    });
+    // To return the full object with ID and resolved timestamp, we'd ideally fetch it,
+    // but for simplicity and immediate feedback, we'll construct it.
+    // Firestore returns serverTimestamp as null on client initially if not fetched.
+    return { ...messageData, id: docRef.id, timestamp: new Date().toISOString() } as ChatMessage;
+  } catch (error) {
+    console.error("Error adding chat message to Firestore: ", error);
+    throw error;
+  }
 };
 
-export const createNewTodoItem = (
-    text: string, 
-    createdByUserId: string, 
-    createdByName: string, 
-    assignedToUserId?: string, 
-    assignedToUserName?: string
-): TodoItem => {
-  return {
-    id: `todo-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Longer random suffix
-    text,
-    assignedToUserId,
-    assignedToUserName,
-    completed: false,
-    createdAt: new Date().toISOString(),
-    createdByUserId,
-    createdByName,
-  };
+export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[]) => void): (() => void) => {
+  const q = query(chatMessagesCollectionRef, orderBy("timestamp", "asc"), limit(50)); // Get last 50, oldest first for display
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const messages = querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate().toISOString() : new Date().toISOString(),
+      } as ChatMessage;
+    });
+    callback(messages);
+  }, (error) => {
+    console.error("Error listening to chat messages:", error);
+    // Handle error appropriately in UI if needed
+  });
+  return unsubscribe; // Return the unsubscribe function for cleanup
+};
+
+
+export const addTodoItemToFirestore = async (todoData: Omit<TodoItem, 'id' | 'createdAt' | 'completed'>): Promise<TodoItem> => {
+   try {
+    const docRef = await addDoc(todoItemsCollectionRef, {
+      ...todoData,
+      completed: false,
+      createdAt: serverTimestamp()
+    });
+    return { ...todoData, id: docRef.id, createdAt: new Date().toISOString(), completed: false } as TodoItem;
+  } catch (error) {
+    console.error("Error adding todo item to Firestore: ", error);
+    throw error;
+  }
+};
+
+export const getTodoItemsFromFirestore = (callback: (todos: TodoItem[]) => void): (() => void) => {
+  const q = query(todoItemsCollectionRef, orderBy("createdAt", "desc"));
+  const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const todos = querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as TodoItem;
+    });
+    callback(todos);
+  }, (error) => {
+    console.error("Error listening to todo items:", error);
+  });
+  return unsubscribe;
+};
+
+export const updateTodoItemInFirestore = async (todoId: string, updates: Partial<Omit<TodoItem, 'id' | 'createdAt' | 'createdByUserId' | 'createdByName'>>): Promise<void> => {
+  const todoDoc = doc(db, "todoItems", todoId);
+  try {
+    await updateDoc(todoDoc, updates);
+  } catch (error) {
+    console.error(`Error updating todo item ${todoId}: `, error);
+    throw error;
+  }
+};
+
+export const deleteTodoItemFromFirestore = async (todoId: string): Promise<void> => {
+  const todoDoc = doc(db, "todoItems", todoId);
+  try {
+    await deleteDoc(todoDoc);
+  } catch (error) {
+    console.error(`Error deleting todo item ${todoId}: `, error);
+    throw error;
+  }
 };
 
 
