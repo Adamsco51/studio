@@ -31,7 +31,7 @@ export interface BillOfLading {
   categories: string[]; // Manual categories
   status: BLStatus;
   createdAt: string; // ISO Date string
-  createdByUserId?: string; // Added field for user who created the BL
+  createdByUserId?: string; 
 }
 
 export interface Expense {
@@ -40,7 +40,7 @@ export interface Expense {
   label: string;
   amount: number;
   date: string; // ISO Date string
-  employeeId: string; // Will be replaced by authenticated user's UID
+  employeeId: string; 
 }
 
 // This User type is for the mock data and general app use for displaying names/roles if needed
@@ -55,15 +55,22 @@ export interface AuthUser {
   uid: string;
   email: string | null;
   displayName: string | null;
-  // You might add a 'role' here if you fetch it from Firestore alongside auth state
-  // role?: 'admin' | 'employee'; 
+  role?: 'admin' | 'employee'; 
+}
+
+export interface UserProfile {
+  uid: string; // Should match Firebase Auth UID
+  email: string | null;
+  displayName: string | null;
+  role: 'admin' | 'employee';
+  createdAt: string; // ISO Date string for when the profile was created/updated
 }
 
 
 export interface ChatMessage {
   id: string;
   senderId: string;
-  senderName: string; // Denormalized for easier display
+  senderName: string; 
   text: string;
   timestamp: string; // ISO Date string
 }
@@ -72,9 +79,10 @@ export interface TodoItem {
   id: string;
   text: string;
   assignedToUserId?: string;
-  assignedToUserName?: string; // Denormalized
+  assignedToUserName?: string; 
   completed: boolean;
   createdAt: string; // ISO Date string
   createdByUserId: string;
-  createdByName: string; // Denormalized
+  createdByName: string; 
 }
+

@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus } from 'lucide-react';
+import { createUserProfile } from '@/lib/mock-data'; // Import function to create user profile
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -28,13 +29,19 @@ export default function SignupPage() {
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      // Update profile with display name
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName });
+      const firebaseUser = userCredential.user;
+
+      // Update profile with display name in Firebase Auth
+      if (firebaseUser) {
+        await updateProfile(firebaseUser, { displayName });
       }
+      
+      // Create user profile document in Firestore
+      if (firebaseUser) {
+        await createUserProfile(firebaseUser.uid, firebaseUser.email, displayName, 'employee'); // Default role 'employee'
+      }
+
       toast({ title: 'Inscription Réussie', description: 'Votre compte a été créé. Redirection vers le tableau de bord...' });
-      // TODO: Here you might want to create a user profile document in Firestore
-      // with a default role e.g. 'employee'
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Erreur d\'inscription.');
