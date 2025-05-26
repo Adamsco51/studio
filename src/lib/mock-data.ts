@@ -9,12 +9,12 @@ import {
   doc, 
   getDocs, 
   getDoc,
-  setDoc, // For creating user profiles with a specific ID (UID)
+  setDoc, 
   serverTimestamp,
   Timestamp,
   query, 
   where,
-  orderBy, // For ordering requests
+  orderBy, 
   arrayUnion,
   arrayRemove
 } from "firebase/firestore";
@@ -49,12 +49,12 @@ export const createUserProfile = async (uid: string, email: string | null, displ
   const userProfileDocRef = doc(db, "users", uid);
   try {
     await setDoc(userProfileDocRef, {
-      uid, // Storing uid also in the document for easier querying if needed
+      uid, 
       email,
-      displayName: displayName || email, // Use email as displayName if displayName is null
+      displayName: displayName || email, 
       role,
-      createdAt: serverTimestamp() // Use serverTimestamp for creation
-    }, { merge: true }); // Use merge: true to update if exists, or create if not
+      createdAt: serverTimestamp() 
+    }, { merge: true }); 
   } catch (e) {
     console.error("Error creating/updating user profile: ", e);
     throw e;
@@ -285,8 +285,8 @@ export const deleteBLFromFirestore = async (blId: string) => {
   try {
     const blSnap = await getDoc(blDocRef);
     if (blSnap.exists()) {
-        const blData = blSnap.data() as BillOfLading; 
-        if (blData.clientId) {
+        const blData = blSnap.data(); 
+        if (blData && blData.clientId) {
             const clientDocRef = doc(db, "clients", blData.clientId);
             await updateDoc(clientDocRef, {
                 blIds: arrayRemove(blId)
@@ -320,7 +320,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
-    // Fallback, though getDoc should ideally succeed right after addDoc
+    
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -399,11 +399,11 @@ export const addWorkTypeToFirestore = async (workTypeData: Omit<WorkType, 'id' |
 export const getWorkTypesFromFirestore = async (): Promise<WorkType[]> => {
   try {
     const data = await getDocs(workTypesCollectionRef);
-    return data.docs.map(doc => {
-      const workTypeData = doc.data();
+    return data.docs.map(docSnap => { // Renamed doc to docSnap to avoid conflict
+      const workTypeData = docSnap.data();
       return {
         ...workTypeData,
-        id: doc.id,
+        id: docSnap.id,
         createdAt: workTypeData.createdAt instanceof Timestamp ? workTypeData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as WorkType;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -464,7 +464,7 @@ export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
 
 // Approval Request Service
 export const addApprovalRequestToFirestore = async (
-  requestData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status'>
+  requestData: Omit<ApprovalRequest, 'id' | 'createdAt' | 'status' | 'processedAt' | 'adminNotes' | 'processedByUserId' >
 ): Promise<ApprovalRequest> => {
   try {
     const docRef = await addDoc(approvalRequestsCollectionRef, {
@@ -481,7 +481,7 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
-    // Fallback
+    
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -523,15 +523,17 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
 export const updateApprovalRequestStatusInFirestore = async (
   requestId: string, 
   newStatus: ApprovalRequestStatus, 
-  adminNotes?: string
+  adminNotes?: string,
+  processedByUserId?: string
 ): Promise<void> => {
   const requestDoc = doc(db, "approvalRequests", requestId);
   try {
     const updateData: Partial<ApprovalRequest> = { 
       status: newStatus, 
-      processedAt: serverTimestamp() as any, // Firestore will convert this
+      processedAt: serverTimestamp() as any, 
+      processedByUserId: processedByUserId,
     };
-    if (adminNotes) {
+    if (adminNotes !== undefined) { // Allow empty string for notes
       updateData.adminNotes = adminNotes;
     }
     await updateDoc(requestDoc, updateData);
@@ -591,8 +593,17 @@ export const getEmployeeNameFromMock = (employeeId?: string): string => {
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
     
+    
     if (employeeId.length > 10 && !employeeId.startsWith('user-')) { 
+        // Try to fetch from users collection if it's a Firebase UID
+        // This part is pseudo-code for now, as getUserProfile is async
+        // and this function is expected to be sync.
+        // For a real app, you'd fetch user profiles when loading data that needs names.
+        // console.log(`Attempting to find name for UID: ${employeeId}`);
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
     return 'Utilisateur Inconnu'; 
 };
+
+
+    

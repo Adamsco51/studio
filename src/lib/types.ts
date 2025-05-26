@@ -91,18 +91,22 @@ export type ApprovalRequestActionType = 'edit' | 'delete';
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'pin_issued' | 'completed';
 
 export interface ApprovalRequest {
-  id: string; // Firestore document ID will be used here
+  id: string; 
   requestedByUserId: string;
   requestedByUserName: string;
   entityType: ApprovalRequestEntityType;
   entityId: string;
-  entityDescription?: string; // e.g., BL Number, Client Name
+  entityDescription?: string; 
   actionType: ApprovalRequestActionType;
   reason: string;
   status: ApprovalRequestStatus;
-  createdAt: string; // ISO Date string
-  processedAt?: string; // ISO Date string, when admin processed it
+  createdAt: string; 
+  processedAt?: string; 
   adminNotes?: string;
+  processedByUserId?: string; // UID of the admin who processed the request
   pinCode?: string;
-  pinExpiresAt?: string; // ISO Date string
+  pinExpiresAt?: string; 
 }
+
+
+    

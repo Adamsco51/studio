@@ -7,13 +7,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { getApprovalRequestsFromFirestore, updateApprovalRequestStatusInFirestore } from '@/lib/mock-data';
+import { 
+    getApprovalRequestsFromFirestore, 
+    updateApprovalRequestStatusInFirestore,
+    deleteBLFromFirestore,
+    deleteClientFromFirestore,
+    deleteExpenseFromFirestore,
+    deleteWorkTypeFromFirestore
+} from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Loader2, CheckCircle, XCircle, HelpCircle, Edit, Trash2, ShieldQuestion } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, HelpCircle, ShieldQuestion } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +33,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 const getStatusVariant = (status: ApprovalRequestStatus) => {
   switch (status) {
@@ -82,44 +90,74 @@ export default function AdminApprovalsPage() {
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
-      router.push('/dashboard'); // Redirect non-admins
+      router.push('/dashboard'); 
     }
   }, [authLoading, isAdmin, router]);
 
-  useEffect(() => {
+  const fetchRequests = async () => {
     if (isAdmin) {
-      const fetchRequests = async () => {
-        setIsLoading(true);
-        try {
-          // Fetch all requests, or filter by 'pending' initially
-          const fetchedRequests = await getApprovalRequestsFromFirestore(); 
-          setRequests(fetchedRequests);
-        } catch (error) {
-          console.error("Failed to fetch approval requests:", error);
-          toast({ title: "Erreur", description: "Impossible de charger les demandes.", variant: "destructive" });
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      fetchRequests();
+      setIsLoading(true);
+      try {
+        const fetchedRequests = await getApprovalRequestsFromFirestore(); 
+        setRequests(fetchedRequests);
+      } catch (error) {
+        console.error("Failed to fetch approval requests:", error);
+        toast({ title: "Erreur", description: "Impossible de charger les demandes.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
     }
+  };
+
+  useEffect(() => {
+    fetchRequests();
   }, [isAdmin, toast]);
 
   const handleOpenConfirmationDialog = (request: ApprovalRequest, action: 'approve' | 'reject') => {
     setSelectedRequest(request);
     setActionToConfirm(action);
-    setAdminNotes(request.adminNotes || ''); // Pre-fill notes if any
+    setAdminNotes(request.adminNotes || ''); 
   };
 
   const handleProcessRequest = async () => {
-    if (!selectedRequest || !actionToConfirm) return;
+    if (!selectedRequest || !actionToConfirm || !user) return;
 
     setIsProcessingAction(true);
     const newStatus = actionToConfirm === 'approve' ? 'approved' : 'rejected';
+    
     try {
-      await updateApprovalRequestStatusInFirestore(selectedRequest.id, newStatus, adminNotes);
-      setRequests(prev => prev.map(r => r.id === selectedRequest.id ? { ...r, status: newStatus, adminNotes, processedAt: new Date().toISOString() } : r));
+      await updateApprovalRequestStatusInFirestore(selectedRequest.id, newStatus, adminNotes, user.uid);
       toast({ title: "Demande Traitée", description: `La demande a été ${newStatus === 'approved' ? 'approuvée' : 'rejetée'}.` });
+
+      if (newStatus === 'approved' && selectedRequest.actionType === 'delete') {
+        try {
+          let entityDeleted = false;
+          if (selectedRequest.entityType === 'bl') {
+            await deleteBLFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
+          } else if (selectedRequest.entityType === 'client') {
+            await deleteClientFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
+          } else if (selectedRequest.entityType === 'expense') {
+            await deleteExpenseFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
+          } else if (selectedRequest.entityType === 'workType') {
+            await deleteWorkTypeFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
+          }
+
+          if (entityDeleted) {
+            toast({ title: "Action Effectuée", description: `${getEntityTypeText(selectedRequest.entityType)} (ID: ${selectedRequest.entityId}) a été supprimé(e) avec succès.` });
+            // Optionally, update request status to 'completed'
+            await updateApprovalRequestStatusInFirestore(selectedRequest.id, 'completed', adminNotes ? `${adminNotes}\nEntité supprimée.` : 'Entité supprimée automatiquement après approbation.', user.uid);
+          }
+        } catch (deleteError: any) {
+          console.error(`Failed to delete entity ${selectedRequest.entityType} with ID ${selectedRequest.entityId}:`, deleteError);
+          toast({ title: "Erreur de Suppression d'Entité", description: `La demande a été approuvée, mais la suppression de l'entité a échoué: ${deleteError.message}. Veuillez supprimer manuellement.`, variant: "destructive", duration: 7000 });
+        }
+      }
+      
+      fetchRequests(); // Refresh the list
       setSelectedRequest(null);
       setActionToConfirm(null);
       setAdminNotes('');
@@ -128,6 +166,32 @@ export default function AdminApprovalsPage() {
       toast({ title: "Erreur", description: "Échec du traitement de la demande.", variant: "destructive" });
     } finally {
       setIsProcessingAction(false);
+    }
+  };
+
+  const getEntityLink = (request: ApprovalRequest) => {
+    switch (request.entityType) {
+      case 'bl':
+        return `/bls/${request.entityId}`;
+      case 'client':
+        return `/clients/${request.entityId}`;
+      case 'workType':
+        return `/work-types/${request.entityId}/edit`; // No detail page, link to edit
+      case 'expense':
+        // Expenses don't have a direct detail page, ideally link to BL.
+        // This would require fetching expense to get blId, or storing blId in ApprovalRequest for expenses.
+        // For now, we'll just show text or try to parse from description if possible.
+        // A better solution is to ensure the BL ID is part of the approval request for an expense.
+        // For this iteration, we'll provide a simple text or a link if BL ID is in description.
+        if (request.entityDescription?.includes("BL N°")) {
+          const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
+          // This is a very naive way to find a BL ID if it's in the description string.
+          // A robust solution would be to store the parent BL ID in the ApprovalRequest for expenses.
+          // For now, this is a placeholder.
+        }
+        return null; // No direct link for expenses for now without more info
+      default:
+        return null;
     }
   };
 
@@ -180,41 +244,55 @@ export default function AdminApprovalsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {requests.map((req) => (
-                  <TableRow key={req.id}>
-                    <TableCell>{req.requestedByUserName || req.requestedByUserId}</TableCell>
-                    <TableCell>
-                        <div>{getEntityTypeText(req.entityType)}</div>
-                        <div className="text-xs text-muted-foreground">{req.entityDescription || req.entityId}</div>
-                    </TableCell>
-                    <TableCell>{getActionText(req.actionType)}</TableCell>
-                    <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
-                    <TableCell>{format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
-                         {req.status === 'pending' && <HelpCircle className="mr-1 h-3 w-3" />}
-                         {req.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
-                         {req.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
-                        {getStatusText(req.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {req.status === 'pending' && (
-                        <div className="space-x-2">
-                          <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'approve')}>
-                            <CheckCircle className="mr-1 h-4 w-4 text-green-500" /> Approuver
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'reject')}>
-                            <XCircle className="mr-1 h-4 w-4 text-red-500" /> Rejeter
-                          </Button>
-                        </div>
-                      )}
-                      {req.status !== 'pending' && req.adminNotes && (
-                         <p className="text-xs text-muted-foreground italic text-left" title={`Notes: ${req.adminNotes}`}>Traité {req.processedAt ? format(new Date(req.processedAt), 'dd/MM/yy', {locale: fr}) : ''}</p>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {requests.map((req) => {
+                  const entityLink = getEntityLink(req);
+                  return (
+                    <TableRow key={req.id}>
+                      <TableCell>{req.requestedByUserName || req.requestedByUserId}</TableCell>
+                      <TableCell>
+                          <div>{getEntityTypeText(req.entityType)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {entityLink ? (
+                                <Link href={entityLink} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" title="Voir l'entité">
+                                    {req.entityDescription || req.entityId}
+                                </Link>
+                            ) : (
+                                req.entityDescription || req.entityId
+                            )}
+                          </div>
+                      </TableCell>
+                      <TableCell>{getActionText(req.actionType)}</TableCell>
+                      <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
+                      <TableCell>{format(new Date(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
+                           {req.status === 'pending' && <HelpCircle className="mr-1 h-3 w-3" />}
+                           {req.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
+                           {req.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
+                           {req.status === 'completed' && <CheckCircle className="mr-1 h-3 w-3 text-green-500" />}
+                          {getStatusText(req.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {req.status === 'pending' && (
+                          <div className="space-x-2">
+                            <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'approve')}>
+                              <CheckCircle className="mr-1 h-4 w-4 text-green-500" /> Approuver
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'reject')}>
+                              <XCircle className="mr-1 h-4 w-4 text-red-500" /> Rejeter
+                            </Button>
+                          </div>
+                        )}
+                        {req.status !== 'pending' && req.adminNotes && (
+                           <p className="text-xs text-muted-foreground italic text-left" title={`Notes Admin: ${req.adminNotes}${req.processedByUserId ? ` (par ${req.processedByUserId.substring(0,6)}...)` : ''}`}>
+                             Traité {req.processedAt ? format(new Date(req.processedAt), 'dd/MM/yy HH:mm', {locale: fr}) : ''}
+                           </p>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -234,7 +312,7 @@ export default function AdminApprovalsPage() {
               Confirmer : {actionToConfirm === 'approve' ? 'Approuver' : 'Rejeter'} la Demande
             </DialogTitle>
             <DialogDescription>
-              Demande de {selectedRequest?.actionType === 'edit' ? 'modification' : 'suppression'} pour {getEntityTypeText(selectedRequest?.entityType || 'bl')} "{selectedRequest?.entityDescription || selectedRequest?.entityId}".<br/>
+              Demande de {getActionText(selectedRequest?.actionType || 'edit')} pour {getEntityTypeText(selectedRequest?.entityType || 'bl')} "{selectedRequest?.entityDescription || selectedRequest?.entityId}".<br/>
               Demandeur: {selectedRequest?.requestedByUserName}. Raison: "{selectedRequest?.reason}"
             </DialogDescription>
           </DialogHeader>
@@ -266,3 +344,6 @@ export default function AdminApprovalsPage() {
     </>
   );
 }
+
+
+    
