@@ -58,7 +58,7 @@ export interface AuthUser {
 
 export interface UserProfile {
   uid: string;
-  email: string | null;
+  email: string | null; // Email field is important here
   displayName: string | null;
   role: 'admin' | 'employee';
   createdAt: string;

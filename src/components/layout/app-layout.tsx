@@ -30,26 +30,31 @@ import { useAuth } from '@/contexts/auth-context';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { useToast } from '@/hooks/use-toast';
-import { logSessionEvent } from '@/lib/mock-data'; // Import session logger
+import { logSessionEvent } from '@/lib/mock-data';
+import { useCompanyProfile } from '@/contexts/company-profile-context'; // Import useCompanyProfile
+
+const DEFAULT_APP_NAME = "TransitFlow";
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, loading, isAdmin } = useAuth(); 
+  const { user, loading: authLoading, isAdmin } = useAuth(); 
+  const { companyProfile, loadingProfile } = useCompanyProfile(); // Get company profile
   const router = useRouter();
   const { toast } = useToast();
 
+  const appNameToDisplay = companyProfile?.appName || DEFAULT_APP_NAME;
+
   useEffect(() => {
-    if (!loading && !user) {
+    if (!authLoading && !user) {
       router.push('/login');
     }
-  }, [user, loading, router]);
+  }, [user, authLoading, router]);
 
   const handleLogout = async () => {
-    if (user) { // Ensure user exists before logging event
+    if (user) { 
       try {
         await logSessionEvent(user.uid, user.displayName, user.email, 'logout');
       } catch (logError) {
         console.error("Error logging logout event:", logError);
-        // Continue with logout even if logging fails
       }
     }
     try {
@@ -62,7 +67,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
   };
 
-  if (loading) {
+  if (authLoading || loadingProfile) { // Check both auth and company profile loading
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -82,9 +87,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8 text-primary shrink-0">
               <path d="M12.378 1.602a.75.75 0 00-.756 0L3.366 6.027a.75.75 0 00-.366.648v10.65a.75.75 0 00.366.648l8.256 4.425a.75.75 0 00.756 0l8.256-4.425a.75.75 0 00.366-.648V6.675a.75.75 0 00-.366-.648L12.378 1.602zM12 15.93a.75.75 0 00.622-.355l3.256-4.652a.75.75 0 00-.088-1.038.75.75 0 00-1.038-.088l-2.664 3.806-3.928-3.226a.75.75 0 00-.952.042.75.75 0 00.042.952l4.5 3.75a.75.75 0 00.248.11z" />
             </svg>
-            <span className="text-xl font-semibold text-foreground group-data-[collapsible=icon]:hidden">TransitFlow</span>
+            <span className="text-xl font-semibold text-foreground group-data-[collapsible=icon]:hidden">{appNameToDisplay}</span>
           </Link>
-          <SidebarTrigger className="hidden md:flex h-7 w-7" /> {/* Removed group-data-[collapsible=icon]:hidden */}
+          <SidebarTrigger className="hidden md:flex h-7 w-7" />
         </SidebarHeader>
         <SidebarContent>
           <SidebarNav />
@@ -122,13 +127,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <SidebarInset className="flex flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b bg-background/80 px-4 sm:px-6 backdrop-blur-lg">
           <div className="flex items-center gap-2">
-            {/* This trigger is for mobile view or when the sidebar header trigger is not visible */}
             <SidebarTrigger className="md:hidden h-8 w-8" /> 
             <Link href="/dashboard" className="hidden md:flex items-center gap-2">
                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7 text-primary">
                 <path d="M12.378 1.602a.75.75 0 00-.756 0L3.366 6.027a.75.75 0 00-.366.648v10.65a.75.75 0 00.366.648l8.256 4.425a.75.75 0 00.756 0l8.256-4.425a.75.75 0 00.366-.648V6.675a.75.75 0 00-.366-.648L12.378 1.602zM12 15.93a.75.75 0 00.622-.355l3.256-4.652a.75.75 0 00-.088-1.038.75.75 0 00-1.038-.088l-2.664 3.806-3.928-3.226a.75.75 0 00-.952.042.75.75 0 00.042.952l4.5 3.75a.75.75 0 00.248.11z" />
               </svg>
-              <span className="text-lg font-semibold text-foreground">TransitFlow</span>
+              <span className="text-lg font-semibold text-foreground">{appNameToDisplay}</span>
             </Link>
           </div>
 

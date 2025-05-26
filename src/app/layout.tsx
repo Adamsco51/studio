@@ -6,9 +6,10 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { Providers } from '@/components/layout/providers';
 import { AuthProvider } from '@/contexts/auth-context';
+import { CompanyProfileProvider } from '@/contexts/company-profile-context'; // Import CompanyProfileProvider
 
 export const metadata: Metadata = {
-  title: 'TransitFlow',
+  title: 'TransitFlow', // This can be made dynamic later if needed
   description: 'Gestion de transit et logistique',
 };
 
@@ -22,7 +23,9 @@ export default function RootLayout({
       <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
         <Providers>
           <AuthProvider>
-            {children}
+            <CompanyProfileProvider> {/* Wrap with CompanyProfileProvider */}
+              {children}
+            </CompanyProfileProvider>
           </AuthProvider>
           <Toaster />
         </Providers>

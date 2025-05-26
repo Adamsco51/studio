@@ -9,23 +9,39 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Database, UserCircle, Loader2, Logs, Briefcase, Building } from 'lucide-react'; 
+import { Bell, Database, UserCircle, Loader2, Logs, Briefcase, Building, Mail, KeyRound } from 'lucide-react'; 
 import { useAuth } from '@/contexts/auth-context';
+import { useCompanyProfile } from '@/contexts/company-profile-context'; // Import useCompanyProfile
 import { useToast } from '@/hooks/use-toast';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { updateProfile } from 'firebase/auth';
+import { updateProfile, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { updateUserProfileInFirestore, getCompanyProfileFromFirestore, updateCompanyProfileInFirestore } from '@/lib/mock-data';
-import type { CompanyProfile } from '@/lib/types';
+import type { CompanyProfile, UserProfile } from '@/lib/types';
 import Link from 'next/link';
-import { Form, FormField, FormItem, FormControl, FormMessage } from "@/components/ui/form"; // Added Form, FormField, FormItem
+import { Form, FormField, FormItem, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 
 const profileFormSchema = z.object({
   displayName: z.string().min(1, { message: "Le nom d'affichage ne peut pas être vide." }),
 });
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
+
+const emailFormSchema = z.object({
+  newEmail: z.string().email({ message: "Veuillez entrer une adresse email valide." }),
+});
+type EmailFormValues = z.infer<typeof emailFormSchema>;
+
+const passwordFormSchema = z.object({
+  newPassword: z.string().min(6, { message: "Le mot de passe doit contenir au moins 6 caractères." }),
+  confirmPassword: z.string(),
+}).refine(data => data.newPassword === data.confirmPassword, {
+  message: "Les mots de passe ne correspondent pas.",
+  path: ["confirmPassword"], // path of error
+});
+type PasswordFormValues = z.infer<typeof passwordFormSchema>;
+
 
 const companyProfileFormSchema = z.object({
   appName: z.string().optional(),
@@ -39,16 +55,28 @@ type CompanyProfileFormValues = z.infer<typeof companyProfileFormSchema>;
 
 export default function SettingsPage() {
   const { user, loading: authLoading, isAdmin } = useAuth(); 
+  const { companyProfile, refreshProfile: refreshCompanyProfile, loadingProfile } = useCompanyProfile(); // Use Company Profile context
   const { toast } = useToast();
+
   const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
+  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false);
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   const [isSubmittingCompanyProfile, setIsSubmittingCompanyProfile] = useState(false);
-  const [initialCompanyProfile, setInitialCompanyProfile] = useState<CompanyProfile | null>(null);
+  
 
   const userProfileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
-    defaultValues: {
-      displayName: '',
-    },
+    defaultValues: { displayName: '' },
+  });
+
+  const emailForm = useForm<EmailFormValues>({
+    resolver: zodResolver(emailFormSchema),
+    defaultValues: { newEmail: '' },
+  });
+
+  const passwordForm = useForm<PasswordFormValues>({
+    resolver: zodResolver(passwordFormSchema),
+    defaultValues: { newPassword: '', confirmPassword: '' },
   });
 
   const companyForm = useForm<CompanyProfileFormValues>({
@@ -62,28 +90,26 @@ export default function SettingsPage() {
     },
   });
 
-  const fetchCompanyProfile = useCallback(async () => {
-    if (isAdmin) {
-      try {
-        const profile = await getCompanyProfileFromFirestore();
-        setInitialCompanyProfile(profile);
-        if (profile) {
-          companyForm.reset(profile);
-        }
-      } catch (error) {
-        console.error("Failed to fetch company profile for settings:", error);
-        toast({ title: "Erreur", description: "Impossible de charger les informations de l'entreprise.", variant: "destructive" });
-      }
-    }
-  }, [isAdmin, companyForm, toast]);
-
-
   useEffect(() => {
     if (user?.displayName) {
       userProfileForm.reset({ displayName: user.displayName });
     }
-    fetchCompanyProfile();
-  }, [user, userProfileForm, fetchCompanyProfile]);
+    if (user?.email) {
+        emailForm.reset({ newEmail: user.email });
+    }
+    if (isAdmin && companyProfile) {
+      companyForm.reset(companyProfile);
+    } else if (isAdmin && !companyProfile && !loadingProfile) {
+        // If admin and no profile yet, but not loading, reset with defaults or empty
+        companyForm.reset({
+            appName: 'TransitFlow', // Default app name
+            companyName: '',
+            companyAddress: '',
+            companyEmail: '',
+            companyPhone: '',
+        });
+    }
+  }, [user, companyProfile, isAdmin, userProfileForm, emailForm, companyForm, loadingProfile]);
 
 
   const onUserProfileSubmit = async (data: ProfileFormValues) => {
@@ -95,15 +121,61 @@ export default function SettingsPage() {
     try {
       await updateProfile(auth.currentUser, { displayName: data.displayName });
       await updateUserProfileInFirestore(user.uid, { displayName: data.displayName });
-      
       toast({ title: "Profil Utilisateur Mis à Jour", description: "Votre nom d'affichage a été mis à jour." });
-    } catch (error) {
+      // AuthContext will pick up displayName change from onAuthStateChanged
+    } catch (error: any) {
       console.error("Error updating user profile:", error);
-      toast({ title: "Erreur de Mise à Jour", description: "Impossible de mettre à jour le profil utilisateur.", variant: "destructive" });
+      toast({ title: "Erreur de Mise à Jour", description: error.message || "Impossible de mettre à jour le profil utilisateur.", variant: "destructive" });
     } finally {
       setIsSubmittingProfile(false);
     }
   };
+
+  const onEmailSubmit = async (data: EmailFormValues) => {
+    if (!user || !auth.currentUser) {
+      toast({ title: "Erreur", description: "Utilisateur non authentifié.", variant: "destructive" });
+      return;
+    }
+    if (auth.currentUser.email === data.newEmail) {
+        toast({ title: "Information", description: "Le nouvel email est identique à l'actuel.", variant: "default" });
+        return;
+    }
+    setIsSubmittingEmail(true);
+    try {
+      // IMPORTANT: Changing email requires recent sign-in. This might fail.
+      // A full implementation would prompt for re-authentication.
+      await updateEmail(auth.currentUser, data.newEmail);
+      await updateUserProfileInFirestore(user.uid, { email: data.newEmail });
+      toast({ title: "Email Mis à Jour", description: "Votre email a été mis à jour. Vous devrez peut-être vous reconnecter." });
+      // The user's email in AuthContext will update via onAuthStateChanged.
+    } catch (error: any) {
+      console.error("Error updating email:", error);
+      toast({ title: "Erreur de Mise à Jour Email", description: error.message || "Impossible de mettre à jour l'email. Une reconnexion récente peut être nécessaire.", variant: "destructive" });
+    } finally {
+      setIsSubmittingEmail(false);
+    }
+  };
+
+  const onPasswordSubmit = async (data: PasswordFormValues) => {
+    if (!user || !auth.currentUser) {
+      toast({ title: "Erreur", description: "Utilisateur non authentifié.", variant: "destructive" });
+      return;
+    }
+    setIsSubmittingPassword(true);
+    try {
+      // IMPORTANT: Changing password requires recent sign-in. This might fail.
+      // A full implementation would prompt for re-authentication.
+      await updatePassword(auth.currentUser, data.newPassword);
+      toast({ title: "Mot de Passe Mis à Jour", description: "Votre mot de passe a été changé avec succès." });
+      passwordForm.reset();
+    } catch (error: any) {
+      console.error("Error updating password:", error);
+      toast({ title: "Erreur de Mise à Jour Mot de Passe", description: error.message || "Impossible de changer le mot de passe. Une reconnexion récente peut être nécessaire.", variant: "destructive" });
+    } finally {
+      setIsSubmittingPassword(false);
+    }
+  };
+
 
   const onCompanyProfileSubmit = async (data: CompanyProfileFormValues) => {
     if (!isAdmin) {
@@ -113,18 +185,18 @@ export default function SettingsPage() {
     setIsSubmittingCompanyProfile(true);
     try {
       await updateCompanyProfileInFirestore(data);
+      await refreshCompanyProfile(); // Refresh the company profile in the context
       toast({ title: "Informations de l'Entreprise Mises à Jour", description: "Les détails ont été sauvegardés." });
-      fetchCompanyProfile(); 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating company profile:", error);
-      toast({ title: "Erreur de Sauvegarde", description: "Impossible de sauvegarder les informations de l'entreprise.", variant: "destructive" });
+      toast({ title: "Erreur de Sauvegarde", description: error.message || "Impossible de sauvegarder les informations de l'entreprise.", variant: "destructive" });
     } finally {
       setIsSubmittingCompanyProfile(false);
     }
   };
 
 
-  if (authLoading) {
+  if (authLoading || (isAdmin && loadingProfile)) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -140,44 +212,135 @@ export default function SettingsPage() {
         description="Configurez votre profil et les options de l'application."
       />
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="shadow-lg">
+        <Card className="shadow-lg lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><UserCircle className="h-5 w-5 text-primary" /> Mon Profil</CardTitle>
             <CardDescription>Gérez vos informations personnelles.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
             {user ? (
-              <Form {...userProfileForm}>
-                <form onSubmit={userProfileForm.handleSubmit(onUserProfileSubmit)} className="space-y-4">
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" value={user.email || ''} disabled className="mt-1" />
-                  </div>
-                  <FormField
-                    control={userProfileForm.control}
-                    name="displayName"
-                    render={({ field, fieldState }) => (
-                      <FormItem>
-                        <Label htmlFor="displayName">Nom d'affichage</Label>
-                        <FormControl>
-                          <Input
-                            id="displayName"
-                            {...field}
-                            placeholder="Votre nom complet"
-                            disabled={isSubmittingProfile}
-                            className="mt-1"
-                          />
-                        </FormControl>
-                        {fieldState.error && <FormMessage>{fieldState.error.message}</FormMessage>}
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit" disabled={isSubmittingProfile}>
-                    {isSubmittingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Sauvegarder le Profil
-                  </Button>
-                </form>
-              </Form>
+              <>
+                {/* Display Name Form */}
+                <Form {...userProfileForm}>
+                  <form onSubmit={userProfileForm.handleSubmit(onUserProfileSubmit)} className="space-y-4">
+                    <div>
+                      <Label htmlFor="currentEmail">Email Actuel</Label>
+                      <Input id="currentEmail" type="email" value={user.email || ''} disabled className="mt-1 bg-muted/50" />
+                    </div>
+                    <FormField
+                      control={userProfileForm.control}
+                      name="displayName"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <Label htmlFor="displayName">Nom d'affichage</Label>
+                          <FormControl>
+                            <Input
+                              id="displayName"
+                              {...field}
+                              placeholder="Votre nom complet"
+                              disabled={isSubmittingProfile}
+                              className="mt-1"
+                            />
+                          </FormControl>
+                          {fieldState.error && <FormMessage>{fieldState.error.message}</FormMessage>}
+                        </FormItem>
+                      )}
+                    />
+                    <Button type="submit" disabled={isSubmittingProfile} className="w-full">
+                      {isSubmittingProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Sauvegarder Nom d'Affichage
+                    </Button>
+                  </form>
+                </Form>
+                <Separator />
+                {/* Change Email Form */}
+                <Form {...emailForm}>
+                   <h3 className="text-md font-medium flex items-center gap-2"><Mail className="h-4 w-4 text-muted-foreground"/> Changer d'Adresse Email</h3>
+                  <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
+                    <FormField
+                      control={emailForm.control}
+                      name="newEmail"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <Label htmlFor="newEmail">Nouvel Email</Label>
+                          <FormControl>
+                            <Input
+                              id="newEmail"
+                              type="email"
+                              {...field}
+                              placeholder="nouveau@example.com"
+                              disabled={isSubmittingEmail}
+                              className="mt-1"
+                            />
+                          </FormControl>
+                           <FormDescription className="text-xs">
+                             Un email de vérification pourrait être envoyé. Le changement d'email peut nécessiter une reconnexion.
+                           </FormDescription>
+                          {fieldState.error && <FormMessage>{fieldState.error.message}</FormMessage>}
+                        </FormItem>
+                      )}
+                    />
+                    <Button type="submit" disabled={isSubmittingEmail} className="w-full">
+                      {isSubmittingEmail && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Changer l'Email
+                    </Button>
+                  </form>
+                </Form>
+                <Separator />
+                {/* Change Password Form */}
+                <Form {...passwordForm}>
+                   <h3 className="text-md font-medium flex items-center gap-2"><KeyRound className="h-4 w-4 text-muted-foreground"/> Changer de Mot de Passe</h3>
+                  <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
+                     <FormField
+                      control={passwordForm.control}
+                      name="newPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label htmlFor="newPassword">Nouveau Mot de Passe</Label>
+                          <FormControl>
+                            <Input
+                              id="newPassword"
+                              type="password"
+                              {...field}
+                              placeholder="********"
+                              disabled={isSubmittingPassword}
+                              className="mt-1"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                     <FormField
+                      control={passwordForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <Label htmlFor="confirmPassword">Confirmer Nouveau Mot de Passe</Label>
+                          <FormControl>
+                            <Input
+                              id="confirmPassword"
+                              type="password"
+                              {...field}
+                              placeholder="********"
+                              disabled={isSubmittingPassword}
+                              className="mt-1"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                     <FormDescription className="text-xs">
+                        Le changement de mot de passe peut nécessiter une reconnexion récente pour des raisons de sécurité.
+                    </FormDescription>
+                    <Button type="submit" disabled={isSubmittingPassword} className="w-full">
+                      {isSubmittingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Changer le Mot de Passe
+                    </Button>
+                  </form>
+                </Form>
+              </>
             ) : (
               <p className="text-muted-foreground">Chargement du profil utilisateur...</p>
             )}
@@ -200,7 +363,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <Label htmlFor="appName">Nom de l'Application</Label>
                         <FormControl>
-                           <Input id="appName" placeholder="Ex: TransitFlow" {...field} disabled={isSubmittingCompanyProfile} />
+                           <Input id="appName" placeholder="Ex: TransitFlow" {...field} disabled={isSubmittingCompanyProfile || loadingProfile} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -213,7 +376,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <Label htmlFor="companyName">Nom de l'Entreprise</Label>
                          <FormControl>
-                           <Input id="companyName" placeholder="Ex: Votre Entreprise SARL" {...field} disabled={isSubmittingCompanyProfile} />
+                           <Input id="companyName" placeholder="Ex: Votre Entreprise SARL" {...field} disabled={isSubmittingCompanyProfile || loadingProfile} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -226,7 +389,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <Label htmlFor="companyAddress">Adresse de l'Entreprise</Label>
                         <FormControl>
-                           <Input id="companyAddress" placeholder="Ex: 123 Rue Principale, Ville" {...field} disabled={isSubmittingCompanyProfile} />
+                           <Input id="companyAddress" placeholder="Ex: 123 Rue Principale, Ville" {...field} disabled={isSubmittingCompanyProfile || loadingProfile} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -239,7 +402,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <Label htmlFor="companyEmail">Email de l'Entreprise</Label>
                         <FormControl>
-                           <Input id="companyEmail" type="email" placeholder="Ex: contact@entreprise.com" {...field} disabled={isSubmittingCompanyProfile} />
+                           <Input id="companyEmail" type="email" placeholder="Ex: contact@entreprise.com" {...field} disabled={isSubmittingCompanyProfile || loadingProfile} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -252,14 +415,14 @@ export default function SettingsPage() {
                       <FormItem>
                         <Label htmlFor="companyPhone">Téléphone de l'Entreprise</Label>
                         <FormControl>
-                           <Input id="companyPhone" type="tel" placeholder="Ex: +221 33 800 00 00" {...field} disabled={isSubmittingCompanyProfile} />
+                           <Input id="companyPhone" type="tel" placeholder="Ex: +221 33 800 00 00" {...field} disabled={isSubmittingCompanyProfile || loadingProfile} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" disabled={isSubmittingCompanyProfile}>
-                    {isSubmittingCompanyProfile && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Button type="submit" disabled={isSubmittingCompanyProfile || loadingProfile}>
+                    {(isSubmittingCompanyProfile || (isAdmin && loadingProfile)) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Sauvegarder les Informations
                   </Button>
                 </form>
@@ -268,7 +431,7 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        <Card className="shadow-lg">
+        <Card className="shadow-lg lg:col-span-1"> {/* Adjusted span for better layout */}
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Notifications et Alertes</CardTitle>
             <CardDescription>Configurez les préférences de notification.</CardDescription>
@@ -288,7 +451,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
         
-        <Card className="shadow-lg">
+        <Card className="shadow-lg lg:col-span-2"> {/* Adjusted span */}
            <CardHeader>
             <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5 text-primary" /> Données et Audit</CardTitle>
             <CardDescription>Gérez les options d'exportation des données et la traçabilité.</CardDescription>
