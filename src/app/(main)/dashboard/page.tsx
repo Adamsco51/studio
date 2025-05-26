@@ -1,4 +1,7 @@
 
+"use client"; // Make DashboardPage a client component
+
+import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare, Loader2 } from 'lucide-react';
@@ -8,18 +11,42 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { ChartConfig } from "@/components/ui/chart";
-import ChartsLoader from '@/components/dashboard/charts-loader';
+import DashboardCharts from '@/components/dashboard/dashboard-charts'; // Import directly
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { RecentChatCard } from '@/components/dashboard/recent-chat-card';
+import { useAuth } from '@/contexts/auth-context';
 
+export default function DashboardPage() { 
+  const { user } = useAuth();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [blsData, setBlsData] = useState<BillOfLading[]>([]);
+  const [expensesData, setExpensesData] = useState<Expense[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-export default async function DashboardPage() { 
-  const [clients, blsData, expensesData] = await Promise.all([
-    getClientsFromFirestore(),
-    getBLsFromFirestore(),
-    getExpensesFromFirestore() // Fetch expenses from Firestore
-  ]);
+  useEffect(() => {
+    if (!user) return; // Don't fetch if user is not logged in
+
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [fetchedClients, fetchedBls, fetchedExpenses] = await Promise.all([
+          getClientsFromFirestore(),
+          getBLsFromFirestore(),
+          getExpensesFromFirestore()
+        ]);
+        setClients(fetchedClients);
+        setBlsData(fetchedBls);
+        setExpensesData(fetchedExpenses);
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+        // Optionally, set an error state and display an error message
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [user]);
   
   const totalClients = clients.length;
   
@@ -108,6 +135,15 @@ export default async function DashboardPage() {
     month: { label: "Mois" }
   } satisfies ChartConfig;
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-3 text-muted-foreground">Chargement du tableau de bord...</p>
+      </div>
+    );
+  }
+
   return (
     <>
       <PageHeader title="Tableau de Bord" description="Vue d'ensemble de vos opérations et performances." />
@@ -119,14 +155,14 @@ export default async function DashboardPage() {
               <stat.icon className={`h-5 w-5 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+              <div className={`text-2xl font-bold ${stat.color}`}>{typeof stat.value === 'number' && stat.title !== 'Rentabilité Globale' && stat.title !== 'Total Dépenses' ? stat.value : stat.value}</div>
             </CardContent>
           </Card>
         ))}
       </div>
 
       <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2"> 
-        <ChartsLoader 
+        <DashboardCharts 
           blStatusChartData={blStatusChartData} 
           blStatusChartConfig={blStatusChartConfig} 
           monthlyExpensesChartData={monthlyExpensesChartData}
