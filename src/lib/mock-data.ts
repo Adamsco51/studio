@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus } from './types';
 import { db } from '@/lib/firebase/config';
 import { 
   collection, 
@@ -14,6 +14,7 @@ import {
   Timestamp,
   query, 
   where,
+  orderBy, // For ordering requests
   arrayUnion,
   arrayRemove
 } from "firebase/firestore";
@@ -50,10 +51,10 @@ export const createUserProfile = async (uid: string, email: string | null, displ
     await setDoc(userProfileDocRef, {
       uid, // Storing uid also in the document for easier querying if needed
       email,
-      displayName,
+      displayName: displayName || email, // Use email as displayName if displayName is null
       role,
       createdAt: serverTimestamp() // Use serverTimestamp for creation
-    });
+    }, { merge: true }); // Use merge: true to update if exists, or create if not
   } catch (e) {
     console.error("Error creating/updating user profile: ", e);
     throw e;
@@ -319,6 +320,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
+    // Fallback, though getDoc should ideally succeed right after addDoc
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -479,6 +481,7 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
+    // Fallback
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -491,7 +494,55 @@ export const addApprovalRequestToFirestore = async (
   }
 };
 
+export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestStatus): Promise<ApprovalRequest[]> => {
+  try {
+    let q = query(approvalRequestsCollectionRef, orderBy("createdAt", "desc"));
+    if (status) {
+      q = query(approvalRequestsCollectionRef, where("status", "==", status), orderBy("createdAt", "desc"));
+    }
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const reqData = docSnap.data();
+      return {
+        ...reqData,
+        id: docSnap.id,
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : new Date().toISOString(),
+        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : undefined,
+      } as ApprovalRequest;
+    });
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch approval requests. Check rules for 'approvalRequests' collection.", e);
+    } else {
+      console.error("Error getting documents (approval requests): ", e);
+    }
+    return [];
+  }
+};
 
+export const updateApprovalRequestStatusInFirestore = async (
+  requestId: string, 
+  newStatus: ApprovalRequestStatus, 
+  adminNotes?: string
+): Promise<void> => {
+  const requestDoc = doc(db, "approvalRequests", requestId);
+  try {
+    const updateData: Partial<ApprovalRequest> = { 
+      status: newStatus, 
+      processedAt: serverTimestamp() as any, // Firestore will convert this
+    };
+    if (adminNotes) {
+      updateData.adminNotes = adminNotes;
+    }
+    await updateDoc(requestDoc, updateData);
+  } catch (e) {
+    console.error("Error updating document (approval request status): ", e);
+    throw e;
+  }
+};
+
+
+// Mock Chat & Todo (kept for now, could be migrated to Firestore too)
 export const addChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
   const newMessage: ChatMessage = {
     id: `msg-${Date.now()}`,
@@ -540,11 +591,8 @@ export const getEmployeeNameFromMock = (employeeId?: string): string => {
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
     
-    // This is a simplified lookup. In a real app, you'd fetch from user profiles in Firestore.
-    // For now, if it's not a known mock ID, return a placeholder.
-    if (employeeId.length > 10 && !employeeId.startsWith('user-')) { // Heuristic for a Firebase UID
+    if (employeeId.length > 10 && !employeeId.startsWith('user-')) { 
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
     return 'Utilisateur Inconnu'; 
 };
-
