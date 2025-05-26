@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType } from './types';
 import { db } from '@/lib/firebase/config';
 import { 
   collection, 
@@ -16,7 +16,8 @@ import {
   where,
   orderBy, 
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  deleteField // Ensure deleteField is imported
 } from "firebase/firestore";
 
 export let MOCK_USERS: User[] = [
@@ -513,7 +514,7 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
         id: docSnap.id,
         createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : new Date().toISOString(),
         processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : undefined,
-        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : undefined,
+        pinExpiresAt: reqData.pinExpiresAt ? (reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : reqData.pinExpiresAt) : undefined,
       } as ApprovalRequest;
     });
   } catch (e: any) {
@@ -532,13 +533,13 @@ export const updateApprovalRequestStatusInFirestore = async (
   adminNotes?: string,
   processedByUserId?: string,
   pinCode?: string,
-  pinExpiresAt?: Date // Expect a Date object for pinExpiresAt
+  pinExpiresAt?: Date 
 ): Promise<void> => {
   const requestDoc = doc(db, "approvalRequests", requestId);
   try {
-    const updateData: Partial<ApprovalRequest> = { 
+    const updateData: any = { 
       status: newStatus, 
-      processedAt: serverTimestamp() as any, // Firestore will convert this
+      processedAt: serverTimestamp(), 
       processedByUserId: processedByUserId,
     };
     if (adminNotes !== undefined) { 
@@ -546,13 +547,73 @@ export const updateApprovalRequestStatusInFirestore = async (
     }
     if (pinCode !== undefined) {
       updateData.pinCode = pinCode;
+    } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') { // Remove pin if not issuing or pending
+        updateData.pinCode = deleteField();
     }
+
     if (pinExpiresAt !== undefined) {
-      updateData.pinExpiresAt = Timestamp.fromDate(pinExpiresAt).toDate().toISOString(); // Store as ISO string
+      updateData.pinExpiresAt = Timestamp.fromDate(pinExpiresAt); 
+    } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') {
+        updateData.pinExpiresAt = deleteField();
     }
     await updateDoc(requestDoc, updateData);
   } catch (e) {
     console.error("Error updating document (approval request status): ", e);
+    throw e;
+  }
+};
+
+export const getPinIssuedRequestForEntity = async (
+  entityType: ApprovalRequestEntityType,
+  entityId: string,
+  actionType: ApprovalRequestActionType
+): Promise<ApprovalRequest | null> => {
+  const q = query(
+    approvalRequestsCollectionRef,
+    where("entityType", "==", entityType),
+    where("entityId", "==", entityId),
+    where("actionType", "==", actionType),
+    where("status", "==", "pin_issued")
+  );
+
+  try {
+    const querySnapshot = await getDocs(q);
+    for (const docSnap of querySnapshot.docs) {
+      const requestData = docSnap.data();
+      const request = {
+        id: docSnap.id,
+        ...requestData,
+        createdAt: requestData.createdAt instanceof Timestamp ? requestData.createdAt.toDate().toISOString() : new Date().toISOString(),
+        processedAt: requestData.processedAt instanceof Timestamp ? requestData.processedAt.toDate().toISOString() : undefined,
+        pinExpiresAt: requestData.pinExpiresAt instanceof Timestamp ? requestData.pinExpiresAt.toDate().toISOString() : requestData.pinExpiresAt,
+      } as ApprovalRequest;
+
+      if (request.pinCode && request.pinExpiresAt && new Date() < new Date(request.pinExpiresAt)) {
+        return request; // Return the first valid, non-expired PIN_issued request
+      }
+    }
+    return null;
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch PIN request for ${entityType} ${entityId}. Check rules for 'approvalRequests' collection.`, e);
+    } else {
+      console.error(`Error getting PIN request document for ${entityType} ${entityId}: `, e);
+    }
+    return null;
+  }
+};
+
+export const completeApprovalRequestWithPin = async (requestId: string): Promise<void> => {
+  const requestDoc = doc(db, "approvalRequests", requestId);
+  try {
+    await updateDoc(requestDoc, {
+      status: 'completed',
+      pinCode: deleteField(), 
+      pinExpiresAt: deleteField(),
+      processedAt: serverTimestamp() 
+    });
+  } catch (e) {
+    console.error(`Error completing approval request ${requestId} with PIN: `, e);
     throw e;
   }
 };
@@ -609,15 +670,7 @@ export const getEmployeeNameFromMock = (employeeId?: string): string => {
     
     
     if (employeeId.length > 10 && !employeeId.startsWith('user-')) { 
-        // Try to fetch from users collection if it's a Firebase UID
-        // This part is pseudo-code for now, as getUserProfile is async
-        // and this function is expected to be sync.
-        // For a real app, you'd fetch user profiles when loading data that needs names.
-        // console.log(`Attempting to find name for UID: ${employeeId}`);
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
     return 'Utilisateur Inconnu'; 
 };
-
-
-    
