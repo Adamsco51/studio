@@ -20,23 +20,26 @@ import {
   deleteField 
 } from "firebase/firestore";
 
+// MOCK_USERS is still used for things like assignee selection in chat or creator name display.
 export let MOCK_USERS: User[] = [
   { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee' },
   { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin' },
   { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee'},
 ];
 
-export let MOCK_CHAT_MESSAGES: ChatMessage[] = [
+// These are initial values. The ChatPage component will manage its own state.
+export const INITIAL_MOCK_CHAT_MESSAGES: ChatMessage[] = [
     { id: 'msg-1', senderId: 'user-1-mock', senderName: 'Alice Employee (Mock)', text: 'Bonjour l\'équipe, n\'oubliez pas la réunion de 14h.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
     { id: 'msg-2', senderId: 'user-2-mock', senderName: 'Bob Admin (Mock)', text: 'Bien noté Alice. J\'ai ajouté une tâche pour la préparation du rapport BL-2.', timestamp: new Date(Date.now() - 1000 * 60 * 55).toISOString() },
     { id: 'msg-3', senderId: 'user-3-mock', senderName: 'Charlie Collaborator (Mock)', text: 'Je peux m\'occuper de contacter le client Global Imports Inc. pour le BL-3.', timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
 ];
 
-export let MOCK_TODO_ITEMS: TodoItem[] = [
+export const INITIAL_MOCK_TODO_ITEMS: TodoItem[] = [
     { id: 'todo-1', text: 'Préparer le rapport financier pour BL-2', assignedToUserId: 'user-1-mock', assignedToUserName: 'Alice Employee (Mock)', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(), createdByUserId: 'user-2-mock', createdByName: 'Bob Admin (Mock)' },
     { id: 'todo-2', text: 'Contacter le client Global Imports Inc. (BL-3)', assignedToUserId: 'user-3-mock', assignedToUserName: 'Charlie Collaborator (Mock)', completed: false, createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(), createdByUserId: 'user-3-mock', createdByName: 'Charlie Collaborator (Mock)' },
     { id: 'todo-3', text: 'Vérifier les documents douaniers pour BL-1', completed: true, createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(), createdByUserId: 'user-2-mock', createdByName: 'Bob Admin (Mock)' },
 ];
+
 
 const usersCollectionRef = collection(db, "users");
 const clientsCollectionRef = collection(db, "clients");
@@ -326,6 +329,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
+    // Fallback, should ideally not be reached if doc creation is successful
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -486,6 +490,7 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
+    // Fallback, should not be hit if doc created
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -510,7 +515,7 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
       return {
         ...reqData,
         id: docSnap.id,
-        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : new Date().toISOString(),
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt : new Date().toISOString()),
         processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt : undefined),
         pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt : undefined),
       } as ApprovalRequest;
@@ -538,7 +543,7 @@ export const getApprovalRequestsByUserIdFromFirestore = async (userId: string): 
       return {
         ...reqData,
         id: docSnap.id,
-        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : new Date().toISOString(),
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt : new Date().toISOString()),
         processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt : undefined),
         pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt : undefined),
       } as ApprovalRequest;
@@ -569,10 +574,10 @@ export const updateApprovalRequestStatusInFirestore = async (
       processedAt: serverTimestamp(), 
       processedByUserId: processedByUserId,
     };
-    if (adminNotes !== undefined) { 
+    if (adminNotes !== undefined && adminNotes !== null) { 
       updateData.adminNotes = adminNotes;
     } else {
-      updateData.adminNotes = deleteField(); // Clear notes if not provided
+      updateData.adminNotes = deleteField();
     }
 
     if (pinCode !== undefined) {
@@ -650,27 +655,28 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
 
 
 // Mock Chat & Todo (kept for now, could be migrated to Firestore too)
-export const addChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
-  const newMessage: ChatMessage = {
-    id: `msg-${Date.now()}`,
+// These functions now DO NOT MUTATE the global arrays.
+// The ChatPage component is responsible for managing its own state.
+
+export const createNewChatMessage = (text: string, senderId: string, senderName: string): ChatMessage => {
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Longer random suffix
     senderId,
     senderName,
     text,
     timestamp: new Date().toISOString(),
   };
-  MOCK_CHAT_MESSAGES.push(newMessage);
-  return newMessage;
 };
 
-export const addTodoItem = (
+export const createNewTodoItem = (
     text: string, 
     createdByUserId: string, 
     createdByName: string, 
     assignedToUserId?: string, 
     assignedToUserName?: string
 ): TodoItem => {
-  const newTodo: TodoItem = {
-    id: `todo-${Date.now()}`,
+  return {
+    id: `todo-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, // Longer random suffix
     text,
     assignedToUserId,
     assignedToUserName,
@@ -679,25 +685,13 @@ export const addTodoItem = (
     createdByUserId,
     createdByName,
   };
-  MOCK_TODO_ITEMS.push(newTodo);
-  return newTodo;
 };
 
-export const toggleTodoItemCompletion = (todoId: string): void => {
-  MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.map(todo =>
-    todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
-  );
-};
-
-export const deleteTodoItem = (todoId: string): void => {
-  MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.filter(todo => todo.id !== todoId);
-};
 
 export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (!employeeId) return 'N/A';
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
-    
     
     if (employeeId.length > 10 && !employeeId.startsWith('user-')) { 
         return `Utilisateur (${employeeId.substring(0,6)}...)`;

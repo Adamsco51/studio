@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { MOCK_CHAT_MESSAGES, MOCK_USERS } from '@/lib/mock-data';
+import { INITIAL_MOCK_CHAT_MESSAGES, MOCK_USERS } from '@/lib/mock-data'; // Changed MOCK_CHAT_MESSAGES to INITIAL_MOCK_CHAT_MESSAGES
 import type { ChatMessage, User } from '@/lib/types';
 import Link from 'next/link';
 import { MessageSquare, ArrowRight } from 'lucide-react';
@@ -15,6 +15,7 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 const getInitials = (name: string) => {
+  if (!name) return "??";
   const names = name.split(' ');
   if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
   return (names[0][0] + names[names.length - 1][0]).toUpperCase();
@@ -27,7 +28,7 @@ export function RecentChatCard() {
 
   useEffect(() => {
     // Ensure messages are sorted by timestamp (newest first for slicing, then reverse for display)
-    const sortedMessages = [...MOCK_CHAT_MESSAGES].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    const sortedMessages = [...INITIAL_MOCK_CHAT_MESSAGES].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // Changed MOCK_CHAT_MESSAGES
     setRecentMessages(sortedMessages.slice(0, MAX_MESSAGES_TO_SHOW).reverse());
   }, []); // Run once on mount to get client-side evaluated mock data
 

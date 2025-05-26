@@ -11,8 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { MOCK_CHAT_MESSAGES, MOCK_TODO_ITEMS, MOCK_USERS, addChatMessage, addTodoItem, toggleTodoItemCompletion, deleteTodoItem } from '@/lib/mock-data';
-import type { ChatMessage, TodoItem, User as MockUser } from '@/lib/types'; // Renamed User to MockUser
+import { 
+    INITIAL_MOCK_CHAT_MESSAGES, 
+    INITIAL_MOCK_TODO_ITEMS, 
+    MOCK_USERS, 
+    createNewChatMessage, 
+    createNewTodoItem 
+} from '@/lib/mock-data';
+import type { ChatMessage, TodoItem, User as MockUser } from '@/lib/types'; 
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,7 +26,7 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Send, ListChecks, PlusCircle, Trash2, UserCircle, MessageCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/auth-context'; // Import useAuth
+import { useAuth } from '@/contexts/auth-context';
 
 const NO_ASSIGNEE_VALUE = "__NO_ASSIGNEE__";
 
@@ -36,7 +42,7 @@ const todoItemSchema = z.object({
 type TodoItemFormValues = z.infer<typeof todoItemSchema>;
 
 export default function ChatPage() {
-  const { user, loading: authLoading } = useAuth(); // Get authenticated user
+  const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const { toast } = useToast();
@@ -55,14 +61,10 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
-    // Initialize with empty arrays and let useEffect populate from mock data
-    // This helps prevent hydration errors with Date.now() in mock data
-    setMessages([]);
-    setTodos([]);
-
-    // Populate after mount
-    setMessages(MOCK_CHAT_MESSAGES.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
-    setTodos(MOCK_TODO_ITEMS.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+    // Initialize with copies of the initial mock data to prevent issues with global array mutations
+    // and ensure component owns its state.
+    setMessages([...INITIAL_MOCK_CHAT_MESSAGES].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
+    setTodos([...INITIAL_MOCK_TODO_ITEMS].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
   }, []);
 
 
@@ -71,8 +73,7 @@ export default function ChatPage() {
         toast({title: "Erreur", description: "Vous devez être connecté pour envoyer un message.", variant: "destructive"});
         return;
     }
-    // Use user.uid and user.displayName for the new message
-    const newMessage = addChatMessage(data.text, user.uid, user.displayName || user.email || "Utilisateur Inconnu");
+    const newMessage = createNewChatMessage(data.text, user.uid, user.displayName || user.email || "Utilisateur Inconnu");
     setMessages(prev => [...prev, newMessage].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
     chatForm.reset();
   };
@@ -82,9 +83,8 @@ export default function ChatPage() {
         toast({title: "Erreur", description: "Vous devez être connecté pour ajouter une tâche.", variant: "destructive"});
         return;
     }
-    // Use user.uid and user.displayName for createdBy fields
-    const assignedUser = MOCK_USERS.find(u => u.id === data.assignedToUserId); // MOCK_USERS still used for assignee selection
-    const newTodo = addTodoItem(
+    const assignedUser = MOCK_USERS.find(u => u.id === data.assignedToUserId);
+    const newTodo = createNewTodoItem(
         data.text, 
         user.uid, 
         user.displayName || user.email || "Utilisateur Inconnu", 
@@ -100,7 +100,6 @@ export default function ChatPage() {
     const todoToUpdate = todos.find(t => t.id === todoId);
     if (!todoToUpdate) return;
 
-    toggleTodoItemCompletion(todoId); // This updates the mock data source
     const newCompletedStatus = !todoToUpdate.completed;
     
     setTodos(prev => prev.map(t => t.id === todoId ? { ...t, completed: newCompletedStatus } : t));
@@ -111,7 +110,6 @@ export default function ChatPage() {
   };
   
   const handleDeleteTodo = (todoId: string, todoText: string) => {
-    deleteTodoItem(todoId); // This updates the mock data source
     setTodos(prev => prev.filter(t => t.id !== todoId));
     toast({ title: "Tâche supprimée", description: `"${todoText}" a été supprimée.`, variant: "destructive" });
   };
@@ -216,7 +214,7 @@ export default function ChatPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_ASSIGNEE_VALUE}>Non assigné</SelectItem>
-                        {MOCK_USERS.map((mockUser) => ( // Still use MOCK_USERS for assignee selection list
+                        {MOCK_USERS.map((mockUser) => ( 
                           <SelectItem key={mockUser.id} value={mockUser.id}>{mockUser.name}</SelectItem>
                         ))}
                       </SelectContent>
