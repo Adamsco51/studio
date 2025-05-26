@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Users, ShieldCheck, Bell, Database, UserCircle, Loader2 } from 'lucide-react';
+import { Users, ShieldCheck, Bell, Database, UserCircle, Loader2, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useForm, Controller } from 'react-hook-form';
@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { updateUserProfileInFirestore } from '@/lib/mock-data';
+import Link from 'next/link'; // Import Link
 
 const profileFormSchema = z.object({
   displayName: z.string().min(1, { message: "Le nom d'affichage ne peut pas être vide." }),
@@ -26,7 +27,7 @@ const profileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export default function SettingsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin } = useAuth(); // Get isAdmin
   const { toast } = useToast();
   const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
 
@@ -140,6 +141,9 @@ export default function SettingsPage() {
               <Input id="companyAddress" placeholder="123 Rue Principale, Paris" disabled />
             </div>
             <Button disabled>Sauvegarder les Informations</Button>
+            <p className="text-xs text-muted-foreground">
+              La modification des informations de l'entreprise est réservée aux administrateurs et nécessite une configuration backend (non implémentée).
+            </p>
           </CardContent>
         </Card>
 
@@ -149,12 +153,26 @@ export default function SettingsPage() {
             <CardDescription>Gérez les comptes employés et administrateurs.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              La gestion des utilisateurs (ajout, modification des rôles, suppression) est une fonctionnalité avancée.
-              Pour le moment, cette section est indicative.
-            </p>
-            <Button variant="outline" disabled>Voir la liste des utilisateurs</Button>
-            <Button disabled>Ajouter un nouvel utilisateur</Button>
+            {isAdmin ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Consultez la liste des utilisateurs et leurs rôles.
+                </p>
+                <Link href="/admin/users" passHref>
+                  <Button variant="outline" className="w-full">
+                    Voir la liste des utilisateurs <ExternalLink className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+                <Button disabled className="w-full">Ajouter un nouvel utilisateur</Button>
+                 <p className="text-xs text-muted-foreground">
+                    La modification des rôles et l'ajout direct sont des fonctionnalités avancées (non implémentées ici).
+                 </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                La gestion des utilisateurs est réservée aux administrateurs.
+              </p>
+            )}
           </CardContent>
         </Card>
         
@@ -180,16 +198,16 @@ export default function SettingsPage() {
         
         <Card className="shadow-lg md:col-span-2 lg:col-span-3">
            <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5 text-primary" /> Données et Export</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5 text-primary" /> Données et Audit</CardTitle>
             <CardDescription>Gérez les options d'exportation des données et la traçabilité.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-                <h4 className="font-medium">Journal d'audit (Traçabilité)</h4>
+                <h4 className="font-medium">Journal d'audit (Sessions)</h4>
                 <p className="text-sm text-muted-foreground">
-                    Consultez l'historique des connexions, modifications et demandes.
+                    Consultez l'historique des connexions et déconnexions (fonctionnalité non implémentée).
                 </p>
-                <Button variant="outline" disabled>Voir le journal d'audit</Button>
+                <Button variant="outline" disabled>Voir le journal d'audit des sessions</Button>
             </div>
             <Separator/>
             <div className="space-y-2">
@@ -205,3 +223,4 @@ export default function SettingsPage() {
     </>
   );
 }
+

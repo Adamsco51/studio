@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered } from 'lucide-react'; // Added ListOrdered
+import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users } from 'lucide-react'; // Added Users
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
@@ -14,24 +14,24 @@ import { useAuth } from '@/contexts/auth-context';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/clients', label: 'Clients', icon: Users },
+  { href: '/clients', label: 'Clients', icon: UsersIconLucide },
   { href: '/bls', label: 'Bills of Lading', icon: FileText },
   { href: '/expenses', label: 'Dépenses', icon: DollarSign },
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
   { href: '/chat', label: 'Messagerie', icon: MessageSquare },
-  { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered }, // New Item
+  { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered },
   { href: '/reports', label: 'Rapports', icon: Package },
 ];
 
 const adminNavItems = [
     { href: '/admin/approvals', label: 'Approbations', icon: ShieldAlert },
+    { href: '/admin/users', label: 'Utilisateurs', icon: Users }, // New Admin User List Link
 ];
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const { isAdmin, user } = useAuth(); // Get isAdmin status and user
+  const { isAdmin, user } = useAuth(); 
 
-  // Filter out 'Mes Demandes' if user is admin, as admins use the 'Approbations' page
   const visibleNavItems = user && isAdmin ? navItems.filter(item => item.href !== '/my-requests') : navItems;
 
   return (
@@ -71,3 +71,4 @@ export function SidebarNav() {
     </SidebarMenu>
   );
 }
+

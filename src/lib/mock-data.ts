@@ -17,12 +17,12 @@ import {
   orderBy, 
   arrayUnion,
   arrayRemove,
-  deleteField, // Import deleteField
+  deleteField, 
   onSnapshot,
   limit
 } from "firebase/firestore";
 
-// MOCK_USERS is still used for things like assignee selection in chat or creator name display.
+// MOCK_USERS is still used for things like assignee selection in chat or creator name display if Firestore data is not available.
 export let MOCK_USERS: User[] = [
   { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee' },
   { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin' },
@@ -84,7 +84,31 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   }
 };
 
-export const updateUserProfileInFirestore = async (uid: string, data: Partial<Pick<UserProfile, 'displayName'>>): Promise<void> => {
+export const getAllUserProfiles = async (): Promise<UserProfile[]> => {
+  try {
+    const querySnapshot = await getDocs(query(usersCollectionRef, orderBy("createdAt", "desc")));
+    return querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        uid: data.uid,
+        email: data.email,
+        displayName: data.displayName,
+        role: data.role,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as UserProfile;
+    });
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch all user profiles. Check rules for 'users' collection (admin access).", e);
+    } else {
+      console.error("Error getting all user profiles: ", e);
+    }
+    return [];
+  }
+};
+
+
+export const updateUserProfileInFirestore = async (uid: string, data: Partial<Pick<UserProfile, 'displayName' | 'role' >>): Promise<void> => {
   const userProfileDocRef = doc(db, "users", uid);
   try {
     await updateDoc(userProfileDocRef, data);
@@ -112,7 +136,8 @@ export const addClientToFirestore = async (clientData: Omit<Client, 'id' | 'crea
 
 export const getClientsFromFirestore = async (): Promise<Client[]> => {
   try {
-    const data = await getDocs(clientsCollectionRef);
+    const q = query(clientsCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
     return data.docs.map(doc => {
       const clientData = doc.data();
       return {
@@ -120,7 +145,7 @@ export const getClientsFromFirestore = async (): Promise<Client[]> => {
         id: doc.id,
         createdAt: clientData.createdAt instanceof Timestamp ? clientData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as Client;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error(
@@ -210,15 +235,16 @@ export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'create
 
 export const getBLsFromFirestore = async (): Promise<BillOfLading[]> => {
   try {
-    const data = await getDocs(blsCollectionRef);
-    return data.docs.map(doc => {
-      const blData = doc.data();
+    const q = query(blsCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const blData = docSnap.data();
       return {
         ...blData,
-        id: doc.id,
+        id: docSnap.id,
         createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as BillOfLading;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
   } catch (e: any) {
      if (e.code === 'permission-denied') {
       console.error(
@@ -260,16 +286,16 @@ export const getBLByIdFromFirestore = async (blId: string): Promise<BillOfLading
 
 export const getBLsByClientIdFromFirestore = async (clientId: string): Promise<BillOfLading[]> => {
   try {
-    const q = query(blsCollectionRef, where("clientId", "==", clientId));
+    const q = query(blsCollectionRef, where("clientId", "==", clientId), orderBy("createdAt", "desc"));
     const data = await getDocs(q);
-    return data.docs.map(doc => {
-      const blData = doc.data();
+    return data.docs.map(docSnap => {
+      const blData = docSnap.data();
       return {
         ...blData,
-        id: doc.id,
+        id: docSnap.id,
         createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as BillOfLading;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error(`Firestore permission denied while trying to fetch BLs for client ID: ${clientId}. Check rules for 'billsOfLading' collection.`, e);
@@ -341,15 +367,16 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
 
 export const getExpensesFromFirestore = async (): Promise<Expense[]> => {
   try {
-    const data = await getDocs(expensesCollectionRef);
-    return data.docs.map(doc => {
-      const expenseData = doc.data();
+    const q = query(expensesCollectionRef, orderBy("date", "desc"));
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const expenseData = docSnap.data();
       return {
         ...expenseData,
-        id: doc.id,
+        id: docSnap.id,
         date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString(),
       } as Expense;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    });
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error("Firestore permission denied while trying to fetch expenses. Check rules for 'expenses' collection.", e);
@@ -362,16 +389,16 @@ export const getExpensesFromFirestore = async (): Promise<Expense[]> => {
 
 export const getExpensesByBlIdFromFirestore = async (blId: string): Promise<Expense[]> => {
   try {
-    const q = query(expensesCollectionRef, where("blId", "==", blId));
+    const q = query(expensesCollectionRef, where("blId", "==", blId), orderBy("date", "desc"));
     const data = await getDocs(q);
-    return data.docs.map(doc => {
-      const expenseData = doc.data();
+    return data.docs.map(docSnap => {
+      const expenseData = docSnap.data();
       return {
         ...expenseData,
-        id: doc.id,
+        id: docSnap.id,
         date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString(),
       } as Expense;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    });
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error(`Firestore permission denied while trying to fetch expenses for BL ID: ${blId}. Check rules for 'expenses' collection.`, e);
@@ -409,7 +436,8 @@ export const addWorkTypeToFirestore = async (workTypeData: Omit<WorkType, 'id' |
 
 export const getWorkTypesFromFirestore = async (): Promise<WorkType[]> => {
   try {
-    const data = await getDocs(workTypesCollectionRef);
+    const q = query(workTypesCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
     return data.docs.map(docSnap => { 
       const workTypeData = docSnap.data();
       return {
@@ -417,7 +445,7 @@ export const getWorkTypesFromFirestore = async (): Promise<WorkType[]> => {
         id: docSnap.id,
         createdAt: workTypeData.createdAt instanceof Timestamp ? workTypeData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as WorkType;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
   } catch (e: any) {
     if (e.code === 'permission-denied') {
       console.error("Firestore permission denied while trying to fetch work types. Check rules for 'workTypes' collection.", e);
@@ -665,6 +693,8 @@ export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, '
       ...messageData,
       timestamp: serverTimestamp()
     });
+    // To return the full ChatMessage object including server-generated timestamp, we might need to fetch it again or construct it carefully
+    // For simplicity here, returning what was sent plus the new ID and a client-side date (Firestore handles the true server timestamp)
     return { ...messageData, id: docRef.id, timestamp: new Date().toISOString() } as ChatMessage;
   } catch (error) {
     console.error("Error adding chat message to Firestore: ", error);
@@ -673,7 +703,7 @@ export const addChatMessageToFirestore = async (messageData: Omit<ChatMessage, '
 };
 
 export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[]) => void): (() => void) => {
-  const q = query(chatMessagesCollectionRef, orderBy("timestamp", "asc"), limit(50));
+  const q = query(chatMessagesCollectionRef, orderBy("timestamp", "asc"), limit(50)); // Get last 50, ascending for display
   const unsubscribe = onSnapshot(q, (querySnapshot) => {
     const messages = querySnapshot.docs.map(docSnap => {
       const data = docSnap.data();
@@ -686,8 +716,9 @@ export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[])
     callback(messages);
   }, (error) => {
     console.error("Error listening to chat messages:", error);
+    // Optionally, inform the user via toast or an error message in the UI
   });
-  return unsubscribe; 
+  return unsubscribe; // Return the unsubscribe function
 };
 
 
@@ -756,3 +787,4 @@ export const getEmployeeNameFromMock = (employeeId?: string): string => {
     }
     return 'Utilisateur Inconnu'; 
 };
+
