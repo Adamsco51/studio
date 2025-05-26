@@ -7,10 +7,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '@/components/ui/button';
 import { 
   getBLsByClientIdFromFirestore, 
-  MOCK_EXPENSES, 
+  getExpensesByBlIdFromFirestore, // Use Firestore for expenses
   MOCK_USERS, 
   deleteClientFromFirestore, 
-  getClientByIdFromFirestore 
+  getClientByIdFromFirestore,
+  getEmployeeNameFromMock
 } from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, User as MockUser } from '@/lib/types';
 import Link from 'next/link';
@@ -49,6 +50,13 @@ import { fr } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/auth-context'; 
 
+interface BlWithExpenses extends BillOfLading {
+    expenses: Expense[];
+    balance: number;
+    financialStatus: string;
+    profit: boolean;
+}
+
 export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = use(paramsPromise);
   const { user, isAdmin } = useAuth(); 
@@ -56,7 +64,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingBls, setIsLoadingBls] = useState(true);
   const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
-  const [clientBLs, setClientBLs] = useState<BillOfLading[]>([]); 
+  const [clientBLsWithDetails, setClientBLsWithDetails] = useState<BlWithExpenses[]>([]); 
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const router = useRouter();
@@ -67,7 +75,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (!clientId || !user) { // Wait for user and clientId
+    if (!clientId || !user) { 
       setIsLoading(false);
       setIsLoadingBls(false);
       return;
@@ -80,21 +88,28 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         setClient(foundClient);
         if (foundClient) {
           const bls = await getBLsByClientIdFromFirestore(foundClient.id);
-          setClientBLs(bls);
+          
+          const blsWithFullDetails = await Promise.all(bls.map(async (bl) => {
+            const expenses = await getExpensesByBlIdFromFirestore(bl.id);
+            const totalExpenseAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+            const balance = bl.allocatedAmount - totalExpenseAmount;
+            return { 
+                ...bl, 
+                expenses, 
+                balance, 
+                financialStatus: balance >= 0 ? 'Bénéfice' : 'Perte',
+                profit: balance >= 0
+            };
+          }));
+
+          setClientBLsWithDetails(blsWithFullDetails);
           setIsLoadingBls(false);
 
           if (foundClient.createdByUserId) {
-            const mockCreator = MOCK_USERS.find(u => u.id === foundClient.createdByUserId);
-             if (mockCreator) {
-              setCreatedByUserDisplay(mockCreator.name);
-            } else if (user && user.uid === foundClient.createdByUserId) {
-              setCreatedByUserDisplay(user.displayName || user.email);
-            } else {
-                setCreatedByUserDisplay("Utilisateur Système");
-            }
+            setCreatedByUserDisplay(getEmployeeNameFromMock(foundClient.createdByUserId));
           }
         } else {
-          setIsLoadingBls(false); // No client, no BLs to load
+          setIsLoadingBls(false); 
         }
       } catch (error) {
         console.error("Failed to fetch client details for ID:", clientId, error);
@@ -124,20 +139,10 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     });
   };
 
-  const getEmployeeName = (employeeId: string): string => {
-    const mockEmployee = MOCK_USERS.find(u => u.id === employeeId);
-    if (mockEmployee) return mockEmployee.name;
-    if (user && user.uid === employeeId) return user.displayName || user.email || 'Employé Actuel';
-    return 'Inconnu';
-  };
-
   const handleDeleteClient = async () => {
     if (!client || !client.id) return;
     setIsDeleting(true);
     try {
-      // Consider implications: deleting a client might require deleting their BLs first or reassigning them.
-      // For now, deleteBLFromFirestore in mock-data attempts to remove BL ID from client.
-      // If BLs are in Firestore, they should be handled (e.g., deleted or clientID nulled).
       await deleteClientFromFirestore(client.id); 
       toast({
         title: "Client Supprimé",
@@ -202,15 +207,6 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       </div>
     );
   }
-
-  // Calculate BL balance and status (using mock expenses for now)
-  const calculateBlBalanceAndStatus = (bl: BillOfLading) => {
-    if (!bl) return { balance: 0, status: 'N/A', profit: false };
-    const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === bl.id); // Still mock
-    const totalExpenseAmount = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
-    const balance = bl.allocatedAmount - totalExpenseAmount;
-    return { balance, status: balance >= 0 ? 'Bénéfice' : 'Perte', profit: balance >= 0 };
-  };
 
   return (
     <>
@@ -362,7 +358,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Connaissements (BLs) Associés</CardTitle>
-              <CardDescription>Liste des BLs gérés pour ce client. Cliquez sur une ligne pour voir les dépenses (mock).</CardDescription>
+              <CardDescription>Liste des BLs gérés pour ce client. Cliquez sur une ligne pour voir les dépenses.</CardDescription>
             </div>
              <Link href={`/bls/add?clientId=${client.id}`} passHref>
                 <Button size="sm">
@@ -376,7 +372,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <p className="ml-2 text-muted-foreground">Chargement des BLs...</p>
                 </div>
-            ) : clientBLs.length > 0 ? (
+            ) : clientBLsWithDetails.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -389,21 +385,18 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clientBLs.map((bl) => {
-                    const { balance, status: financialStatus, profit } = calculateBlBalanceAndStatus(bl);
-                    const blExpenses = MOCK_EXPENSES.filter(exp => exp.blId === bl.id); // Mock expenses
+                  {clientBLsWithDetails.map((bl) => {
                     const isExpanded = expandedBls.has(bl.id);
-
                     return (
                       <React.Fragment key={bl.id}>
                         <TableRow onClick={() => toggleBlExpansion(bl.id)} className="cursor-pointer hover:bg-muted/50 dark:hover:bg-muted/20">
                           <TableCell className="font-medium">{bl.blNumber}</TableCell>
                           <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
-                          <TableCell className={profit ? 'text-green-600' : 'text-red-600'}>
-                            {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                          <TableCell className={bl.profit ? 'text-green-600' : 'text-red-600'}>
+                            {bl.balance.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={profit ? 'default' : 'destructive'} className={profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{financialStatus}</Badge>
+                            <Badge variant={bl.profit ? 'default' : 'destructive'} className={bl.profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{bl.financialStatus}</Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <Link href={`/bls/${bl.id}`} passHref onClick={(e) => e.stopPropagation()}>
@@ -420,8 +413,8 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                           <TableRow className="bg-muted/10 dark:bg-muted/5">
                             <TableCell colSpan={6} className="p-0">
                               <div className="p-4 border-t border-border">
-                                <h4 className="text-md font-semibold mb-3 text-foreground">Dépenses (Mock) pour BL N° {bl.blNumber}</h4>
-                                {blExpenses.length > 0 ? (
+                                <h4 className="text-md font-semibold mb-3 text-foreground">Dépenses pour BL N° {bl.blNumber}</h4>
+                                {bl.expenses.length > 0 ? (
                                   <Table className="bg-card shadow-sm rounded-md">
                                     <TableHeader>
                                       <TableRow className="bg-muted/50 dark:bg-muted/20">
@@ -432,11 +425,11 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                      {blExpenses.map(exp => (
+                                      {bl.expenses.map(exp => (
                                         <TableRow key={exp.id} className="hover:bg-muted/5 dark:hover:bg-muted/10">
                                           <TableCell>{exp.label}</TableCell>
                                           <TableCell>{format(new Date(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
-                                          <TableCell>{getEmployeeName(exp.employeeId)}</TableCell>
+                                          <TableCell>{getEmployeeNameFromMock(exp.employeeId)}</TableCell>
                                           <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</TableCell>
                                         </TableRow>
                                       ))}
@@ -445,7 +438,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
                                 ) : (
                                   <div className="text-center py-4">
                                     <DollarSign className="mx-auto h-10 w-10 text-muted-foreground opacity-50" />
-                                    <p className="mt-2 text-sm text-muted-foreground">Aucune dépense (mock) enregistrée pour ce BL.</p>
+                                    <p className="mt-2 text-sm text-muted-foreground">Aucune dépense enregistrée pour ce BL.</p>
                                   </div>
                                 )}
                               </div>

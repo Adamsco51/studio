@@ -34,36 +34,10 @@ export let MOCK_WORK_TYPES: WorkType[] = [
 // export let MOCK_CLIENTS: Client[] = [ ... ]; 
 
 // MOCK_BILLS_OF_LADING is now managed by Firestore
-/*
-export let MOCK_BILLS_OF_LADING: BillOfLading[] = [
-  {
-    id: 'bl-1',
-    blNumber: 'MEDU824522',
-    clientId: 'client-1-firestore', // Example, will need to match actual Firestore ID later
-    allocatedAmount: 5000,
-    workTypeId: 'wt-1',
-    description: 'Electronics and computer parts from Shanghai to New York.',
-    categories: ['Électronique', 'Haute Technologie'],
-    status: 'terminé',
-    createdAt: new Date('2023-10-15T10:00:00Z').toISOString(),
-    createdByUserId: 'user-2-mock',
-  },
-  {
-    id: 'bl-2',
-    blNumber: 'MAEU123456',
-    clientId: 'client-2-firestore', // Example
-    allocatedAmount: 7500,
-    workTypeId: 'wt-3',
-    description: 'Apparel and textiles from Bangladesh to London.',
-    categories: ['Textile', 'Importation'],
-    status: 'en cours',
-    createdAt: new Date('2023-11-01T14:30:00Z').toISOString(),
-    createdByUserId: 'user-1-mock',
-  },
-  // ... other BLs, ensuring clientId points to Firestore IDs if linked
-];
-*/
+// export let MOCK_BILLS_OF_LADING: BillOfLading[] = [ ... ];
 
+// MOCK_EXPENSES is now managed by Firestore
+/*
 export let MOCK_EXPENSES: Expense[] = [
   {
     id: 'exp-1',
@@ -91,6 +65,7 @@ export let MOCK_EXPENSES: Expense[] = [
   },
   // ... other expenses
 ];
+*/
 
 export let MOCK_CHAT_MESSAGES: ChatMessage[] = [
     { id: 'msg-1', senderId: 'user-1-mock', senderName: 'Alice Employee (Mock)', text: 'Bonjour l\'équipe, n\'oubliez pas la réunion de 14h.', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
@@ -106,6 +81,7 @@ export let MOCK_TODO_ITEMS: TodoItem[] = [
 
 const clientsCollectionRef = collection(db, "clients");
 const blsCollectionRef = collection(db, "billsOfLading");
+const expensesCollectionRef = collection(db, "expenses");
 
 
 // Client CRUD with Firestore
@@ -331,11 +307,82 @@ export const deleteBLFromFirestore = async (blId: string) => {
                 await updateDoc(clientDocRef, { blIds: updatedBlIds });
             }
         }
+        // Delete associated expenses
+        const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
+        const expensesSnapshot = await getDocs(expensesQuery);
+        const deleteExpensePromises = expensesSnapshot.docs.map(expenseDoc => deleteExpenseFromFirestore(expenseDoc.id));
+        await Promise.all(deleteExpensePromises);
     }
-    // TODO: Delete associated expenses when expenses are migrated to Firestore.
     await deleteDoc(blDocRef);
   } catch (e) {
     console.error("Error deleting document (BL): ", e);
+    throw e;
+  }
+};
+
+// Expense CRUD with Firestore
+export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'date'>) => {
+  try {
+    const docRef = await addDoc(expensesCollectionRef, {
+      ...expenseData,
+      date: serverTimestamp() 
+    });
+    return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense; // Return the full expense object with new ID and approximate date
+  } catch (e) {
+    console.error("Error adding document (expense): ", e);
+    throw e;
+  }
+};
+
+export const getExpensesFromFirestore = async (): Promise<Expense[]> => {
+  try {
+    const data = await getDocs(expensesCollectionRef);
+    return data.docs.map(doc => {
+      const expenseData = doc.data();
+      return {
+        ...expenseData,
+        id: doc.id,
+        date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString(),
+      } as Expense;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch expenses.", e);
+    } else {
+      console.error("Error getting documents (expenses): ", e);
+    }
+    return [];
+  }
+};
+
+export const getExpensesByBlIdFromFirestore = async (blId: string): Promise<Expense[]> => {
+  try {
+    const q = query(expensesCollectionRef, where("blId", "==", blId));
+    const data = await getDocs(q);
+    return data.docs.map(doc => {
+      const expenseData = doc.data();
+      return {
+        ...expenseData,
+        id: doc.id,
+        date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString(),
+      } as Expense;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch expenses for BL ID: ${blId}.`, e);
+    } else {
+      console.error(`Error getting documents (expenses for BL ${blId}): `, e);
+    }
+    return [];
+  }
+};
+
+export const deleteExpenseFromFirestore = async (expenseId: string) => {
+  const expenseDoc = doc(db, "expenses", expenseId);
+  try {
+    await deleteDoc(expenseDoc);
+  } catch (e) {
+    console.error("Error deleting document (expense): ", e);
     throw e;
   }
 };
@@ -354,13 +401,12 @@ export const deleteBL = (blId: string) => {
   MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.blId !== blId); 
 };
 */
-
-export const addExpense = (expense: Expense) => {
-  MOCK_EXPENSES.push(expense);
-};
-export const deleteExpense = (expenseId: string) => {
-  MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.id !== expenseId);
-};
+// export const addExpense = (expense: Expense) => {
+//   MOCK_EXPENSES.push(expense);
+// };
+// export const deleteExpense = (expenseId: string) => {
+//   MOCK_EXPENSES = MOCK_EXPENSES.filter(exp => exp.id !== expenseId);
+// };
 
 export const addWorkType = (workType: WorkType) => {
   MOCK_WORK_TYPES.push(workType);
@@ -415,3 +461,14 @@ export const deleteTodoItem = (todoId: string): void => {
   MOCK_TODO_ITEMS = MOCK_TODO_ITEMS.filter(todo => todo.id !== todoId);
 };
 
+// Helper to get employee name (can be adapted to fetch from a 'users' collection in Firestore later)
+export const getEmployeeNameFromMock = (employeeId?: string): string => {
+    if (!employeeId) return 'N/A';
+    // Check mock users first
+    const mockUser = MOCK_USERS.find(u => u.id === employeeId);
+    if (mockUser) return mockUser.name;
+    // Fallback for cases where employeeId might be a Firebase UID during transition
+    // In a full system, you'd fetch the user profile from a 'users' collection in Firestore
+    // For now, we can't reliably get a name if it's a real UID not in MOCK_USERS
+    return 'Utilisateur Inconnu'; 
+};

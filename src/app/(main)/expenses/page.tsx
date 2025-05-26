@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
-    MOCK_EXPENSES, // Expenses are still mock
-    getBLsFromFirestore, // BLs from Firestore
-    getClientsFromFirestore, // Clients from Firestore
-    MOCK_USERS, 
-    deleteExpense as deleteGlobalExpense // Mock expense delete
+    getExpensesFromFirestore, 
+    getBLsFromFirestore, 
+    getClientsFromFirestore, 
+    deleteExpenseFromFirestore,
+    getEmployeeNameFromMock
 } from '@/lib/mock-data';
 import type { Expense, BillOfLading, Client } from '@/lib/types';
 import { PlusCircle, ArrowRight, Search, Trash2, FileText, User as UserIconLucide, CalendarIcon, FilterX, Eye, Edit, Loader2 } from 'lucide-react';
@@ -57,6 +57,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   const [allBls, setAllBls] = useState<BillOfLading[]>([]);
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeletingExpense, setIsDeletingExpense] = useState(false);
   const [selectedBlId, setSelectedBlId] = useState<string | undefined>(undefined);
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -68,42 +69,34 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const [fetchedBls, fetchedClients] = await Promise.all([
+            const [fetchedExpenses, fetchedBls, fetchedClients] = await Promise.all([
+                getExpensesFromFirestore(),
                 getBLsFromFirestore(),
                 getClientsFromFirestore()
             ]);
             setAllBls(fetchedBls);
             setAllClients(fetchedClients);
 
-            // Expenses are still mock, detail them with fetched BLs and Clients
-            const detailedExpenses = MOCK_EXPENSES.map(exp => {
+            const detailedExpenses = fetchedExpenses.map(exp => {
                 const bl = fetchedBls.find(b => b.id === exp.blId);
                 const client = bl ? fetchedClients.find(c => c.id === bl.clientId) : undefined;
-                let empName = 'Inconnu';
-                const mockEmployee = MOCK_USERS.find(u => u.id === exp.employeeId);
-                if (mockEmployee) {
-                    empName = mockEmployee.name;
-                } else if (user && user.uid === exp.employeeId) {
-                    empName = user.displayName || user.email || 'Utilisateur';
-                }
-
                 return {
                     ...exp,
                     blNumber: bl?.blNumber,
                     clientName: client?.name,
-                    employeeName: empName,
+                    employeeName: getEmployeeNameFromMock(exp.employeeId),
                 };
             }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
             setExpenses(detailedExpenses);
 
         } catch (error) {
-            console.error("Failed to fetch BLs or Clients for expenses page:", error);
+            console.error("Failed to fetch data for expenses page:", error);
             toast({title: "Erreur de chargement", description: "Impossible de charger les données de base.", variant: "destructive"});
         } finally {
             setIsLoading(false);
         }
     };
-    if (user) { // Ensure user is loaded before fetching data that might depend on it
+    if (user) { 
         fetchData();
     }
   }, [user, toast]); 
@@ -123,7 +116,6 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     }
 
     if (selectedClientId) {
-      // Find BLs associated with the selected client
       const clientBls = allBls.filter(bl => bl.clientId === selectedClientId);
       const clientBlIds = clientBls.map(bl => bl.id);
       tempExpenses = tempExpenses.filter(exp => exp.blId && clientBlIds.includes(exp.blId));
@@ -147,31 +139,24 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
       (exp.employeeName && exp.employeeName.toLowerCase().includes(searchTerm.toLowerCase())) ||
       exp.amount.toString().includes(searchTerm)
     );
-  }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate, allBls]); // added allBls to deps
+  }, [expenses, searchTerm, selectedBlId, selectedClientId, selectedDate, allBls]);
 
-  const handleDeleteExpenseDirectly = (expenseId: string) => { // Mock delete
-    deleteGlobalExpense(expenseId);
-    // Re-filter/map expenses after deletion from MOCK_EXPENSES
-     const updatedDetailedExpenses = MOCK_EXPENSES.map(exp => {
-        const bl = allBls.find(b => b.id === exp.blId);
-        const client = bl ? allClients.find(c => c.id === bl.clientId) : undefined;
-        let empName = 'Inconnu';
-        const mockEmployee = MOCK_USERS.find(u => u.id === exp.employeeId);
-        if (mockEmployee) empName = mockEmployee.name;
-        else if (user && user.uid === exp.employeeId) empName = user.displayName || user.email || 'Utilisateur';
-
-        return {
-          ...exp,
-          blNumber: bl?.blNumber,
-          clientName: client?.name,
-          employeeName: empName,
-        };
-      }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setExpenses(updatedDetailedExpenses);
-    toast({
-      title: "Dépense Supprimée",
-      description: "La dépense a été supprimée avec succès (simulation).",
-    });
+  const handleDeleteExpenseDirectly = async (expenseId: string) => {
+    setIsDeletingExpense(true);
+    try {
+      await deleteExpenseFromFirestore(expenseId);
+      setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
+      toast({
+        title: "Dépense Supprimée",
+        description: "La dépense a été supprimée avec succès.",
+      });
+      setDeletingExpense(null);
+    } catch (error) {
+        console.error("Failed to delete expense:", error);
+        toast({ title: "Erreur", description: "Échec de la suppression de la dépense.", variant: "destructive"});
+    } finally {
+        setIsDeletingExpense(false);
+    }
   };
 
   const handleSubmitDeleteRequest = () => {
@@ -195,7 +180,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
   return (
     <>
       <PageHeader
-        title="Gestion des Dépenses (Données Mock)"
+        title="Gestion des Dépenses"
         description="Consultez et gérez toutes les dépenses enregistrées."
       />
       <Card className="shadow-lg mb-6">
@@ -287,7 +272,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>Liste des Dépenses (Données Mock)</CardTitle>
+          <CardTitle>Liste des Dépenses</CardTitle>
           <CardDescription>
             Aperçu de toutes les dépenses enregistrées, triées par date (plus récentes en premier).
             Nombre de dépenses affichées: {isLoading ? "Chargement..." : filteredExpenses.length}
@@ -341,8 +326,8 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                       <Button variant="ghost" size="sm" title="Modifier Dépense" disabled> 
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <AlertDialog open={deletingExpense?.id === exp.id} onOpenChange={(isOpen) => {
-                          if(!isOpen) setDeletingExpense(null);
+                      <AlertDialog open={deletingExpense?.id === exp.id && !isDeletingExpense} onOpenChange={(isOpen) => {
+                          if(!isOpen && !isDeletingExpense) setDeletingExpense(null);
                           setDeleteReason('');
                       }}>
                         <AlertDialogTrigger asChild>
@@ -352,8 +337,9 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                             className="text-muted-foreground hover:text-destructive" 
                             title="Supprimer Dépense"
                             onClick={() => {setDeletingExpense(exp); setDeleteReason('');}}
+                            disabled={isDeletingExpense && deletingExpense?.id === exp.id}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {isDeletingExpense && deletingExpense?.id === exp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
@@ -363,7 +349,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                             </AlertDialogTitle>
                             {isAdmin ? (
                                 <AlertDialogDescription>
-                                L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible (simulation).
+                                L'action de supprimer la dépense "{exp.label}" d'un montant de {exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} est irréversible.
                                 </AlertDialogDescription>
                             ) : (
                                 <div className="space-y-2 py-2 text-left">
@@ -381,10 +367,15 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                             )}
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => {setDeletingExpense(null); setDeleteReason('');}}>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={isAdmin ? () => handleDeleteExpenseDirectly(exp.id) : handleSubmitDeleteRequest}>
+                            <AlertDialogCancel onClick={() => {setDeletingExpense(null); setDeleteReason('');}} disabled={isDeletingExpense}>Annuler</AlertDialogCancel>
+                            <Button 
+                                onClick={isAdmin ? () => handleDeleteExpenseDirectly(exp.id) : handleSubmitDeleteRequest}
+                                variant={isAdmin ? "destructive" : "default"}
+                                disabled={isDeletingExpense}
+                            >
+                              {isDeletingExpense && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                               {isAdmin ? "Confirmer" : "Soumettre la Demande"}
-                            </AlertDialogAction>
+                            </Button>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -397,7 +388,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
          )}
            {!isLoading && filteredExpenses.length === 0 && (
             <p className="text-center text-muted-foreground py-4">
-              {searchTerm || selectedBlId || selectedClientId || selectedDate ? "Aucune dépense ne correspond à vos filtres." : "Aucune dépense (mock) trouvée."}
+              {searchTerm || selectedBlId || selectedClientId || selectedDate ? "Aucune dépense ne correspond à vos filtres." : "Aucune dépense trouvée."}
             </p>
           )}
         </CardContent>

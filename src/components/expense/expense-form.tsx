@@ -16,7 +16,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import type { Expense } from "@/lib/types";
-import { useAuth } from "@/contexts/auth-context"; // Import useAuth
+import { useAuth } from "@/contexts/auth-context"; 
+import { addExpenseToFirestore } from "@/lib/mock-data"; // Use Firestore function
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
 const expenseFormSchema = z.object({
   label: z.string().min(3, { message: "Le libellé doit contenir au moins 3 caractères." }),
@@ -27,12 +30,13 @@ type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
 
 interface ExpenseFormProps {
   blId: string;
-  onExpenseAdded: (expense: Expense) => void;
+  onExpenseAdded: (expense: Expense) => void; // Callback to update parent state
 }
 
 export function ExpenseForm({ blId, onExpenseAdded }: ExpenseFormProps) {
   const { toast } = useToast();
-  const { user } = useAuth(); // Get authenticated user
+  const { user } = useAuth(); 
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ExpenseFormValues>({
     resolver: zodResolver(expenseFormSchema),
@@ -42,25 +46,38 @@ export function ExpenseForm({ blId, onExpenseAdded }: ExpenseFormProps) {
     },
   });
 
-  function onSubmit(data: ExpenseFormValues) {
+  async function onSubmit(data: ExpenseFormValues) {
     if (!user) {
       toast({ title: "Erreur", description: "Vous devez être connecté pour ajouter une dépense.", variant: "destructive" });
       return;
     }
+    setIsSubmitting(true);
 
-    const newExpense: Expense = {
-      id: `exp-${Date.now()}`,
+    const expensePayload: Omit<Expense, 'id' | 'date'> = {
       blId: blId,
-      ...data,
-      date: new Date().toISOString(),
-      employeeId: user.uid, // Use authenticated user's UID
+      label: data.label,
+      amount: data.amount,
+      employeeId: user.uid,
     };
-    onExpenseAdded(newExpense);
-    toast({
-      title: "Dépense Ajoutée",
-      description: `La dépense "${data.label}" a été ajoutée au BL.`,
-    });
-    form.reset();
+
+    try {
+      const newExpense = await addExpenseToFirestore(expensePayload);
+      onExpenseAdded(newExpense); // Pass the full new expense (with ID and date) to parent
+      toast({
+        title: "Dépense Ajoutée",
+        description: `La dépense "${data.label}" a été ajoutée au BL.`,
+      });
+      form.reset();
+    } catch (error) {
+      console.error("Failed to add expense:", error);
+      toast({
+        title: "Erreur d'Ajout",
+        description: `Échec de l'ajout de la dépense. ${error instanceof Error ? error.message : ''}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -74,7 +91,7 @@ export function ExpenseForm({ blId, onExpenseAdded }: ExpenseFormProps) {
             <FormItem>
               <FormLabel>Libellé de la dépense</FormLabel>
               <FormControl>
-                <Input placeholder="Ex: Frais de port" {...field} />
+                <Input placeholder="Ex: Frais de port" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -87,13 +104,16 @@ export function ExpenseForm({ blId, onExpenseAdded }: ExpenseFormProps) {
             <FormItem>
               <FormLabel>Montant (€)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="Ex: 250" {...field} />
+                <Input type="number" placeholder="Ex: 250" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" size="sm">Ajouter la Dépense</Button>
+        <Button type="submit" size="sm" disabled={isSubmitting}>
+          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Ajouter la Dépense
+        </Button>
       </form>
     </Form>
   );

@@ -2,8 +2,8 @@
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare, Loader2 } from 'lucide-react';
-import { getClientsFromFirestore, getBLsFromFirestore, MOCK_EXPENSES } from '@/lib/mock-data'; 
-import type { BillOfLading, Client } from '@/lib/types';
+import { getClientsFromFirestore, getBLsFromFirestore, getExpensesFromFirestore } from '@/lib/mock-data'; 
+import type { BillOfLading, Client, Expense } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,9 +15,10 @@ import { RecentChatCard } from '@/components/dashboard/recent-chat-card';
 
 
 export default async function DashboardPage() { 
-  const [clients, blsData] = await Promise.all([
+  const [clients, blsData, expensesData] = await Promise.all([
     getClientsFromFirestore(),
-    getBLsFromFirestore()
+    getBLsFromFirestore(),
+    getExpensesFromFirestore() // Fetch expenses from Firestore
   ]);
   
   const totalClients = clients.length;
@@ -27,15 +28,13 @@ export default async function DashboardPage() {
     return acc;
   }, {} as Record<BillOfLading['status'], number>);
 
-  // Expenses are still mock
-  const totalExpensesGlobal = MOCK_EXPENSES.reduce((sum, exp) => sum + exp.amount, 0);
+  const totalExpensesGlobal = expensesData.reduce((sum, exp) => sum + exp.amount, 0);
 
   const calculateTotalProfitability = () => {
     let totalAllocated = 0;
     blsData.forEach(bl => {
       totalAllocated += bl.allocatedAmount;
     });
-    // This profitability is based on mock expenses. Will need update when expenses are in Firestore.
     return totalAllocated - totalExpensesGlobal;
   };
 
@@ -48,7 +47,7 @@ export default async function DashboardPage() {
 
   const stats = [
     { title: 'Rentabilité Globale', value: `${overallProfitability.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: isOverallProfit ? TrendingUp : TrendingDown, color: isOverallProfit ? 'text-green-500' : 'text-red-500' },
-    { title: 'Total Dépenses (BLs - Mock)', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: DollarSign, color: 'text-red-500' },
+    { title: 'Total Dépenses', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}`, icon: DollarSign, color: 'text-red-500' },
     { title: 'Total Clients', value: totalClients, icon: Users, color: 'text-primary' },
     { title: 'BLs en Cours', value: blsByStatus['en cours'] || 0, icon: Clock, color: 'text-blue-500' },
     { title: 'BLs Terminés', value: blsByStatus['terminé'] || 0, icon: CheckCircle, color: 'text-green-600' },
@@ -59,8 +58,7 @@ export default async function DashboardPage() {
     let profitableBls = 0;
     let lossMakingBls = 0;
     blsData.forEach(bl => {
-      // This calculation uses mock expenses
-      const expensesForBl = MOCK_EXPENSES.filter(exp => exp.blId === bl.id);
+      const expensesForBl = expensesData.filter(exp => exp.blId === bl.id);
       const totalExpensesForBl = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
       const balance = bl.allocatedAmount - totalExpensesForBl;
       if (balance >= 0) {
@@ -91,9 +89,8 @@ export default async function DashboardPage() {
     count: { label: 'Nombre de BLs' }
   } satisfies ChartConfig;
 
-  // Data for Monthly Expenses Line Chart (still mock)
   const expensesByMonthAggregated: Record<string, number> = {};
-  MOCK_EXPENSES.forEach(expense => {
+  expensesData.forEach(expense => {
     const monthKey = format(parseISO(expense.date), 'yyyy-MM'); 
     expensesByMonthAggregated[monthKey] = (expensesByMonthAggregated[monthKey] || 0) + expense.amount;
   });
@@ -107,7 +104,7 @@ export default async function DashboardPage() {
     };
   });
   const monthlyExpensesChartConfig = {
-    totalExpenses: { label: "Dépenses Totales (Mock)", color: "hsl(var(--chart-4))" },
+    totalExpenses: { label: "Dépenses Totales", color: "hsl(var(--chart-4))" },
     month: { label: "Mois" }
   } satisfies ChartConfig;
 
@@ -142,7 +139,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="h-6 w-6 text-primary" />
-              Analyse de Rentabilité des BLs (Basée sur Dépenses Mock)
+              Analyse de Rentabilité des BLs
             </CardTitle>
             <CardDescription>Rentabilité des connaissements enregistrés.</CardDescription>
           </CardHeader>
