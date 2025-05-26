@@ -19,17 +19,13 @@
     }
   ],
   "hosting": {
+    "site":"transitflow",
     "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "function": "nextApp"
-      }
     ]
+    
   }
 }

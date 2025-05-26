@@ -5,16 +5,16 @@ import React, { useEffect, useState, useMemo, use, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { 
-  getBLsByClientIdFromFirestore, 
-  getExpensesByBlIdFromFirestore, 
-  deleteClientFromFirestore, 
+import {
+  getBLsByClientIdFromFirestore,
+  getExpensesByBlIdFromFirestore,
+  deleteClientFromFirestore,
   getClientByIdFromFirestore,
   getEmployeeNameFromMock,
   addApprovalRequestToFirestore,
   getUserProfile,
-  getPinIssuedRequestForEntity, 
-  completeApprovalRequestWithPin, 
+  getPinIssuedRequestForEntity,
+  completeApprovalRequestWithPin,
 } from '@/lib/mock-data';
 import type { Client, BillOfLading, Expense, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
@@ -50,7 +50,7 @@ import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
-import { useAuth } from '@/contexts/auth-context'; 
+import { useAuth } from '@/contexts/auth-context';
 
 interface BlWithExpenses extends BillOfLading {
     expenses: Expense[];
@@ -61,12 +61,12 @@ interface BlWithExpenses extends BillOfLading {
 
 export default function ClientDetailPage({ params: paramsPromise }: { params: Promise<{ clientId: string }> }) {
   const { clientId } = use(paramsPromise);
-  const { user, isAdmin } = useAuth(); 
+  const { user, isAdmin } = useAuth();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingBls, setIsLoadingBls] = useState(true);
   const [createdByUserDisplay, setCreatedByUserDisplay] = useState<string | null>(null);
-  const [clientBLsWithDetails, setClientBLsWithDetails] = useState<BlWithExpenses[]>([]); 
+  const [clientBLsWithDetails, setClientBLsWithDetails] = useState<BlWithExpenses[]>([]);
   const [expandedBls, setExpandedBls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const router = useRouter();
@@ -85,7 +85,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
 
 
   const fetchClientDetails = useCallback(async () => {
-    if (!clientId || !user) { 
+    if (!clientId || !user) {
       setIsLoading(false);
       setIsLoadingBls(false);
       return;
@@ -97,15 +97,15 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
       setClient(foundClient);
       if (foundClient) {
         const bls = await getBLsByClientIdFromFirestore(foundClient.id);
-        
+
         const blsWithFullDetails = await Promise.all(bls.map(async (bl) => {
           const expenses = await getExpensesByBlIdFromFirestore(bl.id);
           const totalExpenseAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0);
           const balance = bl.allocatedAmount - totalExpenseAmount;
-          return { 
-              ...bl, 
-              expenses, 
-              balance, 
+          return {
+              ...bl,
+              expenses,
+              balance,
               financialStatus: balance >= 0 ? 'Bénéfice' : 'Perte',
               profit: balance >= 0,
           };
@@ -115,16 +115,16 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
         setIsLoadingBls(false);
 
         if (foundClient.createdByUserId) {
-          const creatorProfile = await getUserProfile(foundClient.createdByUserId); 
+          const creatorProfile = await getUserProfile(foundClient.createdByUserId);
           setCreatedByUserDisplay(creatorProfile?.displayName || getEmployeeNameFromMock(foundClient.createdByUserId));
         }
       } else {
-        setIsLoadingBls(false); 
+        setIsLoadingBls(false);
         toast({ title: "Erreur", description: "Client non trouvé.", variant: "destructive" });
       }
     } catch (error) {
       console.error("Failed to fetch client details for ID:", clientId, error);
-      setClient(null); 
+      setClient(null);
       setIsLoadingBls(false);
       toast({
         title: "Erreur de Chargement",
@@ -179,7 +179,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   const handleDeleteClientAction = async () => {
     if (!client || !user) return;
     if (isAdmin) {
-      setShowDeleteClientDialog(true); 
+      setShowDeleteClientDialog(true);
     } else {
       setIsProcessingRequest(true);
       try {
@@ -190,7 +190,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
           setShowPinDialog(true);
         } else {
           setDeleteClientReason('');
-          setShowDeleteClientDialog(true); 
+          setShowDeleteClientDialog(true);
         }
       } catch (error) {
         toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -245,13 +245,13 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
     if (!client || !client.id || !isAdmin) return;
     setIsDeleting(true);
     try {
-      await deleteClientFromFirestore(client.id); 
+      await deleteClientFromFirestore(client.id);
       toast({
         title: "Client Supprimé",
         description: `Le client ${client.name} a été supprimé.`,
       });
       router.push('/clients');
-      router.refresh(); 
+      router.refresh();
     } catch (error) {
       console.error("Failed to delete client:", error);
       toast({ title: "Erreur", description: "Échec de la suppression du client.", variant: "destructive" });
@@ -322,7 +322,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
   };
 
 
-  if (isLoading || (!client && isLoading)) { 
+  if (isLoading || (!client && isLoading)) {
     return (
       <div className="flex justify-center items-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -361,7 +361,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
               {(isProcessingRequest && pinActionType === 'edit') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Edit className="mr-2 h-4 w-4" /> Modifier
             </Button>
-            
+
             <Button variant="destructive" onClick={handleDeleteClientAction} disabled={isProcessingRequest || isDeleting}>
               {(isDeleting && isAdmin) || (isProcessingRequest && pinActionType === 'delete') && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Trash2 className="mr-2 h-4 w-4" /> Supprimer
@@ -590,8 +590,8 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             <DialogClose asChild>
                 <Button variant="outline" disabled={isDeleting || isProcessingRequest} onClick={() => {setDeleteClientReason(''); setShowDeleteClientDialog(false);}}>Annuler</Button>
             </DialogClose>
-            <Button 
-              onClick={isAdmin ? handleDeleteClientWithConfirmation : handleSubmitDeleteClientRequest} 
+            <Button
+              onClick={isAdmin ? handleDeleteClientWithConfirmation : handleSubmitDeleteClientRequest}
               disabled={isDeleting || isProcessingRequest || (!isAdmin && !deleteClientReason.trim())}
               variant={isAdmin ? "destructive" : "default"}
             >
@@ -617,7 +617,7 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
               <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
             </DialogTitle>
             <DialogDescription>
-              Un PIN vous a été fourni par un administrateur pour effectuer cette action : {pinActionType === 'edit' ? 'Modifier' : 'Supprimer'} Client "{client?.name}".
+              Un PIN vous a été fourni par un administrateur pour effectuer cette action : {pinActionType === 'edit' ? 'Modifier' : 'Supprimer'} Client "{client?.name || "sélectionné"}".
             </DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-2">

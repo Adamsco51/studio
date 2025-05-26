@@ -42,7 +42,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
-      router.push('/dashboard'); 
+      router.push('/dashboard');
     }
   }, [authLoading, isAdmin, router]);
 
@@ -50,7 +50,7 @@ export default function AdminUsersPage() {
     if (isAdmin) {
       setIsLoading(true);
       try {
-        const fetchedUsers = await getAllUserProfiles(); 
+        const fetchedUsers = await getAllUserProfiles();
         setUsersList(fetchedUsers);
       } catch (error) {
         console.error("Failed to fetch user profiles:", error);
@@ -94,7 +94,7 @@ export default function AdminUsersPage() {
 
       await updateUserProfileInFirestore(editingUser.uid, updates);
       toast({ title: "Informations Mises à Jour", description: `Les informations de ${editingUser.displayName || editingUser.email} ont été mises à jour.` });
-      fetchUsers(); 
+      fetchUsers();
       setEditingUser(null);
     } catch (error) {
       console.error("Failed to update user info:", error);
@@ -127,7 +127,7 @@ export default function AdminUsersPage() {
         <CardHeader>
           <CardTitle>Liste des Utilisateurs Enregistrés</CardTitle>
           <CardDescription>
-            {usersList.length > 0 
+            {usersList.length > 0
               ? `Total des utilisateurs: ${usersList.length}.`
               : "Aucun utilisateur enregistré pour le moment."}
           </CardDescription>
@@ -180,7 +180,7 @@ export default function AdminUsersPage() {
         <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) setEditingUser(null); }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Modifier Utilisateur: {editingUser.displayName || editingUser.email}</DialogTitle>
+              <DialogTitle>Modifier Utilisateur: {editingUser.displayName || editingUser.email || "Utilisateur sélectionné"}</DialogTitle>
               <DialogDescription>
                 Modifiez le nom d'affichage et/ou le rôle de cet utilisateur.
               </DialogDescription>
@@ -192,10 +192,10 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <Label htmlFor="userDisplayName">Nom d'Affichage</Label>
-                <Input 
-                  id="userDisplayName" 
-                  value={newDisplayName} 
-                  onChange={(e) => setNewDisplayName(e.target.value)} 
+                <Input
+                  id="userDisplayName"
+                  value={newDisplayName}
+                  onChange={(e) => setNewDisplayName(e.target.value)}
                   className="mt-1"
                   disabled={isUpdatingRole}
                 />
@@ -215,11 +215,11 @@ export default function AdminUsersPage() {
             </div>
             <DialogFooter>
               <DialogClose asChild><Button variant="outline" disabled={isUpdatingRole} onClick={() => setEditingUser(null)}>Annuler</Button></DialogClose>
-              <Button 
-                onClick={handleUpdateUserInfo} 
+              <Button
+                onClick={handleUpdateUserInfo}
                 disabled={
-                  isUpdatingRole || 
-                  !newRole || 
+                  isUpdatingRole ||
+                  !newRole ||
                   newDisplayName.trim() === '' ||
                   (newRole === editingUser.role && newDisplayName === (editingUser.displayName || ''))
                 }

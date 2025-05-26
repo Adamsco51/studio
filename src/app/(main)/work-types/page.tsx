@@ -1,21 +1,21 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'; 
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { 
-    getWorkTypesFromFirestore, 
-    deleteWorkTypeFromFirestore, 
+import {
+    getWorkTypesFromFirestore,
+    deleteWorkTypeFromFirestore,
     addApprovalRequestToFirestore,
-    getPinIssuedRequestForEntity, 
-    completeApprovalRequestWithPin, 
-} from '@/lib/mock-data'; 
+    getPinIssuedRequestForEntity,
+    completeApprovalRequestWithPin,
+} from '@/lib/mock-data';
 import type { WorkType, ApprovalRequest } from '@/lib/types';
-import { PlusCircle, Edit, Trash2, Search, Loader2, KeyRound, Briefcase } from 'lucide-react'; 
+import { PlusCircle, Edit, Trash2, Search, Loader2, KeyRound, Briefcase } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
@@ -43,7 +43,7 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '@/contexts/auth-context';
 
-export default function WorkTypesPage() { 
+export default function WorkTypesPage() {
   const { user, isAdmin } = useAuth();
   const [workTypes, setWorkTypes] = useState<WorkType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,7 +65,7 @@ export default function WorkTypesPage() {
 
   const fetchWorkTypes = useCallback(async () => {
     if (!user) {
-      setIsLoading(false); 
+      setIsLoading(false);
       return;
     }
     setIsLoading(true);
@@ -86,7 +86,7 @@ export default function WorkTypesPage() {
 
   const filteredWorkTypes = useMemo(() => {
     if (!searchTerm) return workTypes;
-    return workTypes.filter(wt => 
+    return workTypes.filter(wt =>
       wt.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (wt.description && wt.description.toLowerCase().includes(searchTerm.toLowerCase())),
     );
@@ -124,7 +124,7 @@ export default function WorkTypesPage() {
     setPinActionType('delete');
 
     if (isAdmin) {
-        setShowDeleteReasonDialog(true); 
+        setShowDeleteReasonDialog(true);
     } else {
         setIsProcessingAction(true);
         try {
@@ -134,7 +134,7 @@ export default function WorkTypesPage() {
                 setShowPinDialog(true);
             } else {
                 setDeleteReason('');
-                setShowDeleteReasonDialog(true); 
+                setShowDeleteReasonDialog(true);
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -231,7 +231,7 @@ export default function WorkTypesPage() {
         toast({ title: "Erreur", description: "Échec de l'envoi de la demande de modification.", variant: "destructive" });
     } finally {
         setEditReason('');
-        setShowEditReasonDialog(false); 
+        setShowEditReasonDialog(false);
         setWorkTypeTargetedForAction(null);
         setIsProcessingAction(false);
     }
@@ -263,12 +263,12 @@ export default function WorkTypesPage() {
     } finally {
         setDeleteReason('');
         setShowDeleteReasonDialog(false);
-        setWorkTypeTargetedForAction(null); 
+        setWorkTypeTargetedForAction(null);
         setIsProcessingAction(false);
     }
   };
 
-  if (!user && !isLoading) { 
+  if (!user && !isLoading) {
     return <div className="flex justify-center items-center h-64">Veuillez vous connecter pour voir cette page.</div>;
   }
 
@@ -293,7 +293,7 @@ export default function WorkTypesPage() {
         <CardContent>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
+            <Input
               placeholder="Rechercher par nom ou description..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -322,8 +322,8 @@ export default function WorkTypesPage() {
             <div className="text-center py-10 text-muted-foreground">
                 <Briefcase className="mx-auto h-12 w-12 opacity-50" />
                 <p className="mt-2">
-                {searchTerm 
-                    ? "Aucun type de travail ne correspond à votre recherche." 
+                {searchTerm
+                    ? "Aucun type de travail ne correspond à votre recherche."
                     : "Aucun type de travail n'a été trouvé. Commencez par en ajouter un !"
                 }
                 </p>
@@ -350,12 +350,12 @@ export default function WorkTypesPage() {
                   <TableCell>{wt.description || 'N/A'}</TableCell>
                   <TableCell>{wt.createdAt ? format(parseISO(wt.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                   <TableCell className="text-right space-x-1">
-                    <Button variant="outline" size="sm" onClick={() => handleEditWorkTypeAction(wt)} 
+                    <Button variant="outline" size="sm" onClick={() => handleEditWorkTypeAction(wt)}
                         disabled={isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id}>
                         {(isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Edit className="mr-1 h-4 w-4" />} Modifier
                     </Button>
-                   
-                    <Button variant="destructive" size="sm" onClick={() => handleDeleteWorkTypeAction(wt)} 
+
+                    <Button variant="destructive" size="sm" onClick={() => handleDeleteWorkTypeAction(wt)}
                         disabled={isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id}>
                         {(isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Trash2 className="mr-1 h-4 w-4" />} Supprimer
                     </Button>
@@ -375,7 +375,7 @@ export default function WorkTypesPage() {
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Demande de Modification: {workTypeTargetedForAction?.name}</DialogTitle>
+            <DialogTitle>Demande de Modification: {workTypeTargetedForAction?.name || "Type de travail sélectionné"}</DialogTitle>
             <DialogDescription>
               Expliquez pourquoi vous souhaitez modifier ce type de travail.
             </DialogDescription>
@@ -419,7 +419,7 @@ export default function WorkTypesPage() {
             <DialogClose asChild>
                 <Button variant="outline" disabled={isProcessingAction} onClick={() => {setShowDeleteReasonDialog(false); setWorkTypeTargetedForAction(null); setDeleteReason(''); if(pinActionType === 'delete') setActivePinRequest(null);}}>Annuler</Button>
             </DialogClose>
-            <Button 
+            <Button
               onClick={isAdmin ? handleDeleteWorkTypeDirectly : handleSubmitDeleteRequest}
               variant={isAdmin ? "destructive" : "default"}
               disabled={isProcessingAction || (!isAdmin && !deleteReason.trim())}
@@ -447,7 +447,7 @@ export default function WorkTypesPage() {
                 <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
             </DialogTitle>
             <DialogDescription>
-              Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} le type de travail "{workTypeTargetedForAction?.name}".
+              Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} le type de travail "{workTypeTargetedForAction?.name || "sélectionné"}".
             </DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-2">
