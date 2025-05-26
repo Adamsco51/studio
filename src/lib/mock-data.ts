@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent } from './types';
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -40,6 +40,7 @@ const workTypesCollectionRef = collection(db, "workTypes");
 const approvalRequestsCollectionRef = collection(db, "approvalRequests");
 const chatMessagesCollectionRef = collection(db, "chatMessages");
 const todoItemsCollectionRef = collection(db, "todoItems");
+const auditLogSessionsCollectionRef = collection(db, "auditLogSessions");
 
 
 // User Profile CRUD with Firestore
@@ -359,7 +360,7 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
       ...expenseData,
       date: expenseData.date ? Timestamp.fromDate(parseISO(expenseData.date)) : serverTimestamp()
     };
-    if (expenseData.date === undefined) delete dataToSave.date; // remove if truly meant to be serverTimestamp
+    // if (expenseData.date === undefined) delete dataToSave.date; // remove if truly meant to be serverTimestamp
 
     const docRef = await addDoc(expensesCollectionRef, dataToSave);
     const newDocSnap = await getDoc(docRef);
@@ -401,6 +402,20 @@ export const getExpensesFromFirestore = async (): Promise<Expense[]> => {
   }
 };
 
+export const getExpensesByBlIdFromFirestore = async (blId: string): Promise<Expense[]> => {
+  const q = query(expensesCollectionRef, where("blId", "==", blId), orderBy("date", "desc"));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(docSnap => {
+    const expenseData = docSnap.data();
+    return {
+      ...expenseData,
+      id: docSnap.id,
+      date: expenseData.date instanceof Timestamp ? expenseData.date.toDate().toISOString() : new Date().toISOString()
+    } as Expense;
+  });
+};
+
+
 export const getExpenseByIdFromFirestore = async (expenseId: string): Promise<Expense | null> => {
   try {
     const expenseDocRef = doc(db, "expenses", expenseId);
@@ -427,7 +442,12 @@ export const updateExpenseInFirestore = async (expenseId: string, updatedData: P
   try {
     const dataToUpdate: any = { ...updatedData };
     if (updatedData.date) {
-      dataToUpdate.date = Timestamp.fromDate(parseISO(updatedData.date));
+      // Ensure the date is correctly parsed if it's a string, or handled if it's already a Timestamp
+      if (typeof updatedData.date === 'string') {
+        dataToUpdate.date = Timestamp.fromDate(parseISO(updatedData.date));
+      } else {
+        dataToUpdate.date = updatedData.date; // Assume it's already a Timestamp or compatible
+      }
     }
     await updateDoc(expenseDoc, dataToUpdate);
   } catch (e) {
@@ -522,8 +542,6 @@ export const updateWorkTypeInFirestore = async (workTypeId: string, updatedData:
 export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
   const workTypeDoc = doc(db, "workTypes", workTypeId);
   try {
-    // Consider if deleting a work type should affect existing BLs (e.g., set their workTypeId to null or a default)
-    // For now, just deleting the work type itself.
     await deleteDoc(workTypeDoc);
   } catch (e) {
     console.error("Error deleting document (work type): ", e);
@@ -548,6 +566,7 @@ export const addApprovalRequestToFirestore = async (
         id: newDocSnap.id,
         ...data,
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+        status: 'pending', // ensure status is set
       } as ApprovalRequest;
     }
     // Fallback
@@ -577,9 +596,9 @@ export const getApprovalRequestsFromFirestore = async (status?: ApprovalRequestS
       return {
         ...reqData,
         id: docSnap.id,
-        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt.toString() : new Date().toISOString()),
-        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt.toString() : undefined),
-        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt.toString() : undefined),
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (typeof reqData.createdAt === 'string' ? reqData.createdAt : new Date().toISOString()),
+        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (typeof reqData.processedAt === 'string' ? reqData.processedAt : undefined),
+        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (typeof reqData.pinExpiresAt === 'string' ? reqData.pinExpiresAt : undefined),
       } as ApprovalRequest;
     });
   } catch (e: any) {
@@ -605,9 +624,9 @@ export const getApprovalRequestsByUserIdFromFirestore = async (userId: string): 
       return {
         ...reqData,
         id: docSnap.id,
-        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (reqData.createdAt ? reqData.createdAt.toString() : new Date().toISOString()),
-        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (reqData.processedAt ? reqData.processedAt.toString() : undefined),
-        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (reqData.pinExpiresAt ? reqData.pinExpiresAt.toString() : undefined),
+        createdAt: reqData.createdAt instanceof Timestamp ? reqData.createdAt.toDate().toISOString() : (typeof reqData.createdAt === 'string' ? reqData.createdAt : new Date().toISOString()),
+        processedAt: reqData.processedAt instanceof Timestamp ? reqData.processedAt.toDate().toISOString() : (typeof reqData.processedAt === 'string' ? reqData.processedAt : undefined),
+        pinExpiresAt: reqData.pinExpiresAt instanceof Timestamp ? reqData.pinExpiresAt.toDate().toISOString() : (typeof reqData.pinExpiresAt === 'string' ? reqData.pinExpiresAt : undefined),
       } as ApprovalRequest;
     });
   } catch (e: any) {
@@ -641,7 +660,7 @@ export const updateApprovalRequestStatusInFirestore = async (
 
     if (adminNotes !== undefined && adminNotes !== null && adminNotes.trim() !== "") {
       updateData.adminNotes = adminNotes;
-    } else if (adminNotes === '' || adminNotes === null || adminNotes === undefined) { // explicitly clear if empty
+    } else if (adminNotes === '' || adminNotes === null || adminNotes === undefined) { 
       updateData.adminNotes = deleteField();
     }
 
@@ -685,8 +704,8 @@ export const getPinIssuedRequestForEntity = async (
         id: docSnap.id,
         ...requestData,
         createdAt: requestData.createdAt instanceof Timestamp ? requestData.createdAt.toDate().toISOString() : new Date().toISOString(),
-        processedAt: requestData.processedAt instanceof Timestamp ? requestData.processedAt.toDate().toISOString() : (requestData.processedAt ? requestData.processedAt.toString() : undefined),
-        pinExpiresAt: requestData.pinExpiresAt instanceof Timestamp ? requestData.pinExpiresAt.toDate().toISOString() : (requestData.pinExpiresAt ? requestData.pinExpiresAt.toString() : undefined),
+        processedAt: requestData.processedAt instanceof Timestamp ? requestData.processedAt.toDate().toISOString() : (typeof requestData.processedAt === 'string' ? requestData.processedAt : undefined),
+        pinExpiresAt: requestData.pinExpiresAt instanceof Timestamp ? requestData.pinExpiresAt.toDate().toISOString() : (typeof requestData.pinExpiresAt === 'string' ? requestData.pinExpiresAt : undefined),
       } as ApprovalRequest;
 
       if (request.pinCode && request.pinExpiresAt && new Date() < new Date(request.pinExpiresAt)) {
@@ -711,7 +730,7 @@ export const completeApprovalRequestWithPin = async (requestId: string): Promise
       status: 'completed',
       pinCode: deleteField(),
       pinExpiresAt: deleteField(),
-      processedAt: serverTimestamp()
+      processedAt: serverTimestamp() 
     });
   } catch (e) {
     console.error(`Error completing approval request ${requestId} with PIN: `, e);
@@ -829,11 +848,56 @@ export const deleteTodoItemFromFirestore = async (todoId: string): Promise<void>
 
 export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (!employeeId) return 'N/A';
+    // In a real app, this would fetch from user profiles in Firestore
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
 
-    if (employeeId.length > 10 && !employeeId.startsWith('user-')) {
+    // Fallback for Firebase UIDs (if no mock user matches)
+    if (employeeId.length > 10 && !employeeId.startsWith('user-')) { // Basic check for UID format
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
     return 'Utilisateur Inconnu';
+};
+
+// Session Audit Log
+export const logSessionEvent = async (
+  userId: string,
+  userDisplayName: string | null,
+  userEmail: string | null,
+  action: 'login' | 'logout'
+): Promise<void> => {
+  try {
+    await addDoc(auditLogSessionsCollectionRef, {
+      userId,
+      userDisplayName,
+      userEmail,
+      action,
+      timestamp: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("Error logging session event: ", e);
+    // Silently fail for now, or implement more robust error handling
+  }
+};
+
+export const getSessionAuditEvents = async (): Promise<SessionAuditEvent[]> => {
+  try {
+    const q = query(auditLogSessionsCollectionRef, orderBy("timestamp", "desc"));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate().toISOString() : new Date().toISOString(),
+      } as SessionAuditEvent;
+    });
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch session audit events. Check admin rules for 'auditLogSessions'.", e);
+    } else {
+      console.error("Error getting session audit events: ", e);
+    }
+    return [];
+  }
 };

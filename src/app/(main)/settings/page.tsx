@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Database, UserCircle, Loader2 } from 'lucide-react'; // Removed Users, ShieldCheck, ExternalLink
+import { Bell, Database, UserCircle, Loader2, Log } from 'lucide-react'; 
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { useForm, Controller } from 'react-hook-form';
@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { updateUserProfileInFirestore } from '@/lib/mock-data';
-// Removed Link import as it's no longer used here
+import Link from 'next/link';
 
 const profileFormSchema = z.object({
   displayName: z.string().min(1, { message: "Le nom d'affichage ne peut pas être vide." }),
@@ -51,9 +51,7 @@ export default function SettingsPage() {
     }
     setIsSubmittingProfile(true);
     try {
-      // Update Firebase Auth profile
       await updateProfile(auth.currentUser, { displayName: data.displayName });
-      // Update Firestore profile
       await updateUserProfileInFirestore(user.uid, { displayName: data.displayName });
       
       toast({ title: "Profil Mis à Jour", description: "Votre nom d'affichage a été mis à jour." });
@@ -121,9 +119,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
         
-        {/* Card for "Gestion des Utilisateurs" has been removed */}
-        {/* Card for "Informations de l'Entreprise" has been removed */}
-        
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-primary" /> Notifications et Alertes</CardTitle>
@@ -153,9 +148,18 @@ export default function SettingsPage() {
             <div className="space-y-2">
                 <h4 className="font-medium">Journal d'audit (Sessions)</h4>
                 <p className="text-sm text-muted-foreground">
-                    Consultez l'historique des connexions et déconnexions (fonctionnalité non implémentée).
+                    Consultez l'historique des connexions et déconnexions.
                 </p>
-                <Button variant="outline" disabled>Voir le journal d'audit des sessions</Button>
+                {isAdmin ? (
+                  <Link href="/admin/audit-log/sessions" passHref>
+                    <Button variant="outline">
+                      <Log className="mr-2 h-4 w-4" />
+                      Voir le journal d'audit
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button variant="outline" disabled>Voir le journal d'audit (Admin)</Button>
+                )}
             </div>
             <Separator/>
             <div className="space-y-2">
@@ -163,7 +167,7 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">
                     Configurez les formats et options pour l'exportation comptable.
                 </p>
-                <Button variant="outline" disabled>Configurer l'export</Button>
+                <Button variant="outline" disabled>Configurer l'export (Bientôt disponible)</Button>
             </div>
           </CardContent>
         </Card>

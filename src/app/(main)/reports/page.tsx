@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { FileSpreadsheet, Printer, Filter, Loader2, AlertTriangle } from 'lucide-react';
-import { getBLsFromFirestore, getExpensesFromFirestore, getClientsFromFirestore } from '@/lib/mock-data'; // Added getClientsFromFirestore
-import type { BillOfLading, Expense, Client } from '@/lib/types'; // Added Client
+import { getBLsFromFirestore, getExpensesFromFirestore, getClientsFromFirestore } from '@/lib/mock-data'; 
+import type { BillOfLading, Expense, Client } from '@/lib/types'; 
 import { format, parse, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -29,8 +29,8 @@ interface ProfitabilityBlResult {
 export default function ReportsPage() {
   const [selectedReportType, setSelectedReportType] = useState<ReportType | undefined>(undefined);
   const [selectedPeriod, setSelectedPeriod] = useState<string>(""); // YYYY-MM
-  const [isLoading, setIsLoading] = useState(false); // For overall page data loading
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false); // For report generation itself
+  const [isLoading, setIsLoading] = useState(false); 
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false); 
   const [reportResults, setReportResults] = useState<ProfitabilityBlResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +38,7 @@ export default function ReportsPage() {
 
   const [allBls, setAllBls] = useState<BillOfLading[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
-  const [allClients, setAllClients] = useState<Client[]>([]); // State for clients
+  const [allClients, setAllClients] = useState<Client[]>([]); 
 
   useEffect(() => {
     const fetchData = async () => {
@@ -47,11 +47,11 @@ export default function ReportsPage() {
         const [bls, expenses, clients] = await Promise.all([
           getBLsFromFirestore(),
           getExpensesFromFirestore(),
-          getClientsFromFirestore(), // Fetch clients
+          getClientsFromFirestore(), 
         ]);
         setAllBls(bls);
         setAllExpenses(expenses);
-        setAllClients(clients); // Store clients
+        setAllClients(clients); 
       } catch (err) {
         console.error("Error fetching base data for reports:", err);
         toast({ title: "Erreur", description: "Impossible de charger les données de base pour les rapports.", variant: "destructive" });
@@ -194,7 +194,7 @@ export default function ReportsPage() {
               Exportation Comptable
             </CardTitle>
             <CardDescription>
-              Exportez les données financières pour votre logiciel de comptabilité.
+              Exportez les données financières pour votre logiciel de comptabilité. (Fonctionnalité à venir)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -203,7 +203,6 @@ export default function ReportsPage() {
               <select id="exportFormat" className="w-full p-2 border rounded-md bg-input" disabled>
                 <option>CSV</option>
                 <option>Excel (XLSX)</option>
-                <option>Format Comptable Spécifique (à configurer)</option>
               </select>
             </div>
              <div>
@@ -217,11 +216,8 @@ export default function ReportsPage() {
             </div>
             <Button className="w-full" disabled>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-              Exporter les Données
+              Exporter les Données (Bientôt)
             </Button>
-             <p className="text-xs text-muted-foreground text-center">
-              L'exportation comptable sera disponible dans une future mise à jour.
-            </p>
           </CardContent>
         </Card>
       </div>
@@ -260,7 +256,7 @@ export default function ReportsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>N° BL</TableHead>
-                    <TableHead>Client</TableHead> {/* Added Client Name */}
+                    <TableHead>Client</TableHead> 
                     <TableHead>Date Création</TableHead>
                     <TableHead className="text-right">Montant Alloué</TableHead>
                     <TableHead className="text-right">Dépenses Totales</TableHead>
@@ -271,7 +267,7 @@ export default function ReportsPage() {
                   {reportResults.map((item, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{item.blNumber}</TableCell>
-                      <TableCell>{item.clientName}</TableCell> {/* Display Client Name */}
+                      <TableCell>{item.clientName}</TableCell> 
                       <TableCell>{item.createdAt ? format(parseISO(item.createdAt), 'dd MMM yyyy', {locale: fr}) : 'N/A'}</TableCell>
                       <TableCell className="text-right">{item.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
                       <TableCell className="text-right">{item.totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>

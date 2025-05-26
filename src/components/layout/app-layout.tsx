@@ -1,5 +1,5 @@
 
-"use client"; // AppLayout needs to be a client component to use useAuth and useRouter
+"use client"; 
 
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
@@ -30,10 +30,10 @@ import { useAuth } from '@/contexts/auth-context';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { useToast } from '@/hooks/use-toast';
-
+import { logSessionEvent } from '@/lib/mock-data'; // Import session logger
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { user, loading, isAdmin } = useAuth(); // isAdmin from context
+  const { user, loading, isAdmin } = useAuth(); 
   const router = useRouter();
   const { toast } = useToast();
 
@@ -44,6 +44,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [user, loading, router]);
 
   const handleLogout = async () => {
+    if (user) { // Ensure user exists before logging event
+      try {
+        await logSessionEvent(user.uid, user.displayName, user.email, 'logout');
+      } catch (logError) {
+        console.error("Error logging logout event:", logError);
+        // Continue with logout even if logging fails
+      }
+    }
     try {
       await signOut(auth);
       toast({ title: 'Déconnexion Réussie' });
@@ -63,7 +71,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }
 
   if (!user) {
-    // This will be briefly shown before redirect or handled by the effect
     return null; 
   }
 

@@ -105,3 +105,12 @@ export interface ApprovalRequest {
   pinCode?: string;
   pinExpiresAt?: string; // ISO Date string
 }
+
+export interface SessionAuditEvent {
+  id?: string;
+  userId: string;
+  userDisplayName: string | null;
+  userEmail: string | null;
+  action: 'login' | 'logout';
+  timestamp: string; // ISO Date string, Firestore will store as Timestamp
+}

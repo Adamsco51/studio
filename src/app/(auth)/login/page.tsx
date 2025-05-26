@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { LogIn } from 'lucide-react';
+import { logSessionEvent } from '@/lib/mock-data'; // Import session logger
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -26,7 +27,14 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser: FirebaseUser | null = userCredential.user;
+
+      if (firebaseUser) {
+        // Log login event
+        await logSessionEvent(firebaseUser.uid, firebaseUser.displayName, firebaseUser.email, 'login');
+      }
+
       toast({ title: 'Connexion Réussie', description: 'Bienvenue ! Redirection en cours...' });
       router.push('/dashboard');
     } catch (err: any) {
