@@ -3,7 +3,7 @@ import next from "next";
 
 const app = next({
   dev: false,
-  conf: { distDir: ".next" }, // ✅ avec bonne syntaxe
+  conf: {distDir: ".next"}, // ✅ avec bonne syntaxe
 });
 
 const handle = app.getRequestHandler();
