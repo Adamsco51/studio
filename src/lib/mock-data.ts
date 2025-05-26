@@ -118,7 +118,7 @@ export const getClientsFromFirestore = async (): Promise<Client[]> => {
     if (e.code === 'permission-denied') {
       console.error(
         "Firestore permission denied while trying to fetch clients. " +
-        "Please check your Firestore security rules in the Firebase console. ",
+        "Please check your Firestore security rules in the Firebase console for the 'clients' collection. ",
         e
       );
     } else {
@@ -145,7 +145,7 @@ export const getClientByIdFromFirestore = async (clientId: string): Promise<Clie
     }
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error(`Firestore permission denied while trying to fetch client with ID: ${clientId}. `, e);
+      console.error(`Firestore permission denied while trying to fetch client with ID: ${clientId}. Check rules for 'clients' collection.`, e);
     } else {
       console.error(`Error getting document (client ${clientId}): `, e);
     }
@@ -185,10 +185,9 @@ export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'create
     });
     if (blData.clientId) {
         const clientDocRef = doc(db, "clients", blData.clientId);
-        // Atomically add the new BL ID to the client's blIds array
         await updateDoc(clientDocRef, {
             blIds: arrayUnion(docRef.id)
-        });
+        }).catch(err => console.error("Failed to update client with new BL ID:", err));
     }
     return docRef.id;
   } catch (e) {
@@ -212,7 +211,7 @@ export const getBLsFromFirestore = async (): Promise<BillOfLading[]> => {
      if (e.code === 'permission-denied') {
       console.error(
         "Firestore permission denied while trying to fetch Bills of Lading. " +
-        "Please check your Firestore security rules.",
+        "Please check your Firestore security rules for the 'billsOfLading' collection.",
         e
       );
     } else {
@@ -239,7 +238,7 @@ export const getBLByIdFromFirestore = async (blId: string): Promise<BillOfLading
     }
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error(`Firestore permission denied while trying to fetch BL with ID: ${blId}.`, e);
+      console.error(`Firestore permission denied while trying to fetch BL with ID: ${blId}. Check rules for 'billsOfLading' collection.`, e);
     } else {
       console.error(`Error getting document (BL ${blId}): `, e);
     }
@@ -288,10 +287,9 @@ export const deleteBLFromFirestore = async (blId: string) => {
         const blData = blSnap.data() as BillOfLading; 
         if (blData.clientId) {
             const clientDocRef = doc(db, "clients", blData.clientId);
-            // Atomically remove the BL ID from the client's blIds array
             await updateDoc(clientDocRef, {
                 blIds: arrayRemove(blId)
-            });
+            }).catch(err => console.error("Failed to remove BL ID from client:", err));
         }
         const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
         const expensesSnapshot = await getDocs(expensesQuery);
@@ -300,7 +298,7 @@ export const deleteBLFromFirestore = async (blId: string) => {
     }
     await deleteDoc(blDocRef);
   } catch (e) {
-    console.error("Error deleting document (BL): ", e);
+    console.error("Error deleting document (BL and associated data): ", e);
     throw e;
   }
 };
@@ -321,7 +319,6 @@ export const addExpenseToFirestore = async (expenseData: Omit<Expense, 'id' | 'd
         date: newExpenseData.date instanceof Timestamp ? newExpenseData.date.toDate().toISOString() : new Date().toISOString() 
       } as Expense;
     }
-    // Fallback, should ideally not be reached if getDoc succeeds
     return { ...expenseData, id: docRef.id, date: new Date().toISOString() } as Expense;
   } catch (e) {
     console.error("Error adding document (expense): ", e);
@@ -342,7 +339,7 @@ export const getExpensesFromFirestore = async (): Promise<Expense[]> => {
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error("Firestore permission denied while trying to fetch expenses.", e);
+      console.error("Firestore permission denied while trying to fetch expenses. Check rules for 'expenses' collection.", e);
     } else {
       console.error("Error getting documents (expenses): ", e);
     }
@@ -364,7 +361,7 @@ export const getExpensesByBlIdFromFirestore = async (blId: string): Promise<Expe
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error(`Firestore permission denied while trying to fetch expenses for BL ID: ${blId}.`, e);
+      console.error(`Firestore permission denied while trying to fetch expenses for BL ID: ${blId}. Check rules for 'expenses' collection.`, e);
     } else {
       console.error(`Error getting documents (expenses for BL ${blId}): `, e);
     }
@@ -410,7 +407,7 @@ export const getWorkTypesFromFirestore = async (): Promise<WorkType[]> => {
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error("Firestore permission denied while trying to fetch work types.", e);
+      console.error("Firestore permission denied while trying to fetch work types. Check rules for 'workTypes' collection.", e);
     } else {
       console.error("Error getting documents (work types): ", e);
     }
@@ -435,7 +432,7 @@ export const getWorkTypeByIdFromFirestore = async (workTypeId: string): Promise<
     }
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error(`Firestore permission denied while trying to fetch work type with ID: ${workTypeId}.`, e);
+      console.error(`Firestore permission denied while trying to fetch work type with ID: ${workTypeId}. Check rules for 'workTypes' collection.`, e);
     } else {
       console.error(`Error getting document (work type ${workTypeId}): `, e);
     }
@@ -473,7 +470,7 @@ export const addApprovalRequestToFirestore = async (
       status: 'pending',
       createdAt: serverTimestamp(),
     });
-    const newDocSnap = await getDoc(docRef); // Fetch the document to get server-generated fields
+    const newDocSnap = await getDoc(docRef); 
     if (newDocSnap.exists()) {
       const data = newDocSnap.data();
       return {
@@ -482,7 +479,6 @@ export const addApprovalRequestToFirestore = async (
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as ApprovalRequest;
     }
-    // This fallback should ideally not be reached if getDoc after addDoc works as expected
     return { 
       ...requestData, 
       id: docRef.id, 
@@ -541,13 +537,14 @@ export const deleteTodoItem = (todoId: string): void => {
 
 export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (!employeeId) return 'N/A';
-    // In a real app, this would fetch from a user collection or Auth context
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
-
-    // Placeholder if we have a real UID but no mock entry
-    // This part will be less relevant once full user profiles are in Firestore
-    // and fetched through AuthContext.
-    if (employeeId.startsWith('user-')) return `Mock User (${employeeId.slice(0,6)})`;
+    
+    // This is a simplified lookup. In a real app, you'd fetch from user profiles in Firestore.
+    // For now, if it's not a known mock ID, return a placeholder.
+    if (employeeId.length > 10 && !employeeId.startsWith('user-')) { // Heuristic for a Firebase UID
+        return `Utilisateur (${employeeId.substring(0,6)}...)`;
+    }
     return 'Utilisateur Inconnu'; 
 };
+
