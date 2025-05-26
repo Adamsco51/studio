@@ -3,9 +3,8 @@ import next from "next";
 
 const app = next({
   dev: false,
-  conf: {distDir: ".next"}, // ✅ avec bonne syntaxe
+  conf: { distDir: ".next" },
 });
-
 const handle = app.getRequestHandler();
 
 export const nextApp = functions.https.onRequest(async (req, res) => {

@@ -19,14 +19,13 @@
   "rules": {
     // Style général
     "max-len": ["warn", { "code": 100 }],
-    "object-curly-spacing": ["error", "always"],
+    "object-curly-spacing": "off",
     "comma-dangle": ["error", "always-multiline"],
     "spaced-comment": ["warn", "always", { "exceptions": ["-","+"] }],
 
     // TypeScript
     "@typescript-eslint/no-unused-vars": "warn",
     "@typescript-eslint/no-var-requires": "off",
-    "object-curly-spacing": "off",
     
     // Import
     "no-console": "off",
