@@ -59,8 +59,7 @@ interface ExpenseWithDetails extends Expense {
   employeeName?: string;
 }
 
-export default function ExpensesPage({ params: paramsPromise }: { params: Promise<{}> }) {
-  const params = use(paramsPromise);
+export default function ExpensesPage() {
   const { user, isAdmin } = useAuth();
   const [expenses, setExpenses] = useState<ExpenseWithDetails[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -559,7 +558,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
       }}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Modifier Dépense: {expenseTargetedForAction?.label}</DialogTitle>
+            <DialogTitle>Modifier Dépense: {expenseTargetedForAction?.label || "Dépense sélectionnée"}</DialogTitle>
             <DialogDescription>
               Mettez à jour les informations de cette dépense.
             </DialogDescription>
@@ -588,7 +587,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-                {isAdmin ? `Supprimer Dépense: "${expenseTargetedForAction?.label}"?` : `Demande de Suppression: ${expenseTargetedForAction?.label}`}
+                {isAdmin ? `Supprimer Dépense: "${expenseTargetedForAction?.label || "Dépense sélectionnée"}"?` : `Demande de Suppression: ${expenseTargetedForAction?.label || "Dépense sélectionnée"}`}
             </AlertDialogTitle>
             {isAdmin ? (
                 <AlertDialogDescription>
@@ -642,7 +641,7 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
                 <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
             </DialogTitle>
             <DialogDescription>
-              Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} la dépense "{expenseTargetedForAction?.label}".
+              Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} la dépense "{expenseTargetedForAction?.label || "Dépense sélectionnée"}".
             </DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-2">
@@ -673,3 +672,5 @@ export default function ExpensesPage({ params: paramsPromise }: { params: Promis
     </>
   );
 }
+
+    
