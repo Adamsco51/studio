@@ -14,6 +14,7 @@ import {
     deleteClientFromFirestore,
     deleteExpenseFromFirestore,
     deleteWorkTypeFromFirestore,
+    deleteContainerFromFirestore, // Added for container deletion
 } from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
@@ -73,6 +74,7 @@ const getEntityTypeText = (entityType: ApprovalRequest['entityType']) => {
         case 'client': return 'Client';
         case 'workType': return 'Type de Travail';
         case 'expense': return 'Dépense';
+        case 'container': return 'Conteneur'; // Added
         default: return entityType;
     }
 };
@@ -170,7 +172,23 @@ export default function AdminApprovalsPage() {
           } else if (selectedRequest.entityType === 'workType') {
             await deleteWorkTypeFromFirestore(selectedRequest.entityId);
             entityDeleted = true;
+          } else if (selectedRequest.entityType === 'container') {
+            // For container, we need the blId if it's part of the description, or find it
+            // This part might need refinement if blId isn't easily available
+            let blIdForContainer: string | undefined;
+            if (selectedRequest.entityDescription?.includes('(BL N°')) {
+                const match = selectedRequest.entityDescription.match(/\(BL N°\s*([a-zA-Z0-9-]+)\)/);
+                if (match && match[1]) blIdForContainer = match[1];
+            }
+            if (blIdForContainer) {
+                await deleteContainerFromFirestore(selectedRequest.entityId, blIdForContainer);
+                entityDeleted = true;
+            } else {
+                console.warn(`Could not determine BL ID for container deletion request: ${selectedRequest.id}`);
+                toast({ title: "Attention", description: `Conteneur ${selectedRequest.entityId} approuvé pour suppression, mais BL ID non trouvé pour action automatique.`, variant: "default", duration: 7000 });
+            }
           }
+
 
           if (entityDeleted) {
             toast({ title: "Action Effectuée", description: `${getEntityTypeText(selectedRequest.entityType)} (ID: ${selectedRequest.entityId}) a été supprimé(e) avec succès.` });
@@ -205,6 +223,7 @@ export default function AdminApprovalsPage() {
       case 'workType':
         return `/work-types/${request.entityId}/edit`; 
       case 'expense':
+      case 'container': // Containers are also linked to a BL
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {

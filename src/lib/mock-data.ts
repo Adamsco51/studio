@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container } from './types';
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -37,6 +37,7 @@ const clientsCollectionRef = collection(db, "clients");
 const blsCollectionRef = collection(db, "billsOfLading");
 const expensesCollectionRef = collection(db, "expenses");
 const workTypesCollectionRef = collection(db, "workTypes");
+const containersCollectionRef = collection(db, "containers"); // New collection for Containers
 const approvalRequestsCollectionRef = collection(db, "approvalRequests");
 const chatMessagesCollectionRef = collection(db, "chatMessages");
 const todoItemsCollectionRef = collection(db, "todoItems");
@@ -215,33 +216,24 @@ export const deleteClientFromFirestore = async (clientId: string) => {
         const clientData = clientSnapshot.data();
         if (clientData && clientData.blIds && clientData.blIds.length > 0) {
             for (const blId of clientData.blIds) {
-                const blDocRef = doc(db, "billsOfLading", blId);
-                // Fetch the BL to delete its expenses
-                const blSnapshot = await getDoc(blDocRef);
-                if (blSnapshot.exists()) {
-                    const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
-                    const expensesSnapshot = await getDocs(expensesQuery);
-                    expensesSnapshot.forEach(expenseDoc => {
-                        batch.delete(expenseDoc.ref);
-                    });
-                }
-                batch.delete(blDocRef);
+                await deleteBLFromFirestore(blId); // Use existing function that handles BL and its sub-collections
             }
         }
     }
     batch.delete(clientDoc);
     await batch.commit();
   } catch (e) {
-    console.error("Error deleting document (client and associated BLs/expenses): ", e);
+    console.error("Error deleting document (client and associated BLs/expenses/containers): ", e);
     throw e;
   }
 };
 
 // BL CRUD with Firestore
-export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'createdAt'>) => {
+export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'createdAt' | 'containerIds'>) => {
   try {
     const docRef = await addDoc(blsCollectionRef, {
       ...blData,
+      containerIds: [], // Initialize with empty array
       createdAt: serverTimestamp(),
     });
     if (blData.clientId) {
@@ -266,6 +258,7 @@ export const getBLsFromFirestore = async (): Promise<BillOfLading[]> => {
       return {
         ...blData,
         id: docSnap.id,
+        containerIds: blData.containerIds || [],
         createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as BillOfLading;
     });
@@ -292,6 +285,7 @@ export const getBLByIdFromFirestore = async (blId: string): Promise<BillOfLading
       return {
         ...blData,
         id: blSnap.id,
+        containerIds: blData.containerIds || [],
         createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as BillOfLading;
     } else {
@@ -317,6 +311,7 @@ export const getBLsByClientIdFromFirestore = async (clientId: string): Promise<B
       return {
         ...blData,
         id: docSnap.id,
+        containerIds: blData.containerIds || [],
         createdAt: blData.createdAt instanceof Timestamp ? blData.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as BillOfLading;
     });
@@ -347,14 +342,23 @@ export const deleteBLFromFirestore = async (blId: string) => {
   try {
     const blSnap = await getDoc(blDocRef);
     if (blSnap.exists()) {
-        const blData = blSnap.data();
+        const blData = blSnap.data() as BillOfLading; // Cast to get containerIds
         if (blData && blData.clientId) {
             const clientDocRef = doc(db, "clients", blData.clientId);
             batch.update(clientDocRef, { blIds: arrayRemove(blId) });
         }
+        // Delete associated expenses
         const expensesQuery = query(expensesCollectionRef, where("blId", "==", blId));
         const expensesSnapshot = await getDocs(expensesQuery);
         expensesSnapshot.forEach(expenseDoc => batch.delete(expenseDoc.ref));
+
+        // Delete associated containers
+        if (blData.containerIds && blData.containerIds.length > 0) {
+            for (const containerId of blData.containerIds) {
+                const containerDocRef = doc(db, "containers", containerId);
+                batch.delete(containerDocRef);
+            }
+        }
     }
     batch.delete(blDocRef);
     await batch.commit();
@@ -558,6 +562,117 @@ export const deleteWorkTypeFromFirestore = async (workTypeId: string) => {
     throw e;
   }
 };
+
+// Container CRUD with Firestore
+export const addContainerToFirestore = async (
+  containerData: Omit<Container, 'id' | 'createdAt'> & { createdByUserId: string }
+): Promise<Container> => {
+  const batch = writeBatch(db);
+  try {
+    const dataToSave: any = { ...containerData, createdAt: serverTimestamp() };
+    // Convert date strings to Timestamps if they exist
+    if (containerData.shippingDate) dataToSave.shippingDate = Timestamp.fromDate(parseISO(containerData.shippingDate));
+    if (containerData.dischargeDate) dataToSave.dischargeDate = Timestamp.fromDate(parseISO(containerData.dischargeDate));
+    if (containerData.truckLoadingDate) dataToSave.truckLoadingDate = Timestamp.fromDate(parseISO(containerData.truckLoadingDate));
+    if (containerData.destinationArrivalDate) dataToSave.destinationArrivalDate = Timestamp.fromDate(parseISO(containerData.destinationArrivalDate));
+
+    const containerDocRef = doc(collection(db, "containers")); // Generate new ID
+    batch.set(containerDocRef, dataToSave);
+
+    const blDocRef = doc(db, "billsOfLading", containerData.blId);
+    batch.update(blDocRef, { containerIds: arrayUnion(containerDocRef.id) });
+
+    await batch.commit();
+
+    const newDocSnap = await getDoc(containerDocRef);
+    if (newDocSnap.exists()) {
+      const savedData = newDocSnap.data();
+      return {
+        ...savedData,
+        id: newDocSnap.id,
+        createdAt: savedData.createdAt instanceof Timestamp ? savedData.createdAt.toDate().toISOString() : new Date().toISOString(),
+        shippingDate: savedData.shippingDate instanceof Timestamp ? savedData.shippingDate.toDate().toISOString() : undefined,
+        dischargeDate: savedData.dischargeDate instanceof Timestamp ? savedData.dischargeDate.toDate().toISOString() : undefined,
+        truckLoadingDate: savedData.truckLoadingDate instanceof Timestamp ? savedData.truckLoadingDate.toDate().toISOString() : undefined,
+        destinationArrivalDate: savedData.destinationArrivalDate instanceof Timestamp ? savedData.destinationArrivalDate.toDate().toISOString() : undefined,
+      } as Container;
+    }
+    throw new Error("Failed to retrieve saved container data.");
+  } catch (e) {
+    console.error("Error adding document (container) and updating BL: ", e);
+    throw e;
+  }
+};
+
+export const getContainersByBlIdFromFirestore = async (blId: string): Promise<Container[]> => {
+  const q = query(containersCollectionRef, where("blId", "==", blId), orderBy("createdAt", "desc"));
+  try {
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        ...data,
+        id: docSnap.id,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+        shippingDate: data.shippingDate instanceof Timestamp ? data.shippingDate.toDate().toISOString() : undefined,
+        dischargeDate: data.dischargeDate instanceof Timestamp ? data.dischargeDate.toDate().toISOString() : undefined,
+        truckLoadingDate: data.truckLoadingDate instanceof Timestamp ? data.truckLoadingDate.toDate().toISOString() : undefined,
+        destinationArrivalDate: data.destinationArrivalDate instanceof Timestamp ? data.destinationArrivalDate.toDate().toISOString() : undefined,
+      } as Container;
+    });
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch containers for BL ID: ${blId}. Check rules.`, e);
+    } else {
+      console.error(`Error getting documents (containers for BL ${blId}): `, e);
+    }
+    return [];
+  }
+};
+
+export const updateContainerInFirestore = async (
+  containerId: string,
+  updatedData: Partial<Omit<Container, 'id' | 'createdAt' | 'blId' | 'createdByUserId'>>
+): Promise<void> => {
+  const containerDoc = doc(db, "containers", containerId);
+  try {
+    const dataToUpdate: any = { ...updatedData };
+     // Convert date strings to Timestamps if they exist
+    if (updatedData.shippingDate) dataToUpdate.shippingDate = updatedData.shippingDate ? Timestamp.fromDate(parseISO(updatedData.shippingDate)) : deleteField();
+    else if (updatedData.shippingDate === null || updatedData.shippingDate === '') dataToUpdate.shippingDate = deleteField();
+
+    if (updatedData.dischargeDate) dataToUpdate.dischargeDate = updatedData.dischargeDate ? Timestamp.fromDate(parseISO(updatedData.dischargeDate)) : deleteField();
+    else if (updatedData.dischargeDate === null || updatedData.dischargeDate === '') dataToUpdate.dischargeDate = deleteField();
+
+    if (updatedData.truckLoadingDate) dataToUpdate.truckLoadingDate = updatedData.truckLoadingDate ? Timestamp.fromDate(parseISO(updatedData.truckLoadingDate)) : deleteField();
+    else if (updatedData.truckLoadingDate === null || updatedData.truckLoadingDate === '') dataToUpdate.truckLoadingDate = deleteField();
+    
+    if (updatedData.destinationArrivalDate) dataToUpdate.destinationArrivalDate = updatedData.destinationArrivalDate ? Timestamp.fromDate(parseISO(updatedData.destinationArrivalDate)) : deleteField();
+    else if (updatedData.destinationArrivalDate === null || updatedData.destinationArrivalDate === '') dataToUpdate.destinationArrivalDate = deleteField();
+
+    await updateDoc(containerDoc, dataToUpdate);
+  } catch (e) {
+    console.error("Error updating document (container): ", e);
+    throw e;
+  }
+};
+
+export const deleteContainerFromFirestore = async (containerId: string, blId: string): Promise<void> => {
+  const batch = writeBatch(db);
+  try {
+    const containerDocRef = doc(db, "containers", containerId);
+    batch.delete(containerDocRef);
+
+    const blDocRef = doc(db, "billsOfLading", blId);
+    batch.update(blDocRef, { containerIds: arrayRemove(containerId) });
+
+    await batch.commit();
+  } catch (e) {
+    console.error("Error deleting document (container) and updating BL: ", e);
+    throw e;
+  }
+};
+
 
 // Approval Request Service
 export const addApprovalRequestToFirestore = async (
@@ -933,7 +1048,8 @@ export const getCompanyProfileFromFirestore = async (): Promise<CompanyProfile |
     } else {
         console.error("Error fetching company profile:", error);
     }
-    throw error; 
+    // throw error; No longer throwing, return null to allow app to function with defaults
+    return null;
   }
 };
 

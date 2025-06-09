@@ -29,7 +29,24 @@ export interface BillOfLading {
   workTypeId: string;
   description: string;
   categories: string[]; // Manual categories
+  containerIds: string[]; // Added for container management
   status: BLStatus;
+  createdAt: string; // ISO Date string
+  createdByUserId?: string;
+}
+
+export interface Container {
+  id: string;
+  blId: string; // Foreign key to BillOfLading
+  containerNumber: string;
+  type: string; // e.g., '20ft Dry', '40ft HC', 'Reefer'
+  sealNumber?: string;
+  shippingDate?: string; // Date d'embarquement sur le navire (ISO string)
+  dischargeDate?: string; // Date de déchargement du navire (ISO string)
+  truckLoadingDate?: string; // Date d'embarquement sur le camion (ISO string)
+  destinationArrivalDate?: string; // Date d'arrivée à destination (ISO string)
+  status: string; // e.g., 'At Origin Port', 'On Vessel', 'At Destination Port', 'Loaded on Truck', 'Delivered'
+  notes?: string;
   createdAt: string; // ISO Date string
   createdByUserId?: string;
 }
@@ -84,7 +101,7 @@ export interface TodoItem {
   createdByName: string;
 }
 
-export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense';
+export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense' | 'container';
 export type ApprovalRequestActionType = 'edit' | 'delete';
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'pin_issued' | 'completed';
 
