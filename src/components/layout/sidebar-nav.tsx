@@ -3,17 +3,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History } from 'lucide-react'; // Added History
+import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History, Truck as TruckIcon } from 'lucide-react'; // Added TruckIcon and History
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuBadge, 
+  SidebarMenuBadge,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/auth-context';
 import { useEffect, useState } from 'react';
-import { getApprovalRequestsFromFirestore } from '@/lib/mock-data'; 
+import { getApprovalRequestsFromFirestore } from '@/lib/mock-data';
 import type { ApprovalRequest } from '@/lib/types';
 
 const navItems = [
@@ -22,6 +22,8 @@ const navItems = [
   { href: '/bls', label: 'Bills of Lading', icon: FileText },
   { href: '/expenses', label: 'Dépenses', icon: DollarSign },
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
+  { href: '/trucks', label: 'Camions', icon: TruckIcon }, // Added Trucks
+  // { href: '/drivers', label: 'Chauffeurs', icon: UsersIconLucide }, // Placeholder for Drivers
   { href: '/chat', label: 'Messagerie', icon: MessageSquare },
   { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered },
   { href: '/reports', label: 'Rapports', icon: Package },
@@ -51,7 +53,7 @@ export function SidebarNav() {
       };
       fetchPendingApprovals();
     } else {
-      setPendingApprovalsCount(0); 
+      setPendingApprovalsCount(0);
     }
   }, [isAdmin, user]);
 

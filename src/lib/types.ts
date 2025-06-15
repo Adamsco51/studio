@@ -29,7 +29,7 @@ export interface BillOfLading {
   workTypeId: string;
   description: string;
   categories: string[]; // Manual categories
-  containerIds: string[]; // Added for container management
+  containerIds: string[];
   status: BLStatus;
   createdAt: string; // ISO Date string
   createdByUserId?: string;
@@ -81,6 +81,35 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export type TruckStatus = 'available' | 'in_transit' | 'maintenance' | 'out_of_service';
+
+export interface Truck {
+  id: string;
+  registrationNumber: string;
+  model?: string;
+  capacity?: string; // e.g., "1x40ft or 2x20ft", "30 Tonnes"
+  status: TruckStatus;
+  currentDriverId?: string | null;
+  currentDriverName?: string | null; // Denormalized for display
+  notes?: string;
+  createdAt: string; // ISO Date string
+  createdByUserId?: string;
+}
+
+export type DriverStatus = 'available' | 'on_trip' | 'off_duty' | 'unavailable';
+
+export interface Driver {
+  id: string;
+  name: string;
+  licenseNumber: string;
+  phone: string;
+  status: DriverStatus;
+  currentTruckId?: string | null;
+  currentTruckReg?: string | null; // Denormalized for display
+  notes?: string;
+  createdAt: string; // ISO Date string
+  createdByUserId?: string;
+}
 
 export interface ChatMessage {
   id: string;
@@ -101,7 +130,7 @@ export interface TodoItem {
   createdByName: string;
 }
 
-export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense' | 'container';
+export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense' | 'container' | 'truck' | 'driver';
 export type ApprovalRequestActionType = 'edit' | 'delete';
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'pin_issued' | 'completed';
 
