@@ -22,7 +22,7 @@ import {
   limit,
   writeBatch,
 } from "firebase/firestore";
-import { formatISO, parseISO, addHours } from 'date-fns';
+import { formatISO, parseISO, addHours, isValid } from 'date-fns';
 
 
 export const MOCK_USERS: User[] = [
@@ -590,11 +590,29 @@ export const addContainerToFirestore = async (
 ): Promise<Container> => {
   const batch = writeBatch(db);
   try {
-    const dataToSave: any = { ...containerData, createdAt: serverTimestamp() };
-    if (containerData.shippingDate) dataToSave.shippingDate = Timestamp.fromDate(parseISO(containerData.shippingDate));
-    if (containerData.dischargeDate) dataToSave.dischargeDate = Timestamp.fromDate(parseISO(containerData.dischargeDate));
-    if (containerData.truckLoadingDate) dataToSave.truckLoadingDate = Timestamp.fromDate(parseISO(containerData.truckLoadingDate));
-    if (containerData.destinationArrivalDate) dataToSave.destinationArrivalDate = Timestamp.fromDate(parseISO(containerData.destinationArrivalDate));
+    const dataToSave: any = {
+      blId: containerData.blId,
+      containerNumber: containerData.containerNumber,
+      type: containerData.type,
+      sealNumber: containerData.sealNumber || "",
+      status: containerData.status,
+      notes: containerData.notes || "",
+      createdByUserId: containerData.createdByUserId,
+      createdAt: serverTimestamp(),
+    };
+
+    if (containerData.shippingDate && typeof containerData.shippingDate === 'string' && isValid(parseISO(containerData.shippingDate))) {
+      dataToSave.shippingDate = Timestamp.fromDate(parseISO(containerData.shippingDate));
+    }
+    if (containerData.dischargeDate && typeof containerData.dischargeDate === 'string' && isValid(parseISO(containerData.dischargeDate))) {
+      dataToSave.dischargeDate = Timestamp.fromDate(parseISO(containerData.dischargeDate));
+    }
+    if (containerData.truckLoadingDate && typeof containerData.truckLoadingDate === 'string' && isValid(parseISO(containerData.truckLoadingDate))) {
+      dataToSave.truckLoadingDate = Timestamp.fromDate(parseISO(containerData.truckLoadingDate));
+    }
+    if (containerData.destinationArrivalDate && typeof containerData.destinationArrivalDate === 'string' && isValid(parseISO(containerData.destinationArrivalDate))) {
+      dataToSave.destinationArrivalDate = Timestamp.fromDate(parseISO(containerData.destinationArrivalDate));
+    }
 
     const containerDocRef = doc(collection(db, "containers"));
     batch.set(containerDocRef, dataToSave);
@@ -608,8 +626,14 @@ export const addContainerToFirestore = async (
     if (newDocSnap.exists()) {
       const savedData = newDocSnap.data();
       return {
-        ...savedData,
         id: newDocSnap.id,
+        blId: savedData.blId,
+        containerNumber: savedData.containerNumber,
+        type: savedData.type,
+        sealNumber: savedData.sealNumber,
+        status: savedData.status,
+        notes: savedData.notes,
+        createdByUserId: savedData.createdByUserId,
         createdAt: savedData.createdAt instanceof Timestamp ? savedData.createdAt.toDate().toISOString() : new Date().toISOString(),
         shippingDate: savedData.shippingDate instanceof Timestamp ? savedData.shippingDate.toDate().toISOString() : undefined,
         dischargeDate: savedData.dischargeDate instanceof Timestamp ? savedData.dischargeDate.toDate().toISOString() : undefined,
@@ -722,29 +746,39 @@ export const getContainersByBlIdFromFirestore = async (blId: string): Promise<Co
 
 export const updateContainerInFirestore = async (
   containerId: string,
-  updatedData: Partial<Omit<Container, 'id' | 'createdAt' | 'blId' | 'createdByUserId'>>
+  updatedDataFromForm: Partial<Omit<Container, 'id' | 'createdAt' | 'blId' | 'createdByUserId'>>
 ): Promise<void> => {
   const containerDoc = doc(db, "containers", containerId);
   try {
-    const dataToUpdate: any = { ...updatedData };
-    if (updatedData.shippingDate) dataToUpdate.shippingDate = updatedData.shippingDate ? Timestamp.fromDate(parseISO(updatedData.shippingDate)) : deleteField();
-    else if (updatedData.shippingDate === null || updatedData.shippingDate === '') dataToUpdate.shippingDate = deleteField();
+    const dataToUpdate: { [key: string]: any } = {};
 
-    if (updatedData.dischargeDate) dataToUpdate.dischargeDate = updatedData.dischargeDate ? Timestamp.fromDate(parseISO(updatedData.dischargeDate)) : deleteField();
-    else if (updatedData.dischargeDate === null || updatedData.dischargeDate === '') dataToUpdate.dischargeDate = deleteField();
+    for (const key in updatedDataFromForm) {
+      if (Object.prototype.hasOwnProperty.call(updatedDataFromForm, key)) {
+        const value = updatedDataFromForm[key as keyof typeof updatedDataFromForm];
 
-    if (updatedData.truckLoadingDate) dataToUpdate.truckLoadingDate = updatedData.truckLoadingDate ? Timestamp.fromDate(parseISO(updatedData.truckLoadingDate)) : deleteField();
-    else if (updatedData.truckLoadingDate === null || updatedData.truckLoadingDate === '') dataToUpdate.truckLoadingDate = deleteField();
+        if (['shippingDate', 'dischargeDate', 'truckLoadingDate', 'destinationArrivalDate'].includes(key)) {
+          if (value && typeof value === 'string' && isValid(parseISO(value))) {
+            dataToUpdate[key] = Timestamp.fromDate(parseISO(value));
+          } else {
+            dataToUpdate[key] = deleteField();
+          }
+        } else if (key === 'sealNumber' || key === 'notes') {
+            dataToUpdate[key] = value || "";
+        } else {
+          dataToUpdate[key] = value;
+        }
+      }
+    }
 
-    if (updatedData.destinationArrivalDate) dataToUpdate.destinationArrivalDate = updatedData.destinationArrivalDate ? Timestamp.fromDate(parseISO(updatedData.destinationArrivalDate)) : deleteField();
-    else if (updatedData.destinationArrivalDate === null || updatedData.destinationArrivalDate === '') dataToUpdate.destinationArrivalDate = deleteField();
-
-    await updateDoc(containerDoc, dataToUpdate);
+    if (Object.keys(dataToUpdate).length > 0) {
+      await updateDoc(containerDoc, dataToUpdate);
+    }
   } catch (e) {
     console.error("Error updating document (container): ", e);
     throw e;
   }
 };
+
 
 export const deleteContainerFromFirestore = async (containerId: string, blId: string): Promise<void> => {
   const batch = writeBatch(db);

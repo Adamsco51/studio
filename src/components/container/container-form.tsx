@@ -234,16 +234,17 @@ export function ContainerForm({
     
     const statusToSave = data.status === OTHER_STATUS_VALUE ? (data.customStatusText?.trim() || "Other (Not Specified)") : data.status;
 
-    const containerPayloadBase = {
+    // Prepare payload by explicitly taking values from form `data` to avoid issues with `undefined`
+    const containerPayloadBase: Omit<Container, 'id' | 'createdAt' | 'createdByUserId'> = {
       blId: finalBlId,
       containerNumber: data.containerNumber,
       type: data.type,
       sealNumber: data.sealNumber || "",
       status: statusToSave,
-      shippingDate: showShippingDateInput && data.shippingDate ? data.shippingDate : undefined,
-      dischargeDate: showDischargeDateInput && data.dischargeDate ? data.dischargeDate : undefined,
-      truckLoadingDate: showTruckLoadingDateInput && data.truckLoadingDate ? data.truckLoadingDate : undefined,
-      destinationArrivalDate: showDestinationArrivalDateInput && data.destinationArrivalDate ? data.destinationArrivalDate : undefined,
+      shippingDate: showShippingDateInput && data.shippingDate && isValid(parseISO(data.shippingDate)) ? data.shippingDate : undefined,
+      dischargeDate: showDischargeDateInput && data.dischargeDate && isValid(parseISO(data.dischargeDate)) ? data.dischargeDate : undefined,
+      truckLoadingDate: showTruckLoadingDateInput && data.truckLoadingDate && isValid(parseISO(data.truckLoadingDate)) ? data.truckLoadingDate : undefined,
+      destinationArrivalDate: showDestinationArrivalDateInput && data.destinationArrivalDate && isValid(parseISO(data.destinationArrivalDate)) ? data.destinationArrivalDate : undefined,
       notes: data.notes || "",
     };
     
