@@ -20,18 +20,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
 import { useToast } from "@/hooks/use-toast";
 import type { Container, BillOfLading } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
 import { addContainerToFirestore, updateContainerInFirestore, getBLsFromFirestore } from "@/lib/mock-data";
 import { useState, useEffect, useCallback } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
-const containerStatusOptions = [
-  "At Origin Port", "On Vessel", "At Destination Port", "Loaded on Truck", "Customs Clearance", "Delivered", "Empty Returned", "Other"
+const baseContainerStatusOptions = [
+  "At Origin Port", "On Vessel", "At Destination Port", "Loaded on Truck", "Customs Clearance", "Delivered", "Empty Returned"
 ];
+const OTHER_STATUS_VALUE = "Other";
+const containerStatusOptions = [...baseContainerStatusOptions, OTHER_STATUS_VALUE];
+
 
 const containerTypeOptions = [
     "20ft Standard Dry", "40ft Standard Dry", "40ft High Cube (HC)", "20ft Reefer", "40ft Reefer", "20ft Open Top", "40ft Open Top", "20ft Flat Rack", "40ft Flat Rack", "Tank Container", "Other"
@@ -42,6 +46,7 @@ const containerFormSchemaBase = z.object({
   type: z.string({ required_error: "Veuillez sélectionner un type de conteneur." }),
   sealNumber: z.string().optional(),
   status: z.string({ required_error: "Veuillez sélectionner un statut." }),
+  customStatusText: z.string().optional(),
   shippingDate: z.string().optional().nullable(),
   dischargeDate: z.string().optional().nullable(),
   truckLoadingDate: z.string().optional().nullable(),
@@ -52,21 +57,29 @@ const containerFormSchemaBase = z.object({
 const containerFormSchema = z.discriminatedUnion("isBlProvided", [
   containerFormSchemaBase.extend({
     isBlProvided: z.literal(true),
-    blId: z.string(), // blId is directly provided
+    blId: z.string(), 
   }),
   containerFormSchemaBase.extend({
     isBlProvided: z.literal(false),
-    blId: z.string({ required_error: "Veuillez sélectionner un Connaissement (BL)." }), // blId must be selected
+    blId: z.string({ required_error: "Veuillez sélectionner un Connaissement (BL)." }), 
   }),
-]);
+]).superRefine((data, ctx) => {
+  if (data.status === OTHER_STATUS_VALUE && (!data.customStatusText || data.customStatusText.trim() === "")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Veuillez spécifier le statut personnalisé.",
+      path: ["customStatusText"],
+    });
+  }
+});
 
 
 type ContainerFormValues = z.infer<typeof containerFormSchema>;
 
 interface ContainerFormProps {
   initialData?: Container | null;
-  blId?: string; // Optional: if provided, form is for this specific BL
-  availableBls?: BillOfLading[]; // Optional: if adding standalone, pass available BLs
+  blId?: string; 
+  availableBls?: BillOfLading[]; 
   onContainerSaved: (container: Container) => void;
   setDialogOpen?: (open: boolean) => void;
 }
@@ -84,6 +97,11 @@ export function ContainerForm({
   const [internalAvailableBls, setInternalAvailableBls] = useState<BillOfLading[]>(passedAvailableBls || []);
   const [isLoadingBls, setIsLoadingBls] = useState(!passedAvailableBls && !initialData && !providedBlId);
 
+  const [showShippingDateInput, setShowShippingDateInput] = useState(!!initialData?.shippingDate);
+  const [showDischargeDateInput, setShowDischargeDateInput] = useState(!!initialData?.dischargeDate);
+  const [showTruckLoadingDateInput, setShowTruckLoadingDateInput] = useState(!!initialData?.truckLoadingDate);
+  const [showDestinationArrivalDateInput, setShowDestinationArrivalDateInput] = useState(!!initialData?.destinationArrivalDate);
+
 
   const isEditing = !!initialData;
   const isBlContextProvided = !!providedBlId || isEditing;
@@ -96,6 +114,14 @@ export function ContainerForm({
       return undefined;
     }
   };
+  
+  let initialStatus = initialData?.status || "At Origin Port";
+  let initialCustomStatusText = "";
+  if (initialData && !baseContainerStatusOptions.includes(initialData.status)) {
+    initialStatus = OTHER_STATUS_VALUE;
+    initialCustomStatusText = initialData.status;
+  }
+
 
   const form = useForm<ContainerFormValues>({
     resolver: zodResolver(containerFormSchema),
@@ -104,6 +130,8 @@ export function ContainerForm({
           isBlProvided: true,
           blId: initialData.blId,
           ...initialData,
+          status: initialStatus,
+          customStatusText: initialCustomStatusText,
           shippingDate: formatDateForInput(initialData.shippingDate),
           dischargeDate: formatDateForInput(initialData.dischargeDate),
           truckLoadingDate: formatDateForInput(initialData.truckLoadingDate),
@@ -113,17 +141,19 @@ export function ContainerForm({
         ? {
             isBlProvided: true,
             blId: providedBlId,
-            containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+            containerNumber: "", type: "", sealNumber: "", status: "At Origin Port", customStatusText: "",
             shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
           }
-        : { // Adding standalone, blId will come from select
+        : { 
             isBlProvided: false,
-            blId: "", // Requires selection
-            containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+            blId: "", 
+            containerNumber: "", type: "", sealNumber: "", status: "At Origin Port", customStatusText: "",
             shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
           },
   });
   
+  const watchStatus = form.watch("status");
+
   const fetchBlsForSelect = useCallback(async () => {
     if (!passedAvailableBls && !isBlContextProvided) {
       setIsLoadingBls(true);
@@ -144,31 +174,45 @@ export function ContainerForm({
   }, [fetchBlsForSelect]);
 
   useEffect(() => {
-    // Reset form when initialData or providedBlId changes
+    let newStatus = initialData?.status || "At Origin Port";
+    let newCustomStatusText = "";
+    if (initialData && !baseContainerStatusOptions.includes(initialData.status)) {
+        newStatus = OTHER_STATUS_VALUE;
+        newCustomStatusText = initialData.status;
+    }
+
     if (initialData) {
       form.reset({
         isBlProvided: true,
         blId: initialData.blId,
         ...initialData,
+        status: newStatus,
+        customStatusText: newCustomStatusText,
         shippingDate: formatDateForInput(initialData.shippingDate),
         dischargeDate: formatDateForInput(initialData.dischargeDate),
         truckLoadingDate: formatDateForInput(initialData.truckLoadingDate),
         destinationArrivalDate: formatDateForInput(initialData.destinationArrivalDate),
       });
+      setShowShippingDateInput(!!initialData.shippingDate);
+      setShowDischargeDateInput(!!initialData.dischargeDate);
+      setShowTruckLoadingDateInput(!!initialData.truckLoadingDate);
+      setShowDestinationArrivalDateInput(!!initialData.destinationArrivalDate);
     } else if (providedBlId) {
       form.reset({
         isBlProvided: true,
         blId: providedBlId,
-        containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+        containerNumber: "", type: "", sealNumber: "", status: "At Origin Port", customStatusText: "",
         shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
       });
+       setShowShippingDateInput(false); setShowDischargeDateInput(false); setShowTruckLoadingDateInput(false); setShowDestinationArrivalDateInput(false);
     } else {
        form.reset({
         isBlProvided: false,
-        blId: "", // Reset blId for standalone add to force selection
-        containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+        blId: "", 
+        containerNumber: "", type: "", sealNumber: "", status: "At Origin Port", customStatusText: "",
         shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
       });
+       setShowShippingDateInput(false); setShowDischargeDateInput(false); setShowTruckLoadingDateInput(false); setShowDestinationArrivalDateInput(false);
     }
   }, [initialData, providedBlId, form]);
 
@@ -180,24 +224,26 @@ export function ContainerForm({
     }
     setIsSubmitting(true);
 
-    const finalBlId = data.isBlProvided ? data.blId : data.blId; // data.blId is always populated by schema logic
+    const finalBlId = data.isBlProvided ? data.blId : data.blId;
 
     if (!finalBlId) {
         toast({ title: "Erreur", description: "Connaissement (BL) non spécifié.", variant: "destructive" });
         setIsSubmitting(false);
         return;
     }
+    
+    const statusToSave = data.status === OTHER_STATUS_VALUE ? (data.customStatusText?.trim() || "Other (Not Specified)") : data.status;
 
     const containerPayloadBase = {
       blId: finalBlId,
       containerNumber: data.containerNumber,
       type: data.type,
       sealNumber: data.sealNumber || "",
-      status: data.status,
-      shippingDate: data.shippingDate || undefined,
-      dischargeDate: data.dischargeDate || undefined,
-      truckLoadingDate: data.truckLoadingDate || undefined,
-      destinationArrivalDate: data.destinationArrivalDate || undefined,
+      status: statusToSave,
+      shippingDate: showShippingDateInput && data.shippingDate ? data.shippingDate : undefined,
+      dischargeDate: showDischargeDateInput && data.dischargeDate ? data.dischargeDate : undefined,
+      truckLoadingDate: showTruckLoadingDateInput && data.truckLoadingDate ? data.truckLoadingDate : undefined,
+      destinationArrivalDate: showDestinationArrivalDateInput && data.destinationArrivalDate ? data.destinationArrivalDate : undefined,
       notes: data.notes || "",
     };
     
@@ -218,13 +264,11 @@ export function ContainerForm({
       if (setDialogOpen) {
         setDialogOpen(false);
       } else {
-         form.reset(providedBlId ? {
-            isBlProvided: true, blId: providedBlId, containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
-            shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: ""
-         } : {
-            isBlProvided: false, blId: "", containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
-            shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: ""
-         });
+         const resetValues = providedBlId
+            ? { isBlProvided: true, blId: providedBlId, containerNumber: "", type: "", sealNumber: "", status: "At Origin Port", customStatusText: "", shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "" }
+            : { isBlProvided: false, blId: "", containerNumber: "", type: "", sealNumber: "", status: "At Origin Port", customStatusText: "", shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "" };
+         form.reset(resetValues);
+         setShowShippingDateInput(false); setShowDischargeDateInput(false); setShowTruckLoadingDateInput(false); setShowDestinationArrivalDateInput(false);
       }
     } catch (error) {
       console.error("Failed to save container:", error);
@@ -238,48 +282,72 @@ export function ContainerForm({
     }
   }
 
-  const renderDateField = (name: keyof Pick<ContainerFormValues, "shippingDate" | "dischargeDate" | "truckLoadingDate" | "destinationArrivalDate">, label: string) => (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }) => (
-        <FormItem className="flex flex-col">
-          <FormLabel>{label}</FormLabel>
-          <Popover>
-            <PopoverTrigger asChild>
-              <FormControl>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full pl-3 text-left font-normal",
-                    !field.value && "text-muted-foreground",
-                  )}
-                  disabled={isSubmitting}
-                >
-                  {field.value ? (
-                    format(parseISO(field.value), "PPP", { locale: fr })
-                  ) : (
-                    <span>Choisir une date</span>
-                  )}
-                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                </Button>
-              </FormControl>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={field.value ? parseISO(field.value) : undefined}
-                onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
-                disabled={(date) => date < new Date("1900-01-01") || isSubmitting}
-                initialFocus
-                locale={fr}
-              />
-            </PopoverContent>
-          </Popover>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
+  const renderDateFieldWithCheckbox = (
+    showState: boolean,
+    setShowState: (show: boolean) => void,
+    fieldName: keyof Pick<ContainerFormValues, "shippingDate" | "dischargeDate" | "truckLoadingDate" | "destinationArrivalDate">,
+    label: string,
+    checkboxLabel: string
+  ) => (
+    <div>
+        <div className="flex items-center space-x-2 mb-2">
+            <Checkbox
+            id={`checkbox-${fieldName}`}
+            checked={showState}
+            onCheckedChange={(checked) => {
+                setShowState(!!checked);
+                if (!checked) {
+                form.setValue(fieldName, null);
+                }
+            }}
+            disabled={isSubmitting}
+            />
+            <label
+            htmlFor={`checkbox-${fieldName}`}
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+            {checkboxLabel}
+            </label>
+        </div>
+        {showState && (
+            <FormField
+            control={form.control}
+            name={fieldName}
+            render={({ field }) => (
+                <FormItem className="flex flex-col">
+                {/* <FormLabel>{label}</FormLabel> */}
+                <Popover>
+                    <PopoverTrigger asChild>
+                    <FormControl>
+                        <Button
+                        variant={"outline"}
+                        className={cn("w-full pl-3 text-left font-normal",!field.value && "text-muted-foreground")}
+                        disabled={isSubmitting}
+                        >
+                        {field.value && isValid(parseISO(field.value)) ? 
+                            format(parseISO(field.value), "PPP", { locale: fr }) : 
+                            <span>Choisir une date</span>}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                    </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                        mode="single"
+                        selected={field.value && isValid(parseISO(field.value)) ? parseISO(field.value) : undefined}
+                        onSelect={(date) => field.onChange(date ? format(date, 'yyyy-MM-dd') : '')}
+                        disabled={(date) => date < new Date("1900-01-01") || isSubmitting}
+                        initialFocus
+                        locale={fr}
+                    />
+                    </PopoverContent>
+                </Popover>
+                <FormMessage />
+                </FormItem>
+            )}
+            />
+        )}
+    </div>
   );
 
 
@@ -364,52 +432,65 @@ export function ContainerForm({
             />
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField
+          control={form.control}
+          name="sealNumber"
+          render={({ field }) => (
+              <FormItem>
+              <FormLabel>Numéro de Plomb (Optionnel)</FormLabel>
+              <FormControl>
+                  <Input placeholder="Ex: S12345" {...field} disabled={isSubmitting} />
+              </FormControl>
+              <FormMessage />
+              </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+              <FormItem>
+              <FormLabel>Statut du Conteneur</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                  <FormControl>
+                  <SelectTrigger>
+                      <SelectValue placeholder="Sélectionnez un statut" />
+                  </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                  {containerStatusOptions.map(option => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                  </SelectContent>
+              </Select>
+              <FormMessage />
+              </FormItem>
+          )}
+        />
+        {watchStatus === OTHER_STATUS_VALUE && (
             <FormField
             control={form.control}
-            name="sealNumber"
+            name="customStatusText"
             render={({ field }) => (
                 <FormItem>
-                <FormLabel>Numéro de Plomb (Optionnel)</FormLabel>
+                <FormLabel>Préciser le statut "Autre"</FormLabel>
                 <FormControl>
-                    <Input placeholder="Ex: S12345" {...field} disabled={isSubmitting} />
+                    <Input placeholder="Statut personnalisé..." {...field} disabled={isSubmitting} />
                 </FormControl>
                 <FormMessage />
                 </FormItem>
             )}
             />
-            <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-                <FormItem>
-                <FormLabel>Statut du Conteneur</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                    <FormControl>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Sélectionnez un statut" />
-                    </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                    {containerStatusOptions.map(option => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
-        </div>
+        )}
 
         <FormDescription className="text-sm text-muted-foreground pt-2">
-          Dates de Suivi (Optionnel)
+          Dates de Suivi (Cochez pour ajouter une date)
         </FormDescription>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {renderDateField("shippingDate", "Date d'embarquement (Navire)")}
-            {renderDateField("dischargeDate", "Date de déchargement (Navire)")}
-            {renderDateField("truckLoadingDate", "Date de chargement (Camion)")}
-            {renderDateField("destinationArrivalDate", "Date d'arrivée (Destination)")}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
+            {renderDateFieldWithCheckbox(showShippingDateInput, setShowShippingDateInput, "shippingDate", "Date d'embarquement (Navire)", "Date d'embarquement")}
+            {renderDateFieldWithCheckbox(showDischargeDateInput, setShowDischargeDateInput, "dischargeDate", "Date de déchargement (Navire)", "Date de déchargement")}
+            {renderDateFieldWithCheckbox(showTruckLoadingDateInput, setShowTruckLoadingDateInput, "truckLoadingDate", "Date de chargement (Camion)", "Date de chargement camion")}
+            {renderDateFieldWithCheckbox(showDestinationArrivalDateInput, setShowDestinationArrivalDateInput, "destinationArrivalDate", "Date d'arrivée (Destination)", "Date d'arrivée destination")}
         </div>
 
         <FormField
@@ -427,7 +508,7 @@ export function ContainerForm({
         />
         <div className="flex justify-end pt-2">
             <Button type="submit" disabled={isSubmitting || isLoadingBls}>
-            {isSubmitting || isLoadingBls && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {(isSubmitting || (isLoadingBls && !isBlContextProvided)) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isEditing ? "Sauvegarder Modifications" : "Ajouter Conteneur"}
             </Button>
         </div>
@@ -435,3 +516,4 @@ export function ContainerForm({
     </Form>
   );
 }
+
