@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileArchive, PlusCircle, Construction, Loader2, AlertTriangle, Edit, Trash2, KeyRound, UserCircle2, CalendarDays } from 'lucide-react';
+import { FileArchive, PlusCircle, Construction, Loader2, AlertTriangle, Edit, Trash2, KeyRound, UserCircle2, CalendarDays, Mail } from 'lucide-react'; // Added Mail icon
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { 
@@ -36,8 +36,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogDesc, // Aliased to avoid conflict
-  DialogFooter as DialogFoot,       // Aliased to avoid conflict
+  DialogDescription as DialogDesc, 
+  DialogFooter as DialogFoot,       
   DialogClose,
 } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
@@ -74,7 +74,7 @@ export default function SecretaryDocumentsPage() {
         setIsLoading(true);
         try {
             const fetchedDocs = await getSecretaryDocumentsFromFirestore();
-            setDocuments(fetchedDocs); // Already sorted by updatedAt in mock-data
+            setDocuments(fetchedDocs); 
         } catch (error) {
             console.error("Failed to fetch secretary documents:", error);
             toast({ title: "Erreur", description: "Impossible de charger les documents.", variant: "destructive" });
@@ -100,7 +100,7 @@ export default function SecretaryDocumentsPage() {
 
     if (canEditDirectly) {
         router.push(`/secretary/documents/${doc.id}/edit`);
-    } else { // Non-admin, non-secretary/manager attempting to edit
+    } else { 
         setIsProcessingAction(true);
         try {
             const pinRequest = await getPinIssuedRequestForEntity('secretaryDocument', doc.id, 'edit');
@@ -109,7 +109,7 @@ export default function SecretaryDocumentsPage() {
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
-                setShowReasonDialog(true); // To request approval if no PIN or they don't own it
+                setShowReasonDialog(true); 
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -128,8 +128,8 @@ export default function SecretaryDocumentsPage() {
     const canDeleteDirectly = isAdmin || user.jobTitle === 'Secrétaire' || user.jobTitle === 'Manager';
 
     if (canDeleteDirectly) {
-        setShowReasonDialog(true); // This dialog will lead to direct delete confirmation for authorized roles
-    } else { // Non-admin, non-secretary/manager attempting to delete
+        setShowReasonDialog(true); 
+    } else { 
         setIsProcessingAction(true);
         try {
             const pinRequest = await getPinIssuedRequestForEntity('secretaryDocument', doc.id, 'delete');
@@ -138,7 +138,7 @@ export default function SecretaryDocumentsPage() {
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
-                setShowReasonDialog(true); // To request approval if no PIN
+                setShowReasonDialog(true); 
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -314,9 +314,9 @@ export default function SecretaryDocumentsPage() {
             </div>
           )}
           <div className="mt-6 text-center py-6 border-t border-dashed">
-              <Construction className="mx-auto h-12 w-12 text-muted-foreground opacity-70" />
+              <Mail className="mx-auto h-10 w-10 text-muted-foreground opacity-70" />
               <p className="mt-3 text-sm text-muted-foreground">
-                L'intégration de l'éditeur de texte riche (Quill) et l'envoi par email seront bientôt disponibles.
+                L'éditeur de texte est maintenant intégré. L'envoi par email sera bientôt disponible.
               </p>
             </div>
         </CardContent>
@@ -385,4 +385,3 @@ export default function SecretaryDocumentsPage() {
     </>
   );
 }
-

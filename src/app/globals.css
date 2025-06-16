@@ -1,4 +1,6 @@
 
+@import 'react-quill/dist/quill.snow.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -88,4 +90,41 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+}
+
+/* Quill editor specific styles */
+.ql-toolbar {
+  @apply rounded-t-md border-input bg-card;
+}
+.ql-container {
+  @apply rounded-b-md border-input min-h-[200px] text-base md:text-sm;
+}
+.ql-editor {
+  @apply text-foreground placeholder:text-muted-foreground;
+}
+
+/* Dark mode styles for Quill */
+.dark .ql-toolbar {
+  @apply border-input bg-card;
+}
+.dark .ql-toolbar .ql-stroke {
+  @apply stroke-primary-foreground/70;
+}
+.dark .ql-toolbar .ql-fill {
+  @apply fill-primary-foreground/70;
+}
+.dark .ql-toolbar .ql-picker-label {
+  @apply text-primary-foreground/70;
+}
+.dark .ql-toolbar .ql-picker-options {
+  @apply bg-popover text-popover-foreground;
+}
+.dark .ql-container {
+  @apply border-input;
+}
+.dark .ql-editor {
+  @apply text-foreground;
+}
+.dark .ql-editor.ql-blank::before {
+  @apply text-muted-foreground;
 }

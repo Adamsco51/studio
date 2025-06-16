@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+// Removed Textarea import: import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SecretaryDocument, SecretaryDocumentType, SecretaryDocumentStatus, Client, BillOfLading } from "@/lib/types";
@@ -25,19 +25,27 @@ import { useToast } from "@/hooks/use-toast";
 import { 
     addSecretaryDocumentToFirestore, 
     updateSecretaryDocumentInFirestore,
-    getClientsFromFirestore, // To fetch clients for select
-    getBLsFromFirestore,      // To fetch BLs for select
+    getClientsFromFirestore, 
+    getBLsFromFirestore,      
 } from "@/lib/mock-data";
 import { useAuth } from "@/contexts/auth-context";
-import { useState, useEffect, useCallback } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Loader2, Send } from "lucide-react";
+import dynamic from 'next/dynamic';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+const ReactQuill = dynamic(() => import('react-quill'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center min-h-[200px] border rounded-md bg-muted/50"><Loader2 className="h-6 w-6 animate-spin text-primary"/> <span className="ml-2 text-muted-foreground">Chargement éditeur...</span></div>,
+});
+
 
 const documentFormSchema = z.object({
   title: z.string().min(3, { message: "Le titre doit contenir au moins 3 caractères." }),
   documentType: z.custom<SecretaryDocumentType>((val) => SECRETARY_DOCUMENT_TYPES.includes(val as SecretaryDocumentType), {
     message: "Veuillez sélectionner un type de document valide.",
   }),
-  content: z.string().min(10, { message: "Le contenu doit contenir au moins 10 caractères." }), // Basic validation for now
+  content: z.string().min(10, { message: "Le contenu doit contenir au moins 10 caractères." }),
   status: z.custom<SecretaryDocumentStatus>((val) => SECRETARY_DOCUMENT_STATUSES.includes(val as SecretaryDocumentStatus), {
     message: "Veuillez sélectionner un statut valide.",
   }),
@@ -85,6 +93,18 @@ export function SecretaryDocumentForm({ initialData }: DocumentFormProps) {
     fetchDropdownData();
   }, [fetchDropdownData]);
 
+  const quillModules = useMemo(() => ({
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+      ['link', 'image'],
+      [{ 'align': [] }],
+      [{ 'color': [] }, { 'background': [] }],
+      ['clean']
+    ],
+  }), []);
+
 
   const form = useForm<DocumentFormValues>({
     resolver: zodResolver(documentFormSchema),
@@ -116,14 +136,14 @@ export function SecretaryDocumentForm({ initialData }: DocumentFormProps) {
         ...data,
         relatedClientId: data.relatedClientId === NO_SELECTION_VALUE ? null : data.relatedClientId,
         relatedBlId: data.relatedBlId === NO_SELECTION_VALUE ? null : data.relatedBlId,
-        recipientEmail: data.recipientEmail || null, // Ensure empty string becomes null
+        recipientEmail: data.recipientEmail || null,
     };
 
     try {
       if (initialData && initialData.id) {
         await updateSecretaryDocumentInFirestore(initialData.id, { ...payload, version: initialData.version + 1 });
       } else {
-        await addSecretaryDocumentToFirestore({ ...payload, createdByUserId: user.uid });
+        await addSecretaryDocumentToFirestore({ ...payload, createdByUserId: user.uid, createdByUserName: user.displayName || user.email || "Utilisateur inconnu" });
       }
       toast({
         title: initialData ? "Document Modifié" : "Document Créé",
@@ -208,9 +228,15 @@ export function SecretaryDocumentForm({ initialData }: DocumentFormProps) {
                 <FormItem>
                   <FormLabel>Contenu du Document</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Saisissez le contenu ici..." {...field} rows={10} disabled={isSubmitting} />
+                     <ReactQuill 
+                        theme="snow" 
+                        value={field.value} 
+                        onChange={field.onChange}
+                        modules={quillModules}
+                        className="bg-background text-foreground" // Added for better theme integration
+                        readOnly={isSubmitting}
+                      />
                   </FormControl>
-                  <FormDescription>L'éditeur de texte riche (Quill) sera bientôt disponible ici.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -260,7 +286,7 @@ export function SecretaryDocumentForm({ initialData }: DocumentFormProps) {
                     <FormItem>
                         <FormLabel>Email du Destinataire (Optionnel)</FormLabel>
                         <FormControl><Input type="email" placeholder="Ex: destinataire@example.com" {...field} value={field.value ?? ''} disabled={isSubmitting} /></FormControl>
-                        <FormDescription>Pour l'envoi direct du document (fonctionnalité à venir).</FormDescription>
+                        <FormDescription>Pour l'envoi direct du document.</FormDescription>
                         <FormMessage />
                     </FormItem>
                 )}
@@ -279,14 +305,30 @@ export function SecretaryDocumentForm({ initialData }: DocumentFormProps) {
               )}
             />
             
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
-                Annuler
-              </Button>
-              <Button type="submit" disabled={isSubmitting || isLoadingDropdowns}>
-                {(isSubmitting || isLoadingDropdowns) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {initialData ? "Sauvegarder" : "Créer Document"}
-              </Button>
+            <div className="flex justify-between items-center pt-4">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="button" variant="outline" disabled={true} className="cursor-not-allowed">
+                      <Send className="mr-2 h-4 w-4"/>
+                      Envoyer par Email
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Fonctionnalité bientôt disponible</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <div className="flex space-x-2">
+                <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
+                  Annuler
+                </Button>
+                <Button type="submit" disabled={isSubmitting || isLoadingDropdowns}>
+                  {(isSubmitting || isLoadingDropdowns) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {initialData ? "Sauvegarder" : "Créer Document"}
+                </Button>
+              </div>
             </div>
           </form>
         </Form>
