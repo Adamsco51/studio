@@ -19,6 +19,7 @@ import { PlusCircle, Edit, Trash2, Search, Loader2, KeyRound, Briefcase } from '
 import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -29,10 +30,10 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogDescription as DialogDesc, // Alias to avoid conflict if needed
+  DialogFooter as DialogFoot,     // Alias
+  DialogHeader as DialogHead,     // Alias
+  DialogTitle as DialogTitl,      // Alias
   DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
@@ -94,17 +95,17 @@ export default function WorkTypesPage() {
   const handleEditWorkTypeAction = async (workType: WorkType) => {
     if (!user) return;
     setWorkTypeTargetedForAction(workType);
-    setCurrentActionType('edit'); // For the reason dialog if needed
+    setCurrentActionType('edit'); 
 
     if (isAdmin || workType.createdByUserId === user.uid) {
       router.push(`/work-types/${workType.id}/edit`);
     } else {
       setIsProcessingAction(true);
+      setPinActionType('edit'); 
       try {
         const pinRequest = await getPinIssuedRequestForEntity('workType', workType.id, 'edit');
         if (pinRequest) {
           setActivePinRequest(pinRequest);
-          setPinActionType('edit'); // Set pinActionType here
           setShowPinDialog(true);
         } else {
           setActionReason('');
@@ -121,17 +122,17 @@ export default function WorkTypesPage() {
   const handleDeleteWorkTypeAction = async (workType: WorkType) => {
     if (!user) return;
     setWorkTypeTargetedForAction(workType);
-    setCurrentActionType('delete'); // For the reason dialog if needed
+    setCurrentActionType('delete'); 
 
     if (isAdmin || workType.createdByUserId === user.uid) {
         setShowReasonDialog(true); 
     } else {
         setIsProcessingAction(true);
+        setPinActionType('delete'); 
         try {
             const pinRequest = await getPinIssuedRequestForEntity('workType', workType.id, 'delete');
             if (pinRequest) {
                 setActivePinRequest(pinRequest);
-                setPinActionType('delete'); // Set pinActionType here
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
@@ -325,8 +326,8 @@ export default function WorkTypesPage() {
         </CardContent>
       </Card>
 
-      {/* Reason/Confirmation Dialog */}
-      <Dialog open={showReasonDialog} onOpenChange={(isOpen) => {
+      {/* Reason/Confirmation Dialog - Now uses AlertDialog correctly */}
+      <AlertDialog open={showReasonDialog} onOpenChange={(isOpen) => {
         if (!isOpen) { setWorkTypeTargetedForAction(null); setActionReason(''); setCurrentActionType(null); }
         setShowReasonDialog(isOpen);
       }}>
@@ -348,29 +349,31 @@ export default function WorkTypesPage() {
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction}>Annuler</Button></DialogClose>
-            <Button onClick={handleReasonDialogSubmit} variant={currentActionType === 'delete' && (isAdmin || workTypeTargetedForAction?.createdByUserId === user?.uid) ? "destructive" : "default"} disabled={isProcessingAction || (currentActionType !== 'delete' && !(isAdmin || workTypeTargetedForAction?.createdByUserId === user?.uid) && !actionReason.trim())}>
+            <AlertDialogCancel onClick={() => {setShowReasonDialog(false); setWorkTypeTargetedForAction(null); setActionReason(''); setCurrentActionType(null);}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReasonDialogSubmit} 
+                className={cn(currentActionType === 'delete' && (isAdmin || workTypeTargetedForAction?.createdByUserId === user?.uid) ? buttonVariants({variant: "destructive"}) : "")}
+                disabled={isProcessingAction || (currentActionType !== 'delete' && !(isAdmin || workTypeTargetedForAction?.createdByUserId === user?.uid) && !actionReason.trim())}>
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmer
-            </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </Dialog>
+      </AlertDialog>
 
-       {/* PIN Entry Dialog */}
+       {/* PIN Entry Dialog - Uses generic Dialog from ShadCN */}
        <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
         if (!isOpen) { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null); setPinActionType(null); }
         setShowPinDialog(isOpen);
       }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center">
+          <DialogHead> {/* Changed from DialogHeader to DialogHead to match aliased import */}
+            <DialogTitl className="flex items-center"> {/* Changed from DialogTitle to DialogTitl */}
                 <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
-            </DialogTitle>
-            <DialogDescription>
+            </DialogTitl>
+            <DialogDesc> {/* Changed from DialogDescription to DialogDesc */}
               Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} le type de travail "{workTypeTargetedForAction?.name || "sélectionné"}".
-            </DialogDescription>
-          </DialogHeader>
+            </DialogDesc>
+          </DialogHead>
           <div className="py-2 space-y-2">
             <Label htmlFor="pinCodeWorkType">Code PIN (6 chiffres)</Label>
             <Input
@@ -385,7 +388,7 @@ export default function WorkTypesPage() {
               disabled={isProcessingAction}
             />
           </div>
-          <DialogFooter>
+          <DialogFoot> {/* Changed from DialogFooter to DialogFoot */}
             <DialogClose asChild>
                 <Button variant="outline" disabled={isProcessingAction} onClick={() => { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null); setPinActionType(null);}}>Annuler</Button>
             </DialogClose>
@@ -393,7 +396,7 @@ export default function WorkTypesPage() {
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Valider et {pinActionType === 'edit' ? 'Modifier' : 'Supprimer'}
             </Button>
-          </DialogFooter>
+          </DialogFoot>
         </DialogContent>
       </Dialog>
     </>
