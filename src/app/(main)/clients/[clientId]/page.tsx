@@ -587,9 +587,9 @@ export default function ClientDetailPage({ params: paramsPromise }: { params: Pr
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <DialogClose asChild>
+            <AlertDialogCancel asChild>
                 <Button variant="outline" disabled={isDeleting || isProcessingRequest} onClick={() => {setDeleteClientReason(''); setShowDeleteClientDialog(false);}}>Annuler</Button>
-            </DialogClose>
+            </AlertDialogCancel>
             <Button
               onClick={isAdmin ? handleDeleteClientWithConfirmation : handleSubmitDeleteClientRequest}
               disabled={isDeleting || isProcessingRequest || (!isAdmin && !deleteClientReason.trim())}
