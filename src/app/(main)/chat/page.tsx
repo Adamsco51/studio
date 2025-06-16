@@ -11,16 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { 
+import {
     addChatMessageToFirestore,
     getChatMessagesFromFirestore,
     addTodoItemToFirestore,
     getTodoItemsFromFirestore,
     updateTodoItemInFirestore,
     deleteTodoItemFromFirestore,
-    getAllUserProfiles, // Import to get real users
+    getAllUserProfiles,
 } from '@/lib/mock-data';
-import type { ChatMessage, TodoItem, UserProfile } from '@/lib/types'; 
+import type { ChatMessage, TodoItem, UserProfile } from '@/lib/types';
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -47,10 +47,10 @@ export default function ChatPage() {
   const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [appUsers, setAppUsers] = useState<UserProfile[]>([]); // State for real users
+  const [appUsers, setAppUsers] = useState<UserProfile[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [isLoadingTodos, setIsLoadingTodos] = useState(true);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(true); // Loading state for users
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -62,8 +62,8 @@ export default function ChatPage() {
 
   const todoForm = useForm<TodoItemFormValues>({
     resolver: zodResolver(todoItemSchema),
-    defaultValues: { 
-      text: "", 
+    defaultValues: {
+      text: "",
       assignedToUserId: undefined,
     },
   });
@@ -104,7 +104,7 @@ export default function ChatPage() {
         toast({ title: "Erreur", description: "Impossible de charger les utilisateurs pour l'assignation.", variant: "destructive" });
       })
       .finally(() => setIsLoadingUsers(false));
-    
+
     return () => {
       unsubscribeMessages();
       unsubscribeTodos();
@@ -142,8 +142,8 @@ export default function ChatPage() {
         createdByUserId: user.uid,
         createdByName: user.displayName || user.email || "Utilisateur Inconnu",
         assignedToUserId: data.assignedToUserId,
-        assignedToUserName: assignedUser 
-            ? (assignedUser.displayName?.trim() || assignedUser.email?.trim() || `Utilisateur (ID: ${assignedUser.uid.substring(0,4)})`) 
+        assignedToUserName: assignedUser
+            ? (assignedUser.displayName?.trim() || assignedUser.email?.trim() || `Utilisateur (ID: ${assignedUser.uid.substring(0,4)})`)
             : undefined,
     };
     try {
@@ -167,18 +167,16 @@ export default function ChatPage() {
           title: "Tâche mise à jour",
           description: `"${todoToUpdate.text}" marquée comme ${newCompletedStatus ? 'terminée' : 'non terminée'}.`,
         });
-        // Firestore listener will update the local state
     } catch (error) {
         console.error("Error toggling todo:", error);
         toast({ title: "Erreur de mise à jour", description: "Impossible de mettre à jour la tâche.", variant: "destructive" });
     }
   };
-  
+
   const handleDeleteTodo = async (todoId: string, todoText: string) => {
     try {
         await deleteTodoItemFromFirestore(todoId);
         toast({ title: "Tâche supprimée", description: `"${todoText}" a été supprimée.`, variant: "destructive" });
-        // Firestore listener will update the local state
     } catch (error) {
         console.error("Error deleting todo:", error);
         toast({ title: "Erreur de suppression", description: "Impossible de supprimer la tâche.", variant: "destructive" });
@@ -210,7 +208,7 @@ export default function ChatPage() {
         </div>
     );
   }
-  const CURRENT_USER_ID = user.uid; 
+  const CURRENT_USER_ID = user.uid;
 
   return (
     <>
@@ -281,19 +279,27 @@ export default function ChatPage() {
                   name="assignedToUserId"
                   control={todoForm.control}
                   render={({ field }) => (
-                    <Select 
-                      onValueChange={(value) => field.onChange(value === NO_ASSIGNEE_VALUE ? undefined : value)} 
+                    <Select
+                      onValueChange={(value) => field.onChange(value === NO_ASSIGNEE_VALUE ? undefined : value)}
                       value={field.value ?? NO_ASSIGNEE_VALUE}
-                      disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos || isLoadingUsers}
+                      disabled={todoForm.formState.isSubmitting || !user || isLoadingTodos || isLoadingUsers || (!isLoadingUsers && appUsers.length === 0)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={isLoadingUsers ? "Chargement utilisateurs..." : "Assigner à (optionnel)"} />
+                        <SelectValue placeholder={
+                          isLoadingUsers ? "Chargement utilisateurs..." :
+                          appUsers.length === 0 ? "Aucun utilisateur disponible" :
+                          "Assigner à (optionnel)"
+                        } />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={NO_ASSIGNEE_VALUE}>Non assigné</SelectItem>
-                        {appUsers.map((profile) => ( 
-                          <SelectItem key={profile.uid} value={profile.uid}>{profile.displayName || profile.email || 'Utilisateur Inconnu'}</SelectItem>
-                        ))}
+                        {appUsers.length > 0 ? (
+                          appUsers.map((profile) => (
+                            <SelectItem key={profile.uid} value={profile.uid}>{profile.displayName || profile.email || 'Utilisateur Inconnu'}</SelectItem>
+                          ))
+                        ) : (
+                          !isLoadingUsers && <SelectItem value="no_users_dummy_value_for_empty_case" disabled>Aucun utilisateur à assigner</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   )}
