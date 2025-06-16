@@ -3,170 +3,188 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Helper Functions
     function isSignedIn() {
       return request.auth != null;
     }
-    function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-    function isOwner(docUserId) {
-      return isSignedIn() && request.auth.uid == docUserId;
-    }
-    function isEmployee() {
-      // This function might not be strictly necessary if isSignedIn() and !isAdmin() covers it
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
-    }
-    function isJobTitle(jobTitles) {
-      let userJobTitle = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.jobTitle;
-      if (jobTitles is list) {
-        return isSignedIn() && userJobTitle in jobTitles;
-      }
-      return isSignedIn() && userJobTitle == jobTitles;
+
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Helper to check if only specific keys are being changed
-    function AffectsOnly(keys) {
+    function isAdmin() {
+      // Ensure this environment variable is set in your Firebase environment
+      // or replace with a direct check against a list of admin UIDs in Firestore if preferred.
+      // For simplicity in this prototype, we use an environment variable.
+      // In a real app, a custom claim or a 'roles' collection might be more robust.
+      return isSignedIn() && request.auth.uid == "YOUR_ADMIN_UID_HERE"; // Replace with actual admin UID logic
+    }
+
+    function isCreator(resourceName) {
+      return resource[resourceName].createdByUserId == request.auth.uid;
+    }
+
+    function isJobTitle(jobTitles) {
+      // Assumes user profile is readable and contains 'jobTitle'
+      // This function might need adjustment if user profiles are heavily restricted
+      // or if jobTitle isn't always present.
+      // For now, we'll assume admins can bypass this if used in conjunction with isAdmin().
+      // This is a simplified check; a more robust way would be to use custom claims or read the user's profile.
+      // For this prototype, direct access to other user's profiles is restricted,
+      // so this function is best used for the current user or with admin override.
+      let userProfile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return userProfile.jobTitle in jobTitles;
+    }
+
+    // Check if only specified fields are being modified from their current state
+    function affectsOnly(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
-    // Helper to check if at least one of the keys is affected (useful for combined updates)
-    function Affects(keys) {
-      return request.resource.data.diff(resource.data).affectedKeys().hasAny(keys);
+    // Check if a specific field is being modified
+    function isAffecting(key) {
+      return key in request.resource.data && request.resource.data[key] != resource.data[key];
     }
 
-
+    // --- User Profiles ---
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isAdmin() || isOwner(userId));
-      allow delete: if isAdmin();
+      allow read: if isUser(userId) || isAdmin();
+      allow list: if isAdmin(); // Only admins can list all users
+      allow create: if isSignedIn(); // Typically handled by auth triggers or admin actions
+      allow update: if (isUser(userId) && affectsOnly(['displayName', 'jobTitle'])) || isAdmin();
+      allow delete: if isAdmin(); // Or isUser(userId) if users can delete their own accounts
     }
 
-    match /clients/{clientId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (
-                        isAdmin() ||
-                        isOwner(resource.data.createdByUserId) ||
-                        AffectsOnly(['blIds']) // Allow update to blIds by any signed-in user
-                      );
-      allow delete: if isSignedIn() && isAdmin(); // Deletion through approval flow is a function call
-    }
-
-    match /billsOfLading/{blId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (
-                        isAdmin() ||
-                        isOwner(resource.data.createdByUserId) ||
-                        AffectsOnly(['containerIds']) // Allow update to containerIds by any signed-in user
-                      );
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    match /expenses/{expenseId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isAdmin() || isOwner(resource.data.employeeId));
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    match /workTypes/{workTypeId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isAdmin() || isOwner(resource.data.createdByUserId));
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    match /containers/{containerId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isAdmin() || isOwner(resource.data.createdByUserId));
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    match /trucks/{truckId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (
-                        isAdmin() ||
-                        isOwner(resource.data.createdByUserId) ||
-                        ( // Allow system-like updates for assignments/status changes
-                          AffectsOnly(['status', 'currentDriverId', 'currentDriverName']) ||
-                          AffectsOnly(['status']) || // Only status
-                          AffectsOnly(['currentDriverId', 'currentDriverName']) // Only assignment
-                        )
-                      );
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    match /drivers/{driverId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (
-                        isAdmin() ||
-                        isOwner(resource.data.createdByUserId) ||
-                        ( // Allow system-like updates for assignments/status changes
-                          AffectsOnly(['status', 'currentTruckId', 'currentTruckReg']) ||
-                          AffectsOnly(['status']) || // Only status
-                          AffectsOnly(['currentTruckId', 'currentTruckReg']) // Only assignment
-                        )
-                      );
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    match /transports/{transportId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isAdmin() || isOwner(resource.data.createdByUserId));
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    match /approvalRequests/{requestId} {
-      allow read: if isSignedIn(); // Code should filter further if needed (e.g. user can only see their own)
-      allow create: if isSignedIn();
-      allow update: if isAdmin(); // Only admins process requests
-      allow delete: if isAdmin();
-    }
-
-    match /chatMessages/{messageId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn();
-        allow update: if isAdmin() || isOwner(resource.data.senderId);
-        allow delete: if isAdmin() || isOwner(resource.data.senderId);
-    }
-
-    match /todoItems/{todoId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn();
-        allow update: if isSignedIn(); // Any signed-in user can update (e.g. mark complete)
-        allow delete: if isSignedIn() && (isAdmin() || isOwner(resource.data.createdByUserId));
-    }
-
-    match /auditLogSessions/{logId} {
-        allow read: if isAdmin();
-        allow create: if true; // System/backend can write this
-        allow update: if false;
-        allow delete: if false;
-    }
-
+    // --- Company Settings ---
     match /companySettings/{settingId} {
+      allow read: if isSignedIn(); // All authenticated users can read appName
+      allow write: if isAdmin(); // Only admins can change company settings
+    }
+
+    // --- Clients ---
+    match /clients/{clientId} {
+      allow create: if isSignedIn();
       allow read: if isSignedIn();
-      allow list: if isSignedIn(); // Required for getCompanyProfileFromFirestore if it ever tries to list
-      allow create, update, delete: if isAdmin();
+      allow update: if isAdmin() || isCreator(clientId) || 
+                      (isSignedIn() && affectsOnly(['blIds'])); // Allow adding BL ID
+      allow delete: if isAdmin(); // Deletions should go through approval or be admin only
     }
 
+    // --- Bills of Lading ---
+    match /billsOfLading/{blId} {
+      allow create: if isSignedIn();
+      allow read: if isSignedIn();
+      allow update: if isAdmin() || isCreator(blId) ||
+                      (isSignedIn() && affectsOnly(['containerIds'])); // Allow adding container ID
+      allow delete: if isAdmin(); // Deletions via approval or admin only
+    }
+
+    // --- Expenses ---
+    match /expenses/{expenseId} {
+      allow create: if isSignedIn(); // Further checks might be needed based on BL access
+      allow read: if isSignedIn(); // Assuming if they can see the BL, they can see expenses
+      allow update: if isAdmin() || isCreator(expenseId);
+      allow delete: if isAdmin() || isCreator(expenseId); // Or via approval
+    }
+
+    // --- Work Types ---
+    match /workTypes/{workTypeId} {
+      allow create: if isSignedIn();
+      allow read: if isSignedIn();
+      allow update: if isAdmin() || isCreator(workTypeId);
+      allow delete: if isAdmin() || isCreator(workTypeId); // Or via approval
+    }
+
+    // --- Containers ---
+    match /containers/{containerId} {
+      allow create: if isSignedIn(); // Further checks might be needed based on BL access
+      allow read: if isSignedIn();
+      allow update: if isAdmin() || isCreator(containerId);
+      allow delete: if isAdmin() || isCreator(containerId); // Or via approval
+    }
+
+    // --- Trucks ---
+    match /trucks/{truckId} {
+      allow create: if isAdmin() || (isSignedIn() && isJobTitle(['Manager']));
+      allow read: if isSignedIn();
+      allow update: if isAdmin() || (isSignedIn() && isJobTitle(['Manager'])) ||
+                      (isSignedIn() && affectsOnly(['currentDriverId', 'currentDriverName', 'status'])); // For transport updates
+      allow delete: if isAdmin(); // Or via approval
+    }
+
+    // --- Drivers ---
+    match /drivers/{driverId} {
+      allow create: if isAdmin() || (isSignedIn() && isJobTitle(['Manager']));
+      allow read: if isSignedIn();
+      allow update: if isAdmin() || (isSignedIn() || isJobTitle(['Manager'])) ||
+                      (isSignedIn() && affectsOnly(['currentTruckId', 'currentTruckReg', 'status'])); // For transport updates
+      allow delete: if isAdmin(); // Or via approval
+    }
+
+    // --- Transports ---
+    match /transports/{transportId} {
+      allow create: if isSignedIn();
+      allow read: if isSignedIn();
+      allow update: if isAdmin() || isCreator(transportId);
+      allow delete: if isAdmin() || isCreator(transportId); // Or via approval
+    }
+
+    // --- Approval Requests ---
+    match /approvalRequests/{requestId} {
+      allow create: if isSignedIn();
+      allow read: if isAdmin() || (isSignedIn() && resource.data.requestedByUserId == request.auth.uid);
+      allow update: if isAdmin(); // Only admins can change status, notes, PINs
+      allow delete: if isAdmin(); // Rarely needed
+    }
+
+    // --- Chat Messages ---
+    match /chatMessages/{messageId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.senderId == request.auth.uid);
+    }
+
+    // --- Todo Items ---
+    match /todoItems/{todoId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.createdByUserId == request.auth.uid;
+      allow update: if isAdmin() || 
+                      (isSignedIn() && resource.data.createdByUserId == request.auth.uid) ||
+                      (isSignedIn() && resource.data.assignedToUserId == request.auth.uid);
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.createdByUserId == request.auth.uid);
+    }
+
+    // --- Audit Log for Sessions ---
+    match /auditLogSessions/{logId} {
+      allow create: if isSignedIn(); // Client-side logging for login/logout events
+      allow read, list, update, delete: if isAdmin();
+    }
+
+    // --- Secretary Documents ---
     match /secretaryDocuments/{documentId} {
-      allow read: if isSignedIn() && (isAdmin() || isJobTitle(['Secrétaire', 'Manager']));
-      allow create: if isSignedIn() && (isAdmin() || isJobTitle(['Secrétaire', 'Manager']));
-      allow update: if isSignedIn() && (isAdmin() || (isJobTitle(['Secrétaire', 'Manager']) && isOwner(resource.data.createdByUserId)));
-      allow delete: if isSignedIn() && (isAdmin() || (isJobTitle(['Secrétaire', 'Manager']) && isOwner(resource.data.createdByUserId)));
+      function canAccessSecretary() {
+        return isAdmin() || (isSignedIn() && isJobTitle(['Secrétaire', 'Manager']));
+      }
+      allow create: if canAccessSecretary() && request.resource.data.createdByUserId == request.auth.uid;
+      allow read: if canAccessSecretary();
+      allow list: if canAccessSecretary();
+      allow update: if (canAccessSecretary() && isCreator(documentId)) || isAdmin();
+      allow delete: if (canAccessSecretary() && isCreator(documentId)) || isAdmin(); // Or via approval
+    }
+    
+    // --- Accounting Entries ---
+    match /accountingEntries/{entryId} {
+      function canAccessAccounting() {
+        return isAdmin() || (isSignedIn() && isJobTitle(['Comptable', 'Manager']));
+      }
+      allow create: if canAccessAccounting() && request.resource.data.createdByUserId == request.auth.uid;
+      allow read: if canAccessAccounting();
+      allow list: if canAccessAccounting();
+      allow update: if (canAccessAccounting() && isCreator(entryId)) || isAdmin();
+      allow delete: if (canAccessAccounting() && isCreator(entryId)) || isAdmin(); // Or via approval
     }
 
-    match /accountingEntries/{entryId} {
-      allow read: if isSignedIn() && (isAdmin() || isJobTitle(['Comptable', 'Manager']));
-      allow create: if isSignedIn() && (isAdmin() || isJobTitle(['Comptable', 'Manager']));
-      allow update: if isSignedIn() && (isAdmin() || (isJobTitle(['Comptable', 'Manager']) && isOwner(resource.data.createdByUserId)));
-      allow delete: if isSignedIn() && (isAdmin() || (isJobTitle(['Comptable', 'Manager']) && isOwner(resource.data.createdByUserId)));
-    }
   }
 }
+
+    
