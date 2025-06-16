@@ -115,19 +115,16 @@ export default function MyRequestsPage() {
       case 'client':
         return `/clients/${request.entityId}`;
       case 'workType': 
-        // For work types, viewing details might not be applicable, link to list or specific item if page exists
-        return request.actionType === 'edit' ? `/work-types` : `/work-types`; 
+        return request.actionType === 'edit' ? `/work-types/${request.entityId}/edit` : `/work-types`; 
       case 'expense': 
-         // If BL info is in description, try to link to the BL. Otherwise, to general expenses page.
          if (request.entityDescription?.includes("BL N°")) {
-          const blMatch = request.entityDescription.match(/BL N°\\s*([a-zA-Z0-9-]+)/);
+          const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
             return `/bls/${blMatch[1]}`; 
           }
         }
         return `/expenses`;
       case 'container':
-        // If BL info is in description, try to link to the BL. Otherwise, to general containers page.
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
@@ -136,15 +133,15 @@ export default function MyRequestsPage() {
         }
         return `/containers`;
       case 'truck':
-        return `/trucks`;
+         return `/trucks/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'driver':
-        return `/drivers`;
+         return `/drivers/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'transport':
-        return `/transports`; // Consider linking to transport detail page if it exists
+        return `/transports/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'secretaryDocument':
-        return `/secretary/documents`; // Link to the list page
+        return `/secretary/documents/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'accountingEntry':
-        return `/accounting/invoices`; // Link to the list page
+        return `/accounting/invoices/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       default:
         return null;
     }
@@ -253,3 +250,4 @@ export default function MyRequestsPage() {
     </>
   );
 }
+

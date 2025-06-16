@@ -1683,6 +1683,11 @@ export const addAccountingEntryToFirestore = async (
   try {
     const dataToSave: any = {
       ...entryData,
+      relatedClientId: entryData.relatedClientId || null,
+      relatedBlId: entryData.relatedBlId || null,
+      taxAmount: entryData.taxAmount || 0,
+      description: entryData.description || "",
+      notes: entryData.notes || "",
       issueDate: Timestamp.fromDate(parseISO(entryData.issueDate)),
       dueDate: entryData.dueDate ? Timestamp.fromDate(parseISO(entryData.dueDate)) : null,
       createdAt: serverTimestamp(),
@@ -1764,6 +1769,12 @@ export const updateAccountingEntryInFirestore = async (
     if ('dueDate' in updatedData) {
       dataToUpdate.dueDate = updatedData.dueDate ? Timestamp.fromDate(parseISO(updatedData.dueDate)) : null;
     }
+    if ('relatedClientId' in updatedData) dataToUpdate.relatedClientId = updatedData.relatedClientId || null;
+    if ('relatedBlId' in updatedData) dataToUpdate.relatedBlId = updatedData.relatedBlId || null;
+    if ('taxAmount' in updatedData) dataToUpdate.taxAmount = updatedData.taxAmount || 0;
+    if ('description' in updatedData) dataToUpdate.description = updatedData.description || "";
+    if ('notes' in updatedData) dataToUpdate.notes = updatedData.notes || "";
+
     await updateDoc(docRef, dataToUpdate);
   } catch (e) {
     console.error(`Error updating accounting entry ${entryId}:`, e);

@@ -36,8 +36,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
+  DialogDescription as DialogDesc, // Aliased to avoid conflict
+  DialogFooter as DialogFoot,       // Aliased to avoid conflict
   DialogClose,
 } from "@/components/ui/dialog";
 import { Input } from '@/components/ui/input';
@@ -60,6 +60,7 @@ export default function SecretaryDocumentsPage() {
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [pinEntry, setPinEntry] = useState('');
   const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
+  const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
 
 
   useEffect(() => {
@@ -73,15 +74,17 @@ export default function SecretaryDocumentsPage() {
         setIsLoading(true);
         try {
             const fetchedDocs = await getSecretaryDocumentsFromFirestore();
-            setDocuments(fetchedDocs);
+            setDocuments(fetchedDocs.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
         } catch (error) {
             console.error("Failed to fetch secretary documents:", error);
             toast({ title: "Erreur", description: "Impossible de charger les documents.", variant: "destructive" });
         } finally {
             setIsLoading(false);
         }
+    } else if (!user && !authLoading) {
+        setIsLoading(false);
     }
-  }, [user, isAdmin, toast]);
+  }, [user, isAdmin, authLoading, toast]);
 
   useEffect(() => {
     fetchDocuments();
@@ -91,7 +94,11 @@ export default function SecretaryDocumentsPage() {
     if (!user) return;
     setDocTargetedForAction(doc);
     setCurrentActionType('edit');
-    if (isAdmin || doc.createdByUserId === user.uid) {
+    setPinActionType('edit');
+
+    const canEditDirectly = isAdmin || user.jobTitle === 'Secrétaire' || user.jobTitle === 'Manager';
+
+    if (canEditDirectly) {
         router.push(`/secretary/documents/${doc.id}/edit`);
     } else {
         setIsProcessingAction(true);
@@ -102,7 +109,7 @@ export default function SecretaryDocumentsPage() {
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
-                setShowReasonDialog(true);
+                setShowReasonDialog(true); // To request approval
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -116,9 +123,14 @@ export default function SecretaryDocumentsPage() {
     if (!user) return;
     setDocTargetedForAction(doc);
     setCurrentActionType('delete');
-    if (isAdmin || doc.createdByUserId === user.uid) {
-        setShowReasonDialog(true); // Admin or owner still confirms deletion (but no approval needed)
+    setPinActionType('delete');
+    
+    const canDeleteDirectly = isAdmin || user.jobTitle === 'Secrétaire' || user.jobTitle === 'Manager';
+
+    if (canDeleteDirectly) {
+        setShowReasonDialog(true); // This dialog will lead to direct delete confirmation
     } else {
+        // For users without job title and not admin, check for PIN first.
         setIsProcessingAction(true);
         try {
             const pinRequest = await getPinIssuedRequestForEntity('secretaryDocument', doc.id, 'delete');
@@ -127,7 +139,7 @@ export default function SecretaryDocumentsPage() {
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
-                setShowReasonDialog(true);
+                setShowReasonDialog(true); // To request approval
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -138,22 +150,22 @@ export default function SecretaryDocumentsPage() {
   };
 
   const handlePinSubmit = async () => {
-    if (!pinEntry.trim() || !activePinRequest || !docTargetedForAction || !currentActionType) return;
+    if (!pinEntry.trim() || !activePinRequest || !docTargetedForAction || !pinActionType) return;
     if (pinEntry !== activePinRequest.pinCode) {
       toast({ title: "PIN Incorrect", variant: "destructive" });
       return;
     }
      if (activePinRequest.pinExpiresAt && new Date() > parseISO(activePinRequest.pinExpiresAt)) {
       toast({ title: "PIN Expiré", variant: "destructive" });
-      setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null);
+      setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setPinActionType(null);
       return;
     }
     setIsProcessingAction(true);
     try {
       await completeApprovalRequestWithPin(activePinRequest.id);
-      if (currentActionType === 'edit') {
+      if (pinActionType === 'edit') {
         router.push(`/secretary/documents/${docTargetedForAction.id}/edit`);
-      } else if (currentActionType === 'delete') {
+      } else if (pinActionType === 'delete') {
         await deleteSecretaryDocumentFromFirestore(docTargetedForAction.id);
         fetchDocuments();
         toast({ title: "Document Supprimé", description: `Le document "${docTargetedForAction.title}" a été supprimé.` });
@@ -161,27 +173,29 @@ export default function SecretaryDocumentsPage() {
     } catch (error) {
       toast({ title: "Erreur", description: "Échec de l'action avec PIN.", variant: "destructive" });
     } finally {
-      setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setIsProcessingAction(false);
+      setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setPinActionType(null);
+      setIsProcessingAction(false);
     }
   };
 
   const handleReasonDialogSubmit = async () => {
     if (!docTargetedForAction || !currentActionType || !user) return;
 
-    if (isAdmin || docTargetedForAction.createdByUserId === user.uid) { // Direct delete for admin or owner
-        if (currentActionType === 'delete') {
-            setIsProcessingAction(true);
-            try {
-                await deleteSecretaryDocumentFromFirestore(docTargetedForAction.id);
-                fetchDocuments();
-                toast({ title: "Document Supprimé", description: `"${docTargetedForAction.title}" a été supprimé.` });
-            } catch (error) {
-                toast({ title: "Erreur de Suppression", variant: "destructive" });
-            } finally {
-                setIsProcessingAction(false);
-            }
+    const canPerformDirectAction = isAdmin || user.jobTitle === 'Secrétaire' || user.jobTitle === 'Manager';
+
+    if (currentActionType === 'delete' && canPerformDirectAction) {
+        setIsProcessingAction(true);
+        try {
+            await deleteSecretaryDocumentFromFirestore(docTargetedForAction.id);
+            fetchDocuments();
+            toast({ title: "Document Supprimé", description: `"${docTargetedForAction.title}" a été supprimé.` });
+        } catch (error) {
+            toast({ title: "Erreur de Suppression", variant: "destructive" });
+        } finally {
+            setIsProcessingAction(false);
         }
-    } else { // Submit approval request
+    } else { 
+        // Submit approval request (for edit by non-job-title/non-admin, or delete by non-job-title/non-admin)
         if (!actionReason.trim()) {
             toast({ title: "Raison Requise", description: "Veuillez fournir une raison pour votre demande.", variant: "destructive" });
             return;
@@ -194,7 +208,7 @@ export default function SecretaryDocumentsPage() {
                 entityType: 'secretaryDocument',
                 entityId: docTargetedForAction.id,
                 entityDescription: `Document: ${docTargetedForAction.title}`,
-                actionType: currentActionType,
+                actionType: currentActionType, // 'edit' or 'delete'
                 reason: actionReason,
             });
             toast({ title: "Demande Envoyée", description: "Votre demande a été soumise pour approbation." });
@@ -208,13 +222,18 @@ export default function SecretaryDocumentsPage() {
   };
 
 
-  if (authLoading || !user || (!isAdmin && user.jobTitle !== 'Secrétaire' && user.jobTitle !== 'Manager')) {
+  if (authLoading || (!user && !isLoading)) { // Adjusted loading condition
     return (
         <div className="flex h-screen items-center justify-center">
-            <p className="text-muted-foreground">Chargement ou accès non autorisé...</p>
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
     );
   }
+  
+  if (!isAdmin && user && user.jobTitle !== 'Secrétaire' && user.jobTitle !== 'Manager') {
+     return <div className="flex h-screen items-center justify-center">Accès non autorisé.</div>;
+  }
+
 
   return (
     <>
@@ -295,18 +314,18 @@ export default function SecretaryDocumentsPage() {
       </Card>
 
       {/* Reason/Confirmation Dialog */}
-      <Dialog open={showReasonDialog} onOpenChange={(isOpen) => {
+      <AlertDialog open={showReasonDialog} onOpenChange={(isOpen) => {
         if (!isOpen) { setDocTargetedForAction(null); setActionReason(''); setCurrentActionType(null); }
         setShowReasonDialog(isOpen);
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {currentActionType === 'delete' && (isAdmin || docTargetedForAction?.createdByUserId === user?.uid) 
+              {currentActionType === 'delete' && (isAdmin || user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager')
                 ? `Confirmer la Suppression: "${docTargetedForAction?.title}"?` 
                 : `Demande de ${currentActionType === 'edit' ? 'Modification' : 'Suppression'}: ${docTargetedForAction?.title}`}
             </AlertDialogTitle>
-            {currentActionType === 'delete' && (isAdmin || docTargetedForAction?.createdByUserId === user?.uid) ? (
+            {currentActionType === 'delete' && (isAdmin || user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager') ? (
               <AlertDialogDescription>Cette action est irréversible.</AlertDialogDescription>
             ) : (
               <div className="space-y-2 py-2 text-left">
@@ -317,35 +336,41 @@ export default function SecretaryDocumentsPage() {
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction}>Annuler</Button></DialogClose>
-            <Button onClick={handleReasonDialogSubmit} variant={currentActionType === 'delete' && (isAdmin || docTargetedForAction?.createdByUserId === user?.uid) ? "destructive" : "default"} disabled={isProcessingAction || (currentActionType !== 'delete' && !(isAdmin || docTargetedForAction?.createdByUserId === user?.uid) && !actionReason.trim())}>
+            <AlertDialogCancel onClick={() => { setShowReasonDialog(false); setDocTargetedForAction(null); setActionReason(''); setCurrentActionType(null);}} disabled={isProcessingAction}>Annuler</AlertDialogCancel>
+            <Button onClick={handleReasonDialogSubmit} 
+                variant={currentActionType === 'delete' && (isAdmin || user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager') ? "destructive" : "default"} 
+                disabled={isProcessingAction || (
+                    !(isAdmin || user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager') && // If not admin/job title for direct action
+                    currentActionType !== 'delete' && // And not a direct delete confirmation
+                    !actionReason.trim() // Then reason is required
+                )}>
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmer
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </Dialog>
+      </AlertDialog>
 
       {/* PIN Entry Dialog */}
       <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
-        if (!isOpen) { setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setCurrentActionType(null); }
+        if (!isOpen) { setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setCurrentActionType(null); setPinActionType(null); }
         setShowPinDialog(isOpen);
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center"><KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN</DialogTitle>
-            <DialogDescription>Un PIN a été fourni pour {currentActionType === 'edit' ? 'modifier' : 'supprimer'} le document "{docTargetedForAction?.title}".</DialogDescription>
+            <DialogDesc>Un PIN a été fourni pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} le document "{docTargetedForAction?.title}".</DialogDesc>
           </DialogHeader>
           <div className="py-2 space-y-2">
             <Label htmlFor="pinCodeSecDoc">Code PIN (6 chiffres)</Label>
             <Input id="pinCodeSecDoc" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={pinEntry} onChange={(e) => setPinEntry(e.target.value.replace(/\D/g, '').substring(0,6))} placeholder="123456" disabled={isProcessingAction} />
           </div>
-          <DialogFooter>
-            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction}>Annuler</Button></DialogClose>
+          <DialogFoot>
+            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction} onClick={() => { setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setCurrentActionType(null); setPinActionType(null);}}>Annuler</Button></DialogClose>
             <Button onClick={handlePinSubmit} disabled={isProcessingAction || pinEntry.length !== 6}>
-              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Valider et {currentActionType === 'edit' ? 'Modifier' : 'Supprimer'}
+              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Valider et {pinActionType === 'edit' ? 'Modifier' : 'Supprimer'}
             </Button>
-          </DialogFooter>
+          </DialogFoot>
         </DialogContent>
       </Dialog>
     </>

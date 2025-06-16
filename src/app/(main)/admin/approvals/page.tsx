@@ -262,7 +262,7 @@ export default function AdminApprovalsPage() {
       case 'secretaryDocument':
         return `/secretary/documents/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'accountingEntry':
-        return `/accounting/invoices`; // Or a specific detail page if it exists
+        return `/accounting/invoices/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'container':
         if (request.actionType === 'edit') {
           return `/containers/${request.entityId}/edit`;
