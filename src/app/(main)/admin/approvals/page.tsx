@@ -252,7 +252,7 @@ export default function AdminApprovalsPage() {
       case 'client':
         return `/clients/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'workType':
-        return `/work-types/${request.entityId}/edit`;
+        return request.actionType === 'edit' ? `/work-types/${request.entityId}/edit` : '/work-types';
       case 'truck':
         return `/trucks/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'driver':
@@ -262,7 +262,6 @@ export default function AdminApprovalsPage() {
       case 'secretaryDocument':
         return `/secretary/documents/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'accountingEntry':
-        // Assuming accounting entries might not have individual detail/edit pages yet
         return `/accounting/invoices`; // Or a specific detail page if it exists
       case 'container':
         if (request.actionType === 'edit') {

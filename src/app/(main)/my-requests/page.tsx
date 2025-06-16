@@ -52,6 +52,12 @@ const getEntityTypeText = (entityType: ApprovalRequest['entityType']) => {
         case 'client': return 'Client';
         case 'workType': return 'Type de Travail';
         case 'expense': return 'Dépense';
+        case 'container': return 'Conteneur';
+        case 'truck': return 'Camion';
+        case 'driver': return 'Chauffeur';
+        case 'transport': return 'Transport';
+        case 'secretaryDocument': return 'Document (Sec.)';
+        case 'accountingEntry': return 'Écriture (Compta.)';
         default: return entityType;
     }
 };
@@ -100,19 +106,33 @@ export default function MyRequestsPage() {
       case 'client':
         return `/clients/${request.entityId}`;
       case 'workType': 
-        // For work types, an edit link might be more appropriate if the action was edit
-        // But for now, link to the list page if no specific ID page exists.
-        return request.actionType === 'edit' ? `/work-types/${request.entityId}/edit` : `/work-types`; 
+        return request.actionType === 'edit' ? `/work-types` : `/work-types`; 
       case 'expense': 
-         // For expenses, linking to the parent BL might be most useful
          if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
-            return `/bls/${blMatch[1]}`; // Link to the BL detail page
+            return `/bls/${blMatch[1]}`; 
           }
         }
-        // Fallback to the general expenses page if BL ID can't be parsed
         return `/expenses`;
+      case 'container':
+        if (request.entityDescription?.includes("BL N°")) {
+          const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
+          if (blMatch && blMatch[1]) {
+            return `/bls/${blMatch[1]}`;
+          }
+        }
+        return `/containers`;
+      case 'truck':
+        return `/trucks`;
+      case 'driver':
+        return `/drivers`;
+      case 'transport':
+        return `/transports`;
+      case 'secretaryDocument':
+        return `/secretary/documents`;
+      case 'accountingEntry':
+        return `/accounting/invoices`;
       default:
         return null;
     }
