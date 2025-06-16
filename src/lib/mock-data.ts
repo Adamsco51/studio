@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus, TruckStatus } from './types';
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -461,6 +461,7 @@ export const updateExpenseInFirestore = async (expenseId: string, updatedData: P
       if (typeof updatedData.date === 'string') {
         dataToUpdate.date = Timestamp.fromDate(parseISO(updatedData.date));
       } else {
+        // If it's already a Timestamp (though unlikely from form), keep as is
         dataToUpdate.date = updatedData.date;
       }
     }
@@ -750,8 +751,13 @@ export const updateTruckInFirestore = async (truckId: string, updatedData: Parti
   const truckDoc = doc(db, "trucks", truckId);
   try {
     const dataToUpdate: any = { ...updatedData };
-    if (updatedData.currentDriverId === undefined) dataToUpdate.currentDriverId = null;
-    if (updatedData.currentDriverName === undefined) dataToUpdate.currentDriverName = null;
+    // Ensure null is used if undefined or explicitly set to null for currentDriverId/Name
+    if (updatedData.currentDriverId === undefined || updatedData.currentDriverId === null) {
+        dataToUpdate.currentDriverId = null;
+    }
+    if (updatedData.currentDriverName === undefined || updatedData.currentDriverName === null) {
+        dataToUpdate.currentDriverName = null;
+    }
     await updateDoc(truckDoc, dataToUpdate);
   } catch (e) {
     console.error("Error updating document (truck): ", e);
@@ -762,8 +768,6 @@ export const updateTruckInFirestore = async (truckId: string, updatedData: Parti
 export const deleteTruckFromFirestore = async (truckId: string): Promise<void> => {
   const truckDoc = doc(db, "trucks", truckId);
   try {
-    // Future: If drivers can be assigned to trucks, unassign driver here.
-    // e.g., find driver assigned to this truck and update their currentTruckId to null.
     const truckSnap = await getDoc(truckDoc);
     if (truckSnap.exists()) {
         const truckData = truckSnap.data() as Truck;
@@ -772,7 +776,7 @@ export const deleteTruckFromFirestore = async (truckId: string): Promise<void> =
             await updateDoc(driverDocRef, {
                 currentTruckId: null,
                 currentTruckReg: null,
-                status: 'available' // Or other appropriate status
+                status: 'available' as DriverStatus
             });
         }
     }
@@ -860,8 +864,12 @@ export const updateDriverInFirestore = async (driverId: string, updatedData: Par
   const driverDoc = doc(db, "drivers", driverId);
   try {
     const dataToUpdate: any = { ...updatedData };
-    if (updatedData.currentTruckId === undefined) dataToUpdate.currentTruckId = null;
-    if (updatedData.currentTruckReg === undefined) dataToUpdate.currentTruckReg = null;
+     if (updatedData.currentTruckId === undefined || updatedData.currentTruckId === null) {
+        dataToUpdate.currentTruckId = null;
+    }
+    if (updatedData.currentTruckReg === undefined || updatedData.currentTruckReg === null) {
+        dataToUpdate.currentTruckReg = null;
+    }
     await updateDoc(driverDoc, dataToUpdate);
   } catch (e) {
     console.error("Error updating document (driver): ", e);
@@ -872,7 +880,6 @@ export const updateDriverInFirestore = async (driverId: string, updatedData: Par
 export const deleteDriverFromFirestore = async (driverId: string): Promise<void> => {
   const driverDocRef = doc(db, "drivers", driverId);
   try {
-    // Unassign from any truck
     const driverSnap = await getDoc(driverDocRef);
     if (driverSnap.exists()) {
         const driverData = driverSnap.data() as Driver;
@@ -881,7 +888,7 @@ export const deleteDriverFromFirestore = async (driverId: string): Promise<void>
             await updateDoc(truckDocRef, {
                 currentDriverId: null,
                 currentDriverName: null,
-                // Optionally update truck status if needed
+                status: 'available' as TruckStatus,
             });
         }
     }
@@ -1005,6 +1012,7 @@ export const updateApprovalRequestStatusInFirestore = async (
     if (adminNotes !== undefined && adminNotes !== null && adminNotes.trim() !== "") {
       updateData.adminNotes = adminNotes;
     } else if (newStatus !== 'pending') {
+      // Explicitly delete if notes are empty and status is not pending
       updateData.adminNotes = deleteField();
     }
 
@@ -1012,6 +1020,7 @@ export const updateApprovalRequestStatusInFirestore = async (
     if (pinCode !== undefined) {
       updateData.pinCode = pinCode;
     } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') {
+        // Delete if status is not pin_issued or pending, and no new pinCode is provided
         updateData.pinCode = deleteField();
     }
 
@@ -1021,9 +1030,10 @@ export const updateApprovalRequestStatusInFirestore = async (
       } else if (typeof pinExpiresAt === 'string') {
         updateData.pinExpiresAt = Timestamp.fromDate(parseISO(pinExpiresAt));
       } else {
-        updateData.pinExpiresAt = pinExpiresAt;
+        updateData.pinExpiresAt = pinExpiresAt; // Assume it's already a Timestamp
       }
     } else if (newStatus !== 'pin_issued' && newStatus !== 'pending') {
+        // Delete if status is not pin_issued or pending, and no new expiry is provided
         updateData.pinExpiresAt = deleteField();
     }
     await updateDoc(requestDoc, updateData);
@@ -1199,7 +1209,11 @@ export const getEmployeeNameFromMock = (employeeId?: string): string => {
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
 
+    // Basic check if it looks like a UID (common length for Firebase UIDs)
+    // This is a very rough heuristic.
     if (employeeId.length > 10 && !employeeId.startsWith('user-')) {
+        // For actual UIDs from Firebase Auth, we'd ideally fetch their profile.
+        // For now, show a generic placeholder.
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
     return 'Utilisateur Inconnu';
@@ -1222,6 +1236,7 @@ export const logSessionEvent = async (
     });
   } catch (e) {
     console.error("Error logging session event: ", e);
+    // Depending on severity, might not re-throw to avoid blocking login/logout
   }
 };
 
@@ -1254,10 +1269,11 @@ export const getCompanyProfileFromFirestore = async (): Promise<CompanyProfile |
     if (docSnap.exists()) {
       return docSnap.data() as CompanyProfile;
     }
-    return null;
+    return null; // No profile set yet
   } catch (error: any) {
     if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied while trying to fetch company profile. Check rules for 'companySettings/main'.", error);
+        // This error is now more specific in the context, so a general log here is okay.
+        console.warn("Firestore permission denied while trying to fetch company profile (companySettings/main). This might be expected for non-admins if rules are restrictive.");
     } else {
         console.error("Error fetching company profile:", error);
     }

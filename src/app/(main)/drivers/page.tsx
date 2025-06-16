@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import {
     getDriversFromFirestore,
     deleteDriverFromFirestore,
+    updateTruckInFirestore, // Needed if unassigning truck
 } from '@/lib/mock-data';
 import type { Driver, DriverStatus } from '@/lib/types';
 import { PlusCircle, Edit, Trash2, Search, Loader2, UserCog as DriverIcon, Truck } from 'lucide-react';
@@ -99,6 +100,14 @@ export default function DriversPage() {
     }
     setIsDeleting(true);
     try {
+      // If the driver was assigned to a truck, unassign that truck
+      if (driverToDelete.currentTruckId) {
+        await updateTruckInFirestore(driverToDelete.currentTruckId, {
+          currentDriverId: null,
+          currentDriverName: null,
+          status: 'available', // Make truck available
+        });
+      }
       await deleteDriverFromFirestore(driverToDelete.id);
       setDrivers(prevDrivers => prevDrivers.filter(d => d.id !== driverToDelete.id));
       toast({ title: "Chauffeur Supprimé", description: `Le chauffeur ${driverToDelete.name} a été supprimé.` });
@@ -181,8 +190,8 @@ export default function DriversPage() {
                 <TableHead>Nom</TableHead>
                 <TableHead>N° Permis</TableHead>
                 <TableHead>Téléphone</TableHead>
-                <TableHead>Statut</TableHead>
                 <TableHead>Camion Actuel</TableHead>
+                <TableHead>Statut</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -193,17 +202,17 @@ export default function DriversPage() {
                   <TableCell>{driver.licenseNumber}</TableCell>
                   <TableCell>{driver.phone}</TableCell>
                   <TableCell>
-                    <Badge variant={getStatusBadgeVariant(driver.status) as any} className="capitalize">
-                      {getStatusText(driver.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
                     {driver.currentTruckReg ? (
                         <span className="flex items-center gap-1">
                             <Truck className="h-4 w-4 text-muted-foreground"/> {driver.currentTruckReg}
                         </span>
                     ) : <span className="text-muted-foreground italic">Non assigné</span>}
-                    </TableCell>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={getStatusBadgeVariant(driver.status) as any} className="capitalize">
+                      {getStatusText(driver.status)}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right space-x-1">
                     <Link href={`/drivers/${driver.id}/edit`} passHref>
                       <Button variant="outline" size="sm" disabled={isDeleting}>
@@ -222,7 +231,7 @@ export default function DriversPage() {
                             <AlertDialogHeader>
                             <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
                             <AlertDialogDescription>
-                                Êtes-vous sûr de vouloir supprimer le chauffeur {driverToDelete?.name}? Cette action est irréversible.
+                                Êtes-vous sûr de vouloir supprimer le chauffeur {driverToDelete?.name}? Cette action est irréversible et désassignera tout camion lié.
                             </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

@@ -11,10 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import {
     getTrucksFromFirestore,
     deleteTruckFromFirestore,
-    // MOCK_USERS, // Placeholder for driver names if needed later
+    updateDriverInFirestore, // Needed if unassigning driver
 } from '@/lib/mock-data';
 import type { Truck, TruckStatus } from '@/lib/types';
-import { PlusCircle, Edit, Trash2, Search, Loader2, Truck as TruckIcon } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Search, Loader2, Truck as TruckIcon, User } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -88,7 +88,8 @@ export default function TrucksPage() {
     return trucks.filter(truck =>
       truck.registrationNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (truck.model && truck.model.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      getStatusText(truck.status).toLowerCase().includes(searchTerm.toLowerCase())
+      getStatusText(truck.status).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (truck.currentDriverName && truck.currentDriverName.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [trucks, searchTerm]);
 
@@ -99,6 +100,14 @@ export default function TrucksPage() {
     }
     setIsDeleting(true);
     try {
+      // If the truck had a driver, unassign that driver
+      if (truckToDelete.currentDriverId) {
+        await updateDriverInFirestore(truckToDelete.currentDriverId, {
+          currentTruckId: null,
+          currentTruckReg: null,
+          status: 'available', // Make driver available
+        });
+      }
       await deleteTruckFromFirestore(truckToDelete.id);
       setTrucks(prevTrucks => prevTrucks.filter(t => t.id !== truckToDelete.id));
       toast({ title: "Camion Supprimé", description: `Le camion ${truckToDelete.registrationNumber} a été supprimé.` });
@@ -136,10 +145,10 @@ export default function TrucksPage() {
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Rechercher par immat., modèle, statut..."
+              placeholder="Rechercher par immat., modèle, statut, chauffeur..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-sm pl-8"
+              className="max-w-md pl-8"
               disabled={isLoading}
             />
           </div>
@@ -180,9 +189,8 @@ export default function TrucksPage() {
               <TableRow>
                 <TableHead>Immatriculation</TableHead>
                 <TableHead>Modèle</TableHead>
-                <TableHead>Capacité</TableHead>
+                <TableHead>Chauffeur Actuel</TableHead>
                 <TableHead>Statut</TableHead>
-                {/* <TableHead>Chauffeur Actuel</TableHead> */}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -191,13 +199,18 @@ export default function TrucksPage() {
                 <TableRow key={truck.id}>
                   <TableCell className="font-medium">{truck.registrationNumber}</TableCell>
                   <TableCell>{truck.model || 'N/A'}</TableCell>
-                  <TableCell>{truck.capacity || 'N/A'}</TableCell>
+                  <TableCell>
+                    {truck.currentDriverName ? (
+                        <span className="flex items-center gap-1">
+                            <User className="h-4 w-4 text-muted-foreground"/> {truck.currentDriverName}
+                        </span>
+                    ) : <span className="text-muted-foreground italic">Non assigné</span>}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={getStatusBadgeVariant(truck.status) as any} className="capitalize">
                       {getStatusText(truck.status)}
                     </Badge>
                   </TableCell>
-                  {/* <TableCell>{truck.currentDriverName || 'Non Assigné'}</TableCell> */}
                   <TableCell className="text-right space-x-1">
                     <Link href={`/trucks/${truck.id}/edit`} passHref>
                       <Button variant="outline" size="sm" disabled={isDeleting}>
@@ -216,7 +229,7 @@ export default function TrucksPage() {
                             <AlertDialogHeader>
                             <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
                             <AlertDialogDescription>
-                                Êtes-vous sûr de vouloir supprimer le camion {truckToDelete?.registrationNumber}? Cette action est irréversible.
+                                Êtes-vous sûr de vouloir supprimer le camion {truckToDelete?.registrationNumber}? Cette action est irréversible et désassignera tout chauffeur lié.
                             </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

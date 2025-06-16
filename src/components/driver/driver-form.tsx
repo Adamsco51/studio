@@ -18,16 +18,25 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Driver, DriverStatus } from "@/lib/types";
+import type { Driver, DriverStatus, Truck } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { addDriverToFirestore, updateDriverInFirestore, getEmployeeNameFromMock } from "@/lib/mock-data";
+import { 
+    addDriverToFirestore, 
+    updateDriverInFirestore, 
+    getEmployeeNameFromMock,
+    getTrucksFromFirestore, // To fetch trucks for assignment
+    updateTruckInFirestore, // To update truck's assignment
+    getTruckByIdFromFirestore,
+} from "@/lib/mock-data";
 import { useAuth } from "@/contexts/auth-context";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, CalendarDays, UserCircle2 } from "lucide-react";
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Separator } from "@/components/ui/separator";
+
+const NO_TRUCK_ASSIGNED = "NO_TRUCK_ASSIGNED_VALUE";
 
 const driverStatusOptions: { value: DriverStatus; label: string }[] = [
   { value: "available", label: "Disponible" },
@@ -43,8 +52,8 @@ const driverFormSchema = z.object({
   status: z.enum(["available", "on_trip", "off_duty", "unavailable"], {
     required_error: "Veuillez sélectionner un statut pour le chauffeur.",
   }),
+  currentTruckId: z.string().nullable().optional(), // Can be null or a truck's ID
   notes: z.string().optional(),
-  // currentTruckId and currentTruckReg are not directly managed here for simplicity
 });
 
 type DriverFormValues = z.infer<typeof driverFormSchema>;
@@ -58,20 +67,56 @@ export function DriverForm({ initialData }: DriverFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [availableTrucks, setAvailableTrucks] = useState<Truck[]>([]);
+  const [isLoadingTrucks, setIsLoadingTrucks] = useState(true);
+
+
+  useEffect(() => {
+    const fetchTrucks = async () => {
+      setIsLoadingTrucks(true);
+      try {
+        const allTrucks = await getTrucksFromFirestore();
+        // Filter for trucks that are 'available' OR are the currently assigned truck to this driver
+        const filteredTrucks = allTrucks.filter(truck => 
+            truck.status === 'available' ||
+            (initialData && truck.id === initialData.currentTruckId)
+        );
+        setAvailableTrucks(filteredTrucks);
+      } catch (error) {
+        console.error("Failed to fetch trucks for driver form:", error);
+        toast({ title: "Erreur", description: "Impossible de charger la liste des camions disponibles.", variant: "destructive"});
+      } finally {
+        setIsLoadingTrucks(false);
+      }
+    };
+    fetchTrucks();
+  }, [initialData, toast]);
 
   const form = useForm<DriverFormValues>({
     resolver: zodResolver(driverFormSchema),
     defaultValues: initialData ? {
       ...initialData,
+      currentTruckId: initialData.currentTruckId || null,
       notes: initialData.notes || "",
     } : {
       name: "",
       licenseNumber: "",
       phone: "",
       status: "available",
+      currentTruckId: null,
       notes: "",
     },
   });
+  
+  useEffect(() => {
+    if (initialData) {
+         form.reset({
+            ...initialData,
+            currentTruckId: initialData.currentTruckId || null,
+            notes: initialData.notes || "",
+        });
+    }
+  },[initialData, form])
 
   const createdByUserName = initialData?.createdByUserId
     ? getEmployeeNameFromMock(initialData.createdByUserId)
@@ -85,29 +130,85 @@ export function DriverForm({ initialData }: DriverFormProps) {
     }
     setIsSubmitting(true);
 
-    const driverPayload = {
+    const driverId = initialData?.id;
+    const previousTruckId = initialData?.currentTruckId || null;
+    const newTruckId = data.currentTruckId === NO_TRUCK_ASSIGNED ? null : data.currentTruckId;
+    
+    let newTruckReg: string | null = null;
+    let newTruckStatus: TruckStatus = 'available';
+    let newDriverStatusForTruckOp: DriverStatus = data.status;
+
+    if (newTruckId) {
+        const truckDetails = availableTrucks.find(t => t.id === newTruckId) || (newTruckId ? await getTruckByIdFromFirestore(newTruckId) : null);
+        if (truckDetails) {
+            newTruckReg = truckDetails.registrationNumber;
+            if (data.status === 'on_trip') newTruckStatus = 'in_transit';
+            else if (data.status === 'available') newTruckStatus = 'available';
+             // If driver is off_duty/unavailable, truck should ideally be available
+            else if (data.status === 'off_duty' || data.status === 'unavailable') newTruckStatus = 'available';
+        } else if (newTruckId) {
+            toast({ title: "Erreur", description: "Camion sélectionné introuvable.", variant: "destructive"});
+            setIsSubmitting(false);
+            return;
+        }
+    }
+    
+    // If driver is not available, any assigned truck should become available
+    if (data.status === 'off_duty' || data.status === 'unavailable') {
+        newTruckStatus = 'available';
+    }
+
+    const driverPayload: Partial<Driver> = {
       ...data,
-      // currentTruckId and currentTruckReg will be managed by a separate assignment process
-      // For now, ensure they are not accidentally overwritten if not present in form values
-      currentTruckId: initialData?.currentTruckId || null,
-      currentTruckReg: initialData?.currentTruckReg || null,
+      currentTruckId: newTruckId,
+      currentTruckReg: newTruckReg,
     };
 
     try {
-      if (initialData && initialData.id) {
-        await updateDriverInFirestore(initialData.id, driverPayload);
+      // 1. Handle unassignment of the previous truck if different from new or if new is null
+      if (previousTruckId && previousTruckId !== newTruckId) {
+        await updateTruckInFirestore(previousTruckId, {
+          currentDriverId: null,
+          currentDriverName: null,
+          status: 'available', // Make previous truck available
+        });
+      }
+
+      // 2. Handle assignment of the new truck
+      if (newTruckId) {
+        await updateTruckInFirestore(newTruckId, {
+          currentDriverId: driverId || "TEMP_DRIVER_ID_PLACEHOLDER", // Placeholder if new driver
+          currentDriverName: data.name,
+          status: newTruckStatus,
+        });
+      }
+
+      // 3. Save the driver (either add new or update existing)
+      if (driverId) { // Editing existing driver
+        await updateDriverInFirestore(driverId, driverPayload);
+         if (newTruckId && driverPayload.currentTruckId === "TEMP_DRIVER_ID_PLACEHOLDER") {
+            // If it was a new driver, its ID is now known, update truck again
+            await updateTruckInFirestore(newTruckId, { currentDriverId: driverId });
+        }
         toast({ title: "Chauffeur Modifié", description: `Les informations de ${data.name} ont été modifiées.` });
-      } else {
-        await addDriverToFirestore({ ...driverPayload, createdByUserId: user.uid });
+      } else { // Adding new driver
+        const newDriverFullData = await addDriverToFirestore({ 
+            ...(driverPayload as Omit<Driver, 'id'|'createdAt'>), 
+            createdByUserId: user.uid 
+        });
+        if (newTruckId) {
+          // Update the newly assigned truck with the actual new driver's ID
+          await updateTruckInFirestore(newTruckId, { currentDriverId: newDriverFullData.id });
+        }
         toast({ title: "Chauffeur Ajouté", description: `Le chauffeur ${data.name} a été ajouté.` });
       }
       router.push("/drivers");
       router.refresh();
     } catch (error) {
-      console.error("Failed to save driver:", error);
+      console.error("Failed to save driver and/or update truck:", error);
       toast({
         title: "Erreur de Sauvegarde",
-        description: `Échec de la sauvegarde du chauffeur. ${error instanceof Error ? error.message : ""}`,
+        description: `Échec de la sauvegarde. ${error instanceof Error ? error.message : ""}`,
         variant: "destructive",
       });
     } finally {
@@ -183,7 +284,11 @@ export function DriverForm({ initialData }: DriverFormProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Statut du Chauffeur</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                  <Select 
+                    onValueChange={field.onChange} 
+                    value={field.value} 
+                    disabled={isSubmitting}
+                   >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Sélectionnez un statut" />
@@ -197,6 +302,43 @@ export function DriverForm({ initialData }: DriverFormProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="currentTruckId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Camion Assigné (Optionnel)</FormLabel>
+                  <Select
+                    onValueChange={(value) => field.onChange(value === NO_TRUCK_ASSIGNED ? null : value)}
+                    value={field.value ?? NO_TRUCK_ASSIGNED}
+                    disabled={isSubmitting || isLoadingTrucks}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder={isLoadingTrucks ? "Chargement camions..." : "Aucun camion"} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={NO_TRUCK_ASSIGNED}>Aucun Camion</SelectItem>
+                      {availableTrucks.map((truck) => (
+                        <SelectItem key={truck.id} value={truck.id}>
+                          {truck.registrationNumber} ({truck.model || 'N/A'}) - {truck.status === 'available' ? 'Disponible' : `Actuellement: ${truck.currentDriverName || 'En transit'}`}
+                        </SelectItem>
+                      ))}
+                      {initialData?.currentTruckId && !availableTrucks.find(t => t.id === initialData.currentTruckId) && initialData.currentTruckReg && (
+                        <SelectItem value={initialData.currentTruckId} disabled>
+                            {initialData.currentTruckReg} (Actuellement assigné)
+                        </SelectItem>
+                       )}
+                    </SelectContent>
+                  </Select>
+                   <FormDescription>
+                    Seuls les camions "disponibles" ou celui déjà assigné à ce chauffeur sont listés.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -222,8 +364,8 @@ export function DriverForm({ initialData }: DriverFormProps) {
               <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}>
                 Annuler
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" disabled={isSubmitting || isLoadingTrucks}>
+                {(isSubmitting || isLoadingTrucks) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {initialData ? "Sauvegarder" : "Ajouter le Chauffeur"}
               </Button>
             </div>
