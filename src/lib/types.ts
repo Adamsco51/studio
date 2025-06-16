@@ -160,8 +160,8 @@ export interface TodoItem {
   createdByName: string;
 }
 
-export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense' | 'container' | 'truck' | 'driver' | 'transport';
-export type ApprovalRequestActionType = 'edit' | 'delete';
+export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense' | 'container' | 'truck' | 'driver' | 'transport' | 'secretaryDocument' | 'accountingEntry';
+export type ApprovalRequestActionType = 'edit' | 'delete' | 'create'; // Added 'create' for completeness if needed
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'pin_issued' | 'completed';
 
 export interface ApprovalRequest {
@@ -199,29 +199,42 @@ export interface CompanyProfile {
   companyPhone?: string;
 }
 
-// Types for Secretary and Accounting sections (basic for now)
+// Types for Secretary and Accounting sections
+export type SecretaryDocumentType = 'letter' | 'memo' | 'report' | 'contract' | 'other';
+export type SecretaryDocumentStatus = 'draft' | 'pending_review' | 'approved' | 'sent' | 'archived';
+
 export interface SecretaryDocument {
   id: string;
   title: string;
-  content: string; // Could be HTML from Quill
-  documentType: 'letter' | 'memo' | 'report' | 'other';
-  recipientEmail?: string;
+  documentType: SecretaryDocumentType;
+  content: string; // Could be HTML from Quill or Markdown
+  status: SecretaryDocumentStatus;
+  version: number;
+  relatedClientId?: string; // Optional link to a client
+  relatedBlId?: string;   // Optional link to a BL
+  recipientEmail?: string; // For sending
   createdAt: string; // ISO Date string
   createdByUserId: string;
   updatedAt?: string; // ISO Date string
 }
 
+export type AccountingEntryType = 'invoice' | 'receipt' | 'debit_note' | 'credit_note' | 'quote' | 'purchase_order' | 'expense_report';
+export type AccountingEntryStatus = 'draft' | 'pending' | 'approved' | 'sent' | 'paid' | 'partially_paid' | 'overdue' | 'voided' | 'cancelled';
+
 export interface AccountingEntry {
   id: string;
-  entryType: 'invoice' | 'receipt' | 'debit_note' | 'credit_note' | 'quote';
-  referenceNumber: string;
+  entryType: AccountingEntryType;
+  referenceNumber: string; // e.g., INV-2024-001
   relatedBlId?: string;
   relatedClientId?: string;
+  issueDate: string; // ISO Date string
+  dueDate?: string; // ISO Date string
   amount: number;
   currency: string; // e.g., XOF, USD
-  entryDate: string; // ISO Date string
-  dueDate?: string; // ISO Date string
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  taxAmount?: number;
+  totalAmount: number;
+  status: AccountingEntryStatus;
+  description?: string; // General description or line items in simple text
   notes?: string;
   createdAt: string; // ISO Date string
   createdByUserId: string;

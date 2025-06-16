@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus, TruckStatus, Transport, TransportStatus, SecretaryDocument, AccountingEntry } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus, TruckStatus, Transport, TransportStatus, SecretaryDocument, AccountingEntry, SecretaryDocumentType, SecretaryDocumentStatus, AccountingEntryType, AccountingEntryStatus } from './types';
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -1575,10 +1575,16 @@ export const updateCompanyProfileInFirestore = async (data: Partial<CompanyProfi
   }
 };
 
-// Secretary Documents CRUD (Basic for now)
-export const addSecretaryDocumentToFirestore = async (docData: Omit<SecretaryDocument, 'id' | 'createdAt' | 'updatedAt'>): Promise<SecretaryDocument> => {
+// Secretary Documents CRUD
+export const addSecretaryDocumentToFirestore = async (
+  docData: Omit<SecretaryDocument, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<SecretaryDocument> => {
   try {
-    const dataToSave = { ...docData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    const dataToSave: any = {
+      ...docData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
     const docRef = await addDoc(secretaryDocumentsCollectionRef, dataToSave);
     const newDocSnap = await getDoc(docRef);
     if (newDocSnap.exists()) {
@@ -1610,16 +1616,24 @@ export const getSecretaryDocumentsFromFirestore = async (): Promise<SecretaryDoc
         updatedAt: docData.updatedAt ? (docData.updatedAt as Timestamp).toDate().toISOString() : undefined,
       } as SecretaryDocument;
     });
-  } catch (e) {
+  } catch (e: any) {
     console.error("Error getting secretary documents: ", e);
     return [];
   }
 };
 
-// Accounting Entries CRUD (Basic for now)
-export const addAccountingEntryToFirestore = async (entryData: Omit<AccountingEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<AccountingEntry> => {
+// Accounting Entries CRUD
+export const addAccountingEntryToFirestore = async (
+  entryData: Omit<AccountingEntry, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<AccountingEntry> => {
   try {
-    const dataToSave = { ...entryData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    const dataToSave: any = {
+      ...entryData,
+      issueDate: Timestamp.fromDate(parseISO(entryData.issueDate)),
+      dueDate: entryData.dueDate ? Timestamp.fromDate(parseISO(entryData.dueDate)) : null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
     const docRef = await addDoc(accountingEntriesCollectionRef, dataToSave);
     const newDocSnap = await getDoc(docRef);
     if (newDocSnap.exists()) {
@@ -1627,6 +1641,8 @@ export const addAccountingEntryToFirestore = async (entryData: Omit<AccountingEn
       return {
         id: newDocSnap.id,
         ...savedData,
+        issueDate: (savedData.issueDate as Timestamp).toDate().toISOString(),
+        dueDate: savedData.dueDate ? (savedData.dueDate as Timestamp).toDate().toISOString() : undefined,
         createdAt: (savedData.createdAt as Timestamp).toDate().toISOString(),
         updatedAt: (savedData.updatedAt as Timestamp).toDate().toISOString(),
       } as AccountingEntry;
@@ -1640,18 +1656,20 @@ export const addAccountingEntryToFirestore = async (entryData: Omit<AccountingEn
 
 export const getAccountingEntriesFromFirestore = async (): Promise<AccountingEntry[]> => {
   try {
-    const q = query(accountingEntriesCollectionRef, orderBy("createdAt", "desc"));
+    const q = query(accountingEntriesCollectionRef, orderBy("issueDate", "desc"));
     const data = await getDocs(q);
     return data.docs.map(docSnap => {
       const entryData = docSnap.data();
       return {
         id: docSnap.id,
         ...entryData,
+        issueDate: (entryData.issueDate as Timestamp).toDate().toISOString(),
+        dueDate: entryData.dueDate ? (entryData.dueDate as Timestamp).toDate().toISOString() : undefined,
         createdAt: (entryData.createdAt as Timestamp).toDate().toISOString(),
         updatedAt: entryData.updatedAt ? (entryData.updatedAt as Timestamp).toDate().toISOString() : undefined,
       } as AccountingEntry;
     });
-  } catch (e) {
+  } catch (e: any) {
     console.error("Error getting accounting entries: ", e);
     return [];
   }

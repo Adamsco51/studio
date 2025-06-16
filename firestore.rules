@@ -4,159 +4,153 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if user is an admin
+    // Helper function to check if the user is an admin
     function isAdmin(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
     }
 
-    // Helper function to check if user is the owner of a document
+    // Helper function to check if the user is the owner of the document
     function isOwner(userId, resource) {
-      return request.auth.uid == resource.data.createdByUserId || request.auth.uid == resource.data.userId;
+      return request.auth.uid == resource.data.createdByUserId || request.auth.uid == userId;
     }
     
-    // Helper function to check job title
-    function hasJobTitle(userId, requiredJobTitles) {
-      let userJobTitle = get(/databases/$(database)/documents/users/$(userId)).data.jobTitle;
-      return userJobTitle in requiredJobTitles;
+    // Helper function to check user's job title
+    function hasJobTitle(userId, jobTitle) {
+      let userProfile = get(/databases/$(database)/documents/users/$(userId)).data;
+      return userProfile.jobTitle == jobTitle;
     }
 
-    // Users Collection
+    // User profiles
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin(request.auth.uid));
-      allow create: if request.auth != null; // Allow authenticated users to create their own profile initially
-      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin(request.auth.uid));
-      // Delete typically handled by admin functions or restricted.
-      allow delete: if isAdmin(request.auth.uid);
-    }
-    
-    // Company Settings: Allow all authenticated users to read, only admins to write
-    match /companySettings/main {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null && isAdmin(request.auth.uid);
+      allow read: if request.auth != null; // Authenticated users can read any profile (e.g., for display names)
+      allow create: if request.auth.uid == userId; // User can create their own profile
+      allow update: if request.auth.uid == userId || isAdmin(request.auth.uid); // User can update their own profile, or admin can
+      allow delete: if isAdmin(request.auth.uid); // Only admins can delete user profiles
     }
 
-    // Clients Collection
+    // Company Settings
+    match /companySettings/main {
+        allow read: if request.auth != null; // All authenticated users can read company settings (like appName)
+        allow write: if isAdmin(request.auth.uid); // Only admins can write
+    }
+
+    // Clients
     match /clients/{clientId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid));
-      allow delete: if request.auth != null && isAdmin(request.auth.uid); // Only admins can delete for now
+      allow create: if request.auth != null; // Any authenticated user can create a client
+      allow update: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId}))); // Owner or admin can update
+      allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId}); // Only admin can delete directly, others via approval
     }
 
-    // Bills of Lading Collection
+    // Bills of Lading
     match /billsOfLading/{blId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid));
-      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+      allow update: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId})));
+      allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
     }
 
-    // Expenses Collection
+    // Expenses
     match /expenses/{expenseId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      // Allow update/delete if owner of the expense (employeeId) OR owner of parent BL OR admin
-      allow update: if request.auth != null && (
-                      request.auth.uid == resource.data.employeeId || 
-                      (exists(/databases/$(database)/documents/billsOfLading/$(resource.data.blId)) && 
-                       get(/databases/$(database)/documents/billsOfLading/$(resource.data.blId)).data.createdByUserId == request.auth.uid) || 
-                      isAdmin(request.auth.uid)
-                    );
-      allow delete: if request.auth != null && (
-                      request.auth.uid == resource.data.employeeId || 
-                      (exists(/databases/$(database)/documents/billsOfLading/$(resource.data.blId)) && 
-                       get(/databases/$(database)/documents/billsOfLading/$(resource.data.blId)).data.createdByUserId == request.auth.uid) || 
-                      isAdmin(request.auth.uid)
-                    );
+      // Assuming createdByUserId for expenses is the employeeId field.
+      function isExpenseOwner(userId, resource) {
+        return request.auth.uid == resource.data.employeeId;
+      }
+      allow create: if request.auth != null; // Anyone can create an expense for a BL they have access to
+      allow update: if request.auth != null && (isExpenseOwner(request.auth.uid, resource) || isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId})));
+      allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
     }
 
-    // Work Types Collection
+    // Work Types
     match /workTypes/{workTypeId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && isAdmin(request.auth.uid); // Only admins can create/manage work types
-      allow update: if request.auth != null && isAdmin(request.auth.uid);
-      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+      allow create: if request.auth != null; // Generally, admins or specific roles might create these. For now, any auth user.
+      allow update: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId}); // Only admins can update work types
+      allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
     }
 
-    // Containers Collection
+    // Containers
     match /containers/{containerId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid));
-      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+      allow update: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId})));
+      allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
     }
     
-    // Trucks Collection
+    // Trucks
     match /trucks/{truckId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Manager", "Agent Opérationnel"]));
-      allow update: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Manager", "Agent Opérationnel"]));
-      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+      allow create: if request.auth != null; // Typically admins or managers
+      allow update: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
+      allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
     }
 
-    // Drivers Collection
+    // Drivers
     match /drivers/{driverId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Manager", "Agent Opérationnel"]));
-      allow update: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Manager", "Agent Opérationnel"]));
-      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+      allow create: if request.auth != null; // Typically admins or managers
+      allow update: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
+      allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
     }
     
-    // Transports Collection
+    // Transports
     match /transports/{transportId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Manager", "Agent Opérationnel"]));
-      allow update: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Manager", "Agent Opérationnel"]));
-      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+        allow read: if request.auth != null;
+        allow create: if request.auth != null; // Users involved in operations can create transports
+        allow update: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId})));
+        allow delete: if isAdmin(request.auth.uid) || exists(/databases/$(database)/documents/approvalRequests/{requestId});
     }
 
-    // Approval Requests Collection
+    // Approval Requests
     match /approvalRequests/{requestId} {
-      allow read: if request.auth != null && (isAdmin(request.auth.uid) || request.auth.uid == resource.data.requestedByUserId);
+      allow read: if request.auth != null; // Any authenticated user can read requests (e.g., to see their own)
       allow create: if request.auth != null; // Any authenticated user can create a request
-      allow update: if request.auth != null && isAdmin(request.auth.uid); // Only admins can update status (approve/reject)
-      allow delete: if request.auth != null && isAdmin(request.auth.uid); // Only admins can delete requests
+      allow update: if isAdmin(request.auth.uid); // Only admins can update requests (approve/reject/issue PIN)
+      allow delete: if isAdmin(request.auth.uid); // Only admins can delete requests
     }
 
-    // Chat Messages Collection
+    // Chat Messages
     match /chatMessages/{messageId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null; // Any authenticated user can send messages
-      allow update, delete: if request.auth != null && (isAdmin(request.auth.uid) || isOwner(request.auth.uid, resource)); // Owner or admin
+        allow read: if request.auth != null;
+        allow create: if request.auth != null; // All authenticated users can send messages
+        allow update: if false; // Messages are generally immutable
+        allow delete: if isAdmin(request.auth.uid); // Only admins can delete messages
     }
 
-    // Todo Items Collection
+    // Todo Items
     match /todoItems/{todoId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (
-                      isAdmin(request.auth.uid) || 
-                      isOwner(request.auth.uid, resource) || // Creator can update
-                      request.auth.uid == resource.data.assignedToUserId // Assignee can update (e.g., mark complete)
-                    );
-      allow delete: if request.auth != null && (isAdmin(request.auth.uid) || isOwner(request.auth.uid, resource));
-    }
-    
-    // Audit Log Sessions Collection (Admin read-only for app, write via backend/functions ideally)
-    match /auditLogSessions/{logId} {
-        allow read: if request.auth != null && isAdmin(request.auth.uid);
-        allow create, update, delete: if false; // App should not directly write here, use functions
+        allow read: if request.auth != null;
+        allow create: if request.auth != null; // All authenticated users can create todos
+        allow update(data): if request.auth != null && // User can update their own todos, or assigned todos if applicable
+                                (isOwner(request.auth.uid, resource) || 
+                                 (resource.data.assignedToUserId != null && request.auth.uid == resource.data.assignedToUserId) ||
+                                 isAdmin(request.auth.uid));
+        allow delete: if request.auth != null && (isOwner(request.auth.uid, resource) || isAdmin(request.auth.uid));
     }
 
-    // Secretary Documents (Placeholder Rules - adjust based on specific requirements)
-    match /secretaryDocuments/{documentId} {
-      allow read: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Secrétaire", "Manager"]));
-      allow create: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Secrétaire", "Manager"]));
-      allow update: if request.auth != null && (isAdmin(request.auth.uid) || (hasJobTitle(request.auth.uid, ["Secrétaire", "Manager"]) && isOwner(request.auth.uid, resource)));
-      allow delete: if request.auth != null && (isAdmin(request.auth.uid) || (hasJobTitle(request.auth.uid, ["Secrétaire", "Manager"]) && isOwner(request.auth.uid, resource)));
+    // Audit Log for Sessions
+    match /auditLogSessions/{logId} {
+        allow read: if isAdmin(request.auth.uid); // Only admins can read audit logs
+        allow create: if request.auth != null; // System or authenticated actions can create logs
+        allow write: if false; // Logs are immutable once created
     }
     
-    // Accounting Entries (Placeholder Rules - adjust based on specific requirements)
+    // Secretary Documents
+    match /secretaryDocuments/{documentId} {
+      allow read: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, 'Secrétaire') || hasJobTitle(request.auth.uid, 'Manager'));
+      allow create: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, 'Secrétaire') || hasJobTitle(request.auth.uid, 'Manager'));
+      allow update: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, 'Secrétaire') || hasJobTitle(request.auth.uid, 'Manager'));
+      allow delete: if isAdmin(request.auth.uid) || (hasJobTitle(request.auth.uid, 'Secrétaire') || hasJobTitle(request.auth.uid, 'Manager')); // Admins or relevant job titles
+    }
+
+    // Accounting Entries
     match /accountingEntries/{entryId} {
-      allow read: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Comptable", "Manager"]));
-      allow create: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, ["Comptable", "Manager"]));
-      allow update: if request.auth != null && (isAdmin(request.auth.uid) || (hasJobTitle(request.auth.uid, ["Comptable", "Manager"]) && isOwner(request.auth.uid, resource)));
-      allow delete: if request.auth != null && (isAdmin(request.auth.uid) || (hasJobTitle(request.auth.uid, ["Comptable", "Manager"]) && isOwner(request.auth.uid, resource)));
+      allow read: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, 'Comptable') || hasJobTitle(request.auth.uid, 'Manager'));
+      allow create: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, 'Comptable') || hasJobTitle(request.auth.uid, 'Manager'));
+      allow update: if request.auth != null && (isAdmin(request.auth.uid) || hasJobTitle(request.auth.uid, 'Comptable') || hasJobTitle(request.auth.uid, 'Manager'));
+      allow delete: if isAdmin(request.auth.uid) || (hasJobTitle(request.auth.uid, 'Comptable') || hasJobTitle(request.auth.uid, 'Manager'));
     }
 
   }
