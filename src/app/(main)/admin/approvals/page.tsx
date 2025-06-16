@@ -17,6 +17,7 @@ import {
     deleteContainerFromFirestore,
     deleteTruckFromFirestore,
     deleteDriverFromFirestore,
+    deleteTransportFromFirestore, // Added
 } from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
@@ -79,6 +80,7 @@ const getEntityTypeText = (entityType: ApprovalRequest['entityType']) => {
         case 'container': return 'Conteneur';
         case 'truck': return 'Camion';
         case 'driver': return 'Chauffeur';
+        case 'transport': return 'Transport'; // Added
         default: return entityType;
     }
 };
@@ -182,6 +184,9 @@ export default function AdminApprovalsPage() {
           } else if (selectedRequest.entityType === 'driver') {
             await deleteDriverFromFirestore(selectedRequest.entityId);
             entityDeleted = true;
+          } else if (selectedRequest.entityType === 'transport') { // Added
+            await deleteTransportFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
           } else if (selectedRequest.entityType === 'container') {
             let blIdForContainer: string | undefined;
             if (selectedRequest.entityDescription?.includes('(BL N°')) {
@@ -233,6 +238,8 @@ export default function AdminApprovalsPage() {
         return `/trucks/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'driver':
         return `/drivers/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
+      case 'transport': // Added
+        return `/transports/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'expense':
       case 'container':
         if (request.entityDescription?.includes("BL N°")) {

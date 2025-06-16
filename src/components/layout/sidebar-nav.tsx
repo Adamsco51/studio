@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History, Truck as TruckIcon, UserCog } from 'lucide-react'; // Added UserCog for Drivers
+import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History, Truck as TruckIcon, UserCog, Route } from 'lucide-react'; // Added UserCog for Drivers, Route for Transports
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
@@ -24,6 +24,7 @@ const navItems = [
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
   { href: '/trucks', label: 'Camions', icon: TruckIcon },
   { href: '/drivers', label: 'Chauffeurs', icon: UserCog },
+  { href: '/transports', label: 'Transports', icon: Route },
   { href: '/chat', label: 'Messagerie', icon: MessageSquare },
   { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered },
   { href: '/reports', label: 'Rapports', icon: Package },

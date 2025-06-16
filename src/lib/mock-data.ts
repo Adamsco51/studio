@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus, TruckStatus } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus, TruckStatus, Transport, TransportStatus } from './types';
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -40,6 +40,7 @@ const workTypesCollectionRef = collection(db, "workTypes");
 const containersCollectionRef = collection(db, "containers");
 const trucksCollectionRef = collection(db, "trucks");
 const driversCollectionRef = collection(db, "drivers");
+const transportsCollectionRef = collection(db, "transports");
 const approvalRequestsCollectionRef = collection(db, "approvalRequests");
 const chatMessagesCollectionRef = collection(db, "chatMessages");
 const todoItemsCollectionRef = collection(db, "todoItems");
@@ -83,7 +84,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
     }
   } catch (e: any) {
     if (e.code === 'permission-denied') {
-      console.error(`Firestore permission denied while trying to fetch user profile for UID: ${uid}. `, e);
+        console.warn(`Firestore permission denied while trying to fetch user profile for UID: ${uid}. This might be expected for non-admins or if rules are restrictive. Error: ${e.message}`);
     } else {
       console.error(`Error getting user profile (UID ${uid}): `, e);
     }
@@ -361,6 +362,10 @@ export const deleteBLFromFirestore = async (blId: string) => {
                 batch.delete(containerDocRef);
             }
         }
+         // Delete associated transports
+        const transportsQuery = query(transportsCollectionRef, where("blId", "==", blId));
+        const transportsSnapshot = await getDocs(transportsQuery);
+        transportsSnapshot.forEach(transportDoc => batch.delete(transportDoc.ref)); // Note: This is a simple delete. Complex scenarios might need more logic.
     }
     batch.delete(blDocRef);
     await batch.commit();
@@ -895,6 +900,208 @@ export const deleteDriverFromFirestore = async (driverId: string): Promise<void>
     await deleteDoc(driverDocRef);
   } catch (e) {
     console.error("Error deleting document (driver): ", e);
+    throw e;
+  }
+};
+
+// Transport CRUD with Firestore
+export const addTransportToFirestore = async (
+  transportData: Omit<Transport, 'id' | 'createdAt' | 'updatedAt' | 'truckRegistrationNumber' | 'driverName'>
+): Promise<Transport> => {
+  const batch = writeBatch(db);
+  try {
+    const newTransportDocRef = doc(collection(db, "transports"));
+
+    const truck = transportData.truckId ? await getTruckByIdFromFirestore(transportData.truckId) : null;
+    const driver = transportData.driverId ? await getDriverByIdFromFirestore(transportData.driverId) : null;
+
+    const dataToSave: any = {
+      ...transportData,
+      truckRegistrationNumber: truck?.registrationNumber || null,
+      driverName: driver?.name || null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      plannedDepartureDate: Timestamp.fromDate(parseISO(transportData.plannedDepartureDate)),
+      plannedArrivalDate: Timestamp.fromDate(parseISO(transportData.plannedArrivalDate)),
+      actualDepartureDate: transportData.actualDepartureDate ? Timestamp.fromDate(parseISO(transportData.actualDepartureDate)) : null,
+      actualArrivalDate: transportData.actualArrivalDate ? Timestamp.fromDate(parseISO(transportData.actualArrivalDate)) : null,
+    };
+    batch.set(newTransportDocRef, dataToSave);
+
+    // Update Truck status
+    if (truck && transportData.status === 'in_progress') {
+      const truckDocRef = doc(db, "trucks", truck.id);
+      batch.update(truckDocRef, { status: 'in_transit' as TruckStatus });
+    }
+    // Update Driver status
+    if (driver && transportData.status === 'in_progress') {
+      const driverDocRef = doc(db, "drivers", driver.id);
+      batch.update(driverDocRef, { status: 'on_trip' as DriverStatus });
+    }
+
+    await batch.commit();
+    const newDocSnap = await getDoc(newTransportDocRef);
+    if (newDocSnap.exists()) {
+        const savedData = newDocSnap.data();
+        return {
+            ...savedData,
+            id: newDocSnap.id,
+            createdAt: savedData.createdAt.toDate().toISOString(),
+            updatedAt: savedData.updatedAt.toDate().toISOString(),
+            plannedDepartureDate: savedData.plannedDepartureDate.toDate().toISOString(),
+            plannedArrivalDate: savedData.plannedArrivalDate.toDate().toISOString(),
+            actualDepartureDate: savedData.actualDepartureDate ? savedData.actualDepartureDate.toDate().toISOString() : null,
+            actualArrivalDate: savedData.actualArrivalDate ? savedData.actualArrivalDate.toDate().toISOString() : null,
+        } as Transport;
+    }
+    throw new Error("Failed to retrieve saved transport data.");
+  } catch (e) {
+    console.error("Error adding document (transport): ", e);
+    throw e;
+  }
+};
+
+export const getTransportsFromFirestore = async (): Promise<Transport[]> => {
+  try {
+    const q = query(transportsCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const transportData = docSnap.data();
+      return {
+        ...transportData,
+        id: docSnap.id,
+        createdAt: transportData.createdAt.toDate().toISOString(),
+        updatedAt: transportData.updatedAt ? transportData.updatedAt.toDate().toISOString() : undefined,
+        plannedDepartureDate: transportData.plannedDepartureDate.toDate().toISOString(),
+        plannedArrivalDate: transportData.plannedArrivalDate.toDate().toISOString(),
+        actualDepartureDate: transportData.actualDepartureDate ? transportData.actualDepartureDate.toDate().toISOString() : null,
+        actualArrivalDate: transportData.actualArrivalDate ? transportData.actualArrivalDate.toDate().toISOString() : null,
+      } as Transport;
+    });
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch transports. Check rules for 'transports' collection.", e);
+    } else {
+      console.error("Error getting documents (transports): ", e);
+    }
+    return [];
+  }
+};
+
+export const getTransportByIdFromFirestore = async (transportId: string): Promise<Transport | null> => {
+  try {
+    const transportDocRef = doc(db, "transports", transportId);
+    const transportSnap = await getDoc(transportDocRef);
+    if (transportSnap.exists()) {
+      const transportData = transportSnap.data();
+      return {
+        ...transportData,
+        id: transportSnap.id,
+        createdAt: transportData.createdAt.toDate().toISOString(),
+        updatedAt: transportData.updatedAt ? transportData.updatedAt.toDate().toISOString() : undefined,
+        plannedDepartureDate: transportData.plannedDepartureDate.toDate().toISOString(),
+        plannedArrivalDate: transportData.plannedArrivalDate.toDate().toISOString(),
+        actualDepartureDate: transportData.actualDepartureDate ? transportData.actualDepartureDate.toDate().toISOString() : null,
+        actualArrivalDate: transportData.actualArrivalDate ? transportData.actualArrivalDate.toDate().toISOString() : null,
+      } as Transport;
+    } else {
+      console.log("No such document for transport ID:", transportId);
+      return null;
+    }
+  } catch (e: any) {
+    console.error(`Error getting document (transport ${transportId}): `, e);
+    return null;
+  }
+};
+
+export const updateTransportInFirestore = async (
+  transportId: string,
+  updatedData: Partial<Omit<Transport, 'id' | 'createdAt' | 'createdByUserId' | 'truckRegistrationNumber' | 'driverName'>>
+): Promise<void> => {
+  const transportDocRef = doc(db, "transports", transportId);
+  const batch = writeBatch(db);
+  try {
+    const currentTransportSnap = await getDoc(transportDocRef);
+    if (!currentTransportSnap.exists()) throw new Error("Transport document not found");
+    const currentTransportData = currentTransportSnap.data() as Transport;
+
+    const dataToUpdate: any = { ...updatedData, updatedAt: serverTimestamp() };
+
+    // Handle date conversions
+    if (updatedData.plannedDepartureDate) dataToUpdate.plannedDepartureDate = Timestamp.fromDate(parseISO(updatedData.plannedDepartureDate));
+    if (updatedData.plannedArrivalDate) dataToUpdate.plannedArrivalDate = Timestamp.fromDate(parseISO(updatedData.plannedArrivalDate));
+    if (updatedData.actualDepartureDate) dataToUpdate.actualDepartureDate = Timestamp.fromDate(parseISO(updatedData.actualDepartureDate));
+    else if (updatedData.actualDepartureDate === null) dataToUpdate.actualDepartureDate = null;
+    if (updatedData.actualArrivalDate) dataToUpdate.actualArrivalDate = Timestamp.fromDate(parseISO(updatedData.actualArrivalDate));
+    else if (updatedData.actualArrivalDate === null) dataToUpdate.actualArrivalDate = null;
+
+    // Denormalize truck/driver info if IDs change
+    if (updatedData.truckId !== undefined && updatedData.truckId !== currentTransportData.truckId) {
+        const truck = updatedData.truckId ? await getTruckByIdFromFirestore(updatedData.truckId) : null;
+        dataToUpdate.truckRegistrationNumber = truck?.registrationNumber || null;
+    }
+    if (updatedData.driverId !== undefined && updatedData.driverId !== currentTransportData.driverId) {
+        const driver = updatedData.driverId ? await getDriverByIdFromFirestore(updatedData.driverId) : null;
+        dataToUpdate.driverName = driver?.name || null;
+    }
+
+    batch.update(transportDocRef, dataToUpdate);
+
+    // Logic to update truck/driver statuses based on new transport status
+    const newStatus = updatedData.status || currentTransportData.status;
+    const newTruckId = updatedData.truckId !== undefined ? updatedData.truckId : currentTransportData.truckId;
+    const newDriverId = updatedData.driverId !== undefined ? updatedData.driverId : currentTransportData.driverId;
+
+    // If old truck/driver is different from new one, make old one available
+    if (currentTransportData.truckId && currentTransportData.truckId !== newTruckId) {
+        const oldTruckDocRef = doc(db, "trucks", currentTransportData.truckId);
+        batch.update(oldTruckDocRef, { status: 'available' as TruckStatus });
+    }
+    if (currentTransportData.driverId && currentTransportData.driverId !== newDriverId) {
+        const oldDriverDocRef = doc(db, "drivers", currentTransportData.driverId);
+        batch.update(oldDriverDocRef, { status: 'available' as DriverStatus });
+    }
+    
+    // Update new truck/driver based on transport status
+    if (newTruckId) {
+        const truckDocRef = doc(db, "trucks", newTruckId);
+        if (newStatus === 'in_progress') batch.update(truckDocRef, { status: 'in_transit' as TruckStatus });
+        else if (newStatus === 'completed' || newStatus === 'cancelled') batch.update(truckDocRef, { status: 'available' as TruckStatus });
+    }
+    if (newDriverId) {
+        const driverDocRef = doc(db, "drivers", newDriverId);
+        if (newStatus === 'in_progress') batch.update(driverDocRef, { status: 'on_trip' as DriverStatus });
+        else if (newStatus === 'completed' || newStatus === 'cancelled') batch.update(driverDocRef, { status: 'available' as DriverStatus });
+    }
+
+    await batch.commit();
+  } catch (e) {
+    console.error("Error updating document (transport): ", e);
+    throw e;
+  }
+};
+
+export const deleteTransportFromFirestore = async (transportId: string): Promise<void> => {
+  const transportDocRef = doc(db, "transports", transportId);
+  const batch = writeBatch(db);
+  try {
+    const transportSnap = await getDoc(transportDocRef);
+    if (transportSnap.exists()) {
+        const transportData = transportSnap.data() as Transport;
+        // Make assigned truck/driver available if transport was in progress
+        if ((transportData.status === 'in_progress' || transportData.status === 'planned') && transportData.truckId) {
+            const truckDocRef = doc(db, "trucks", transportData.truckId);
+            batch.update(truckDocRef, { status: 'available' as TruckStatus });
+        }
+        if ((transportData.status === 'in_progress' || transportData.status === 'planned') && transportData.driverId) {
+            const driverDocRef = doc(db, "drivers", transportData.driverId);
+            batch.update(driverDocRef, { status: 'available' as DriverStatus });
+        }
+    }
+    batch.delete(transportDocRef);
+    await batch.commit();
+  } catch (e) {
+    console.error("Error deleting document (transport): ", e);
     throw e;
   }
 };

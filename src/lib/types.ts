@@ -111,6 +111,33 @@ export interface Driver {
   createdByUserId?: string;
 }
 
+export type TransportStatus = 'planned' | 'in_progress' | 'completed' | 'delayed' | 'cancelled';
+
+export interface Transport {
+  id: string;
+  transportNumber: string; // Could be auto-generated or manual
+  blId: string;
+  containerIds: string[];
+  truckId: string | null;
+  truckRegistrationNumber?: string | null; // Denormalized
+  driverId: string | null;
+  driverName?: string | null; // Denormalized
+  origin: string;
+  destination: string;
+  plannedDepartureDate: string; // ISO Date string
+  actualDepartureDate?: string | null; // ISO Date string
+  plannedArrivalDate: string; // ISO Date string
+  actualArrivalDate?: string | null; // ISO Date string
+  status: TransportStatus;
+  notes?: string | null;
+  // costs?: Array<{ description: string; amount: number; currency: string }>; // For future enhancement
+  totalCost?: number; // Simplified cost for now
+  createdAt: string; // ISO Date string
+  createdByUserId: string;
+  updatedAt?: string; // ISO Date string
+}
+
+
 export interface ChatMessage {
   id: string;
   senderId: string;
@@ -130,7 +157,7 @@ export interface TodoItem {
   createdByName: string;
 }
 
-export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense' | 'container' | 'truck' | 'driver';
+export type ApprovalRequestEntityType = 'bl' | 'client' | 'workType' | 'expense' | 'container' | 'truck' | 'driver' | 'transport';
 export type ApprovalRequestActionType = 'edit' | 'delete';
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'pin_issued' | 'completed';
 
