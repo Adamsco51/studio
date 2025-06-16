@@ -246,12 +246,13 @@ export const deleteClientFromFirestore = async (clientId: string) => {
 };
 
 // BL CRUD with Firestore
-export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'createdAt' | 'containerIds'>) => {
+export const addBLToFirestore = async (blData: Omit<BillOfLading, 'id' | 'createdAt' | 'containerIds'> & { createdByUserName?: string }) => {
   try {
     const docRef = await addDoc(blsCollectionRef, {
       ...blData,
       containerIds: [], // Initialize with empty array
       createdAt: serverTimestamp(),
+      createdByUserName: blData.createdByUserName || 'Utilisateur Inconnu', // Store creator's name
     });
     if (blData.clientId) {
         const clientDocRef = doc(db, "clients", blData.clientId);

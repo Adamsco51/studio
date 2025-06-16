@@ -12,9 +12,9 @@ import {
     getBLsFromFirestore, 
     getClientsFromFirestore, 
     getExpensesFromFirestore, 
-    getUserProfile, // Using user profiles now
+    // getUserProfile, // Removed: No longer fetching all user profiles here
 } from '@/lib/mock-data';
-import type { BLStatus, BillOfLading, Client, UserProfile as AppUserProfile, Expense } from '@/lib/types';
+import type { BLStatus, BillOfLading, Client, Expense } from '@/lib/types'; // Removed AppUserProfile
 import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -64,12 +64,11 @@ export default function BillsOfLadingPage() {
   const [bls, setBls] = useState<BillOfLading[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]); 
-  const [userProfiles, setUserProfiles] = useState<AppUserProfile[]>([]); // Store user profiles
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(undefined);
-  const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
+  const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined); // Still here for potential future use or specific admin filtering
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   const fetchData = useCallback(async () => {
@@ -79,19 +78,18 @@ export default function BillsOfLadingPage() {
     }
     setIsLoading(true);
     try {
-      const [fetchedBls, fetchedClients, fetchedExpenses, fetchedUserProfiles] = await Promise.all([
+      // Removed getAllUserProfiles from Promise.all
+      const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
         getBLsFromFirestore(),
         getClientsFromFirestore(),
         getExpensesFromFirestore(), 
-        getAllUserProfiles(), // Fetch all user profiles
       ]);
       setBls(fetchedBls);
       setClients(fetchedClients);
       setAllExpenses(fetchedExpenses); 
-      setUserProfiles(fetchedUserProfiles); // Set user profiles
     } catch (error) {
       console.error("Failed to fetch data for BLs page:", error);
-      toast({ title: "Erreur de chargement", description: "Impossible de charger toutes les données.", variant: "destructive" });
+      toast({ title: "Erreur de chargement", description: "Impossible de charger les données nécessaires.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -104,11 +102,6 @@ export default function BillsOfLadingPage() {
   const getClientName = useCallback((clientId: string) => {
     return clients.find(c => c.id === clientId)?.name || 'N/A';
   }, [clients]);
-
-  const getUserName = useCallback((userId?: string) => {
-    if (!userId) return 'N/A';
-    return userProfiles.find(up => up.uid === userId)?.displayName || 'Inconnu'; // Use userProfiles
-  }, [userProfiles]);
 
   // Memoize the calculation of details for all BLs to avoid re-computation on every render
   const blDetailsMap = useMemo(() => {
@@ -131,7 +124,7 @@ export default function BillsOfLadingPage() {
   const handleResetFilters = () => {
     setSearchTerm('');
     setSelectedClientId(undefined);
-    setSelectedUserId(undefined);
+    setSelectedUserId(undefined); // Keep for reset, even if filtering by it is less common now
     setSelectedDate(undefined);
   };
 
@@ -142,9 +135,11 @@ export default function BillsOfLadingPage() {
       tempBLs = tempBLs.filter(bl => bl.clientId === selectedClientId);
     }
 
-    if (selectedUserId) {
-      tempBLs = tempBLs.filter(bl => bl.createdByUserId === selectedUserId);
-    }
+    // Filtering by createdByUserId might be less useful now without readily available user list for selection,
+    // but kept if searchTerm includes user name.
+    // if (selectedUserId) { 
+    //   tempBLs = tempBLs.filter(bl => bl.createdByUserId === selectedUserId);
+    // }
 
     if (selectedDate) {
       tempBLs = tempBLs.filter(bl => {
@@ -163,9 +158,9 @@ export default function BillsOfLadingPage() {
       bl.blNumber.toLowerCase().includes(lowerSearchTerm) ||
       getClientName(bl.clientId).toLowerCase().includes(lowerSearchTerm) ||
       bl.status.toLowerCase().includes(lowerSearchTerm) ||
-      (bl.createdByUserId && getUserName(bl.createdByUserId).toLowerCase().includes(lowerSearchTerm)),
+      (bl.createdByUserName && bl.createdByUserName.toLowerCase().includes(lowerSearchTerm))
     );
-  }, [bls, searchTerm, selectedClientId, selectedUserId, selectedDate, getClientName, getUserName]); 
+  }, [bls, searchTerm, selectedClientId, selectedDate, getClientName]); // Removed selectedUserId and userProfiles from dependencies
 
   return (
     <>
@@ -192,7 +187,7 @@ export default function BillsOfLadingPage() {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
                   id="search-term"
-                  placeholder="N° BL, client, statut..."
+                  placeholder="N° BL, client, statut, créateur..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 w-full" 
@@ -216,20 +211,21 @@ export default function BillsOfLadingPage() {
               </Select>
             </div>
 
-            <div>
+            {/* User filter might be less useful if we don't easily list users for selection. Kept for structure. */}
+            {/* <div>
               <Label htmlFor="user-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Utilisateur (Créateur)</Label>
-              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)} disabled={isLoading || userProfiles.length === 0}>
+              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)} disabled={isLoading}>
                 <SelectTrigger id="user-filter">
-                  <SelectValue placeholder={userProfiles.length === 0 && !isLoading ? "Aucun utilisateur" : "Tous les Utilisateurs"}/>
+                  <SelectValue placeholder="Tous les Utilisateurs"/>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Utilisateurs</SelectItem>
-                  {userProfiles.map(up => ( 
-                    <SelectItem key={up.uid} value={up.uid}>{up.displayName || up.email}</SelectItem>
+                  { MOCK_USERS.map(up => ( // Placeholder, replace with actual user list if needed
+                    <SelectItem key={up.id} value={up.id}>{up.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </div> */}
             
             <div>
               <Label htmlFor="date-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Date de Création</Label>
@@ -319,7 +315,7 @@ export default function BillsOfLadingPage() {
                       <TableRow key={bl.id}>
                         <TableCell className="font-medium whitespace-nowrap">{bl.blNumber}</TableCell>
                         <TableCell className="whitespace-nowrap">{getClientName(bl.clientId)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{getUserName(bl.createdByUserId)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{bl.createdByUserName || 'N/A'}</TableCell>
                         <TableCell className="whitespace-nowrap">{bl.createdAt ? format(parseISO(bl.createdAt), 'dd MMM yyyy', { locale: fr }) : 'N/A'}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className={cn("capitalize flex items-center w-fit", getStatusBadgeStyle(bl.status, 'badge'))}>

@@ -33,6 +33,7 @@ export interface BillOfLading {
   status: BLStatus;
   createdAt: string; // ISO Date string
   createdByUserId?: string;
+  createdByUserName?: string; // Denormalized creator's name
 }
 
 export interface Container {
