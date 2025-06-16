@@ -590,7 +590,8 @@ export const addContainerToFirestore = async (
 ): Promise<Container> => {
   const batch = writeBatch(db);
   try {
-    const dataToSave: any = {
+    // Explicitly build dataToSave to avoid undefined fields from spread
+    const dataToSave: { [key: string]: any } = {
       blId: containerData.blId,
       containerNumber: containerData.containerNumber,
       type: containerData.type,
@@ -1467,23 +1468,42 @@ export const getChatMessagesFromFirestore = (callback: (messages: ChatMessage[])
 
 
 export const addTodoItemToFirestore = async (todoData: Omit<TodoItem, 'id' | 'createdAt' | 'completed'>): Promise<TodoItem> => {
-   try {
-    const docRef = await addDoc(todoItemsCollectionRef, {
-      ...todoData,
+  try {
+    const { assignedToUserId, assignedToUserName, ...restOfTodoData } = todoData;
+    const payload: any = {
+      ...restOfTodoData,
       completed: false,
       createdAt: serverTimestamp(),
-    });
-    const newDocSnap = await getDoc(docRef);
+    };
+    if (assignedToUserId) {
+      payload.assignedToUserId = assignedToUserId;
+    }
+    if (assignedToUserName) {
+      payload.assignedToUserName = assignedToUserName;
+    }
+
+    const docRef = await addDoc(todoItemsCollectionRef, payload);
+    const newDocSnap = await getDoc(docRef); // Get the document to resolve serverTimestamp
     if (newDocSnap.exists()) {
         const data = newDocSnap.data();
         return {
             id: newDocSnap.id,
-            ...data,
+            text: data.text,
+            createdByUserId: data.createdByUserId,
+            createdByName: data.createdByName,
+            assignedToUserId: data.assignedToUserId,
+            assignedToUserName: data.assignedToUserName,
             completed: data.completed,
             createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
         } as TodoItem;
     }
-    return { ...todoData, id: docRef.id, createdAt: new Date().toISOString(), completed: false } as TodoItem;
+    // Fallback, though ideally newDocSnap.exists() is true
+    return { 
+      ...todoData, 
+      id: docRef.id, 
+      createdAt: new Date().toISOString(), 
+      completed: false 
+    } as TodoItem;
   } catch (error) {
     console.error("Error adding todo item to Firestore: ", error);
     throw error;
@@ -1688,9 +1708,9 @@ export const updateSecretaryDocumentInFirestore = async (
   const docRef = doc(db, "secretaryDocuments", documentId);
   try {
     const dataToUpdate: any = { ...updatedData, updatedAt: serverTimestamp() };
-    if ('relatedClientId' in updatedData) dataToUpdate.relatedClientId = updatedData.relatedClientId || null;
-    if ('relatedBlId' in updatedData) dataToUpdate.relatedBlId = updatedData.relatedBlId || null;
-    if ('recipientEmail' in updatedData) dataToUpdate.recipientEmail = updatedData.recipientEmail || null;
+     if ('relatedClientId' in updatedData) dataToUpdate.relatedClientId = updatedData.relatedClientId || null;
+     if ('relatedBlId' in updatedData) dataToUpdate.relatedBlId = updatedData.relatedBlId || null;
+     if ('recipientEmail' in updatedData) dataToUpdate.recipientEmail = updatedData.recipientEmail || null;
 
     await updateDoc(docRef, dataToUpdate);
   } catch (e) {

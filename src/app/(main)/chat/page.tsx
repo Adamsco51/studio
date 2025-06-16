@@ -141,8 +141,8 @@ export default function ChatPage() {
         text: data.text,
         createdByUserId: user.uid,
         createdByName: user.displayName || user.email || "Utilisateur Inconnu",
-        assignedToUserId: data.assignedToUserId === NO_ASSIGNEE_VALUE ? undefined : data.assignedToUserId,
-        assignedToUserName: data.assignedToUserId === NO_ASSIGNEE_VALUE ? undefined : (assignedUser?.displayName || assignedUser?.email),
+        assignedToUserId: data.assignedToUserId, // Directly use, it's already undefined or a UID
+        assignedToUserName: assignedUser ? (assignedUser.displayName || assignedUser.email) : undefined,
     };
     try {
         await addTodoItemToFirestore(todoPayload);
