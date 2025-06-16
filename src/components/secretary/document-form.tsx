@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form"; // Import Controller
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,6 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-// Removed Textarea import: import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SecretaryDocument, SecretaryDocumentType, SecretaryDocumentStatus, Client, BillOfLading } from "@/lib/types";
@@ -224,18 +223,27 @@ export function SecretaryDocumentForm({ initialData }: DocumentFormProps) {
             <FormField
               control={form.control}
               name="content"
-              render={({ field }) => (
+              render={() => ( 
                 <FormItem>
                   <FormLabel>Contenu du Document</FormLabel>
                   <FormControl>
-                     <ReactQuill 
-                        theme="snow" 
-                        value={field.value} 
-                        onChange={field.onChange}
-                        modules={quillModules}
-                        className="bg-background text-foreground" // Added for better theme integration
-                        readOnly={isSubmitting}
-                      />
+                    <Controller
+                        name="content"
+                        control={form.control}
+                        render={({ field: controllerField }) => (
+                            <ReactQuill 
+                                theme="snow" 
+                                value={controllerField.value} 
+                                onChange={(content) => { // Pass only content to RHF
+                                    controllerField.onChange(content);
+                                }}
+                                onBlur={controllerField.onBlur}
+                                modules={quillModules}
+                                className="bg-background text-foreground" 
+                                readOnly={isSubmitting}
+                            />
+                        )}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
