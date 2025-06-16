@@ -12,9 +12,9 @@ import {
     getBLsFromFirestore, 
     getClientsFromFirestore, 
     getExpensesFromFirestore, 
-    MOCK_USERS, 
+    getUserProfile, // Using user profiles now
 } from '@/lib/mock-data';
-import type { BLStatus, BillOfLading, Client, User as AppUser, Expense } from '@/lib/types';
+import type { BLStatus, BillOfLading, Client, UserProfile as AppUserProfile, Expense } from '@/lib/types';
 import { PlusCircle, ArrowRight, CheckCircle, AlertCircle, Clock, Search, CalendarIcon, FilterX, Loader2, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -51,13 +51,20 @@ const StatusIcon = ({ status }: { status: BLStatus }) => {
   return null;
 };
 
+interface BlDetails {
+  totalExpenses: number;
+  balance: number;
+  profitStatus: 'Bénéfice' | 'Perte' | 'N/A';
+  profit: boolean;
+}
+
 export default function BillsOfLadingPage() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [bls, setBls] = useState<BillOfLading[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]); 
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const [allExpenses, setAllExpenses] = useState<Expense[]>([]); 
+  const [userProfiles, setUserProfiles] = useState<AppUserProfile[]>([]); // Store user profiles
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -72,15 +79,16 @@ export default function BillsOfLadingPage() {
     }
     setIsLoading(true);
     try {
-      const [fetchedBls, fetchedClients, fetchedExpenses] = await Promise.all([
+      const [fetchedBls, fetchedClients, fetchedExpenses, fetchedUserProfiles] = await Promise.all([
         getBLsFromFirestore(),
         getClientsFromFirestore(),
         getExpensesFromFirestore(), 
+        getAllUserProfiles(), // Fetch all user profiles
       ]);
       setBls(fetchedBls);
       setClients(fetchedClients);
-      setExpenses(fetchedExpenses); 
-      setUsers(MOCK_USERS); // Keep MOCK_USERS for creator names if not migrating user profiles fully
+      setAllExpenses(fetchedExpenses); 
+      setUserProfiles(fetchedUserProfiles); // Set user profiles
     } catch (error) {
       console.error("Failed to fetch data for BLs page:", error);
       toast({ title: "Erreur de chargement", description: "Impossible de charger toutes les données.", variant: "destructive" });
@@ -99,19 +107,26 @@ export default function BillsOfLadingPage() {
 
   const getUserName = useCallback((userId?: string) => {
     if (!userId) return 'N/A';
-    return users.find(u => u.id === userId)?.name || 'N/A';
-  }, [users]);
+    return userProfiles.find(up => up.uid === userId)?.displayName || 'Inconnu'; // Use userProfiles
+  }, [userProfiles]);
 
-  const calculateBlDetails = useCallback((blId: string) => {
-    const bl = bls.find(b => b.id === blId);
-    if (!bl) return { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
-    
-    const expensesForBl = expenses.filter(exp => exp.blId === blId); 
-    const totalExpenses = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
-    const balance = bl.allocatedAmount - totalExpenses;
-    const profitStatus = balance >= 0 ? 'Bénéfice' : 'Perte';
-    return { totalExpenses, balance, profitStatus, profit: balance >= 0 };
-  }, [bls, expenses]);
+  // Memoize the calculation of details for all BLs to avoid re-computation on every render
+  const blDetailsMap = useMemo(() => {
+    const map = new Map<string, BlDetails>();
+    bls.forEach(bl => {
+      const expensesForBl = allExpenses.filter(exp => exp.blId === bl.id);
+      const totalExpenses = expensesForBl.reduce((sum, exp) => sum + exp.amount, 0);
+      const balance = bl.allocatedAmount - totalExpenses;
+      const profitStatus = balance >= 0 ? 'Bénéfice' : 'Perte';
+      map.set(bl.id, { totalExpenses, balance, profitStatus, profit: balance >= 0 });
+    });
+    return map;
+  }, [bls, allExpenses]);
+
+  const getBlDetails = useCallback((blId: string): BlDetails => {
+    return blDetailsMap.get(blId) || { totalExpenses: 0, balance: 0, profitStatus: 'N/A', profit: false };
+  }, [blDetailsMap]);
+
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -170,14 +185,14 @@ export default function BillsOfLadingPage() {
           <CardTitle>Filtrer les Connaissements</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
-            <div className="lg:col-span-2 xl:col-span-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end">
+            <div className="sm:col-span-2 md:col-span-1">
               <Label htmlFor="search-term" className="block text-sm font-medium text-muted-foreground mb-1">Recherche générale</Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
                   id="search-term"
-                  placeholder="N° BL, client, statut, utilisateur..."
+                  placeholder="N° BL, client, statut..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 w-full" 
@@ -203,14 +218,14 @@ export default function BillsOfLadingPage() {
 
             <div>
               <Label htmlFor="user-filter" className="block text-sm font-medium text-muted-foreground mb-1">Par Utilisateur (Créateur)</Label>
-              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)} disabled={isLoading || users.length === 0}>
+              <Select value={selectedUserId} onValueChange={(value) => setSelectedUserId(value === "all" ? undefined : value)} disabled={isLoading || userProfiles.length === 0}>
                 <SelectTrigger id="user-filter">
-                  <SelectValue placeholder={users.length === 0 && !isLoading ? "Aucun utilisateur" : "Tous les Utilisateurs"}/>
+                  <SelectValue placeholder={userProfiles.length === 0 && !isLoading ? "Aucun utilisateur" : "Tous les Utilisateurs"}/>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Utilisateurs</SelectItem>
-                  {users.map(user => ( 
-                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                  {userProfiles.map(up => ( 
+                    <SelectItem key={up.uid} value={up.uid}>{up.displayName || up.email}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -245,7 +260,7 @@ export default function BillsOfLadingPage() {
               </Popover>
             </div>
 
-            <Button onClick={handleResetFilters} variant="outline" className="w-full md:w-auto xl:mt-[22px]" disabled={isLoading}>
+            <Button onClick={handleResetFilters} variant="outline" className="w-full xl:mt-[22px]" disabled={isLoading}>
               <FilterX className="mr-2 h-4 w-4" /> Réinitialiser
             </Button>
           </div>
@@ -281,56 +296,58 @@ export default function BillsOfLadingPage() {
                 )}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>N° BL</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Créé par</TableHead>
-                  <TableHead>Date Création</TableHead>
-                  <TableHead>Statut BL</TableHead>
-                  <TableHead>Montant Alloué</TableHead>
-                  <TableHead>Dépenses Totales</TableHead>
-                  <TableHead>Solde</TableHead>
-                  <TableHead>Statut Financier</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredBLs.map((bl) => {
-                  const { totalExpenses, balance, profitStatus, profit } = calculateBlDetails(bl.id);
-                  return (
-                    <TableRow key={bl.id}>
-                      <TableCell className="font-medium">{bl.blNumber}</TableCell>
-                      <TableCell>{getClientName(bl.clientId)}</TableCell>
-                      <TableCell>{getUserName(bl.createdByUserId)}</TableCell>
-                      <TableCell>{bl.createdAt ? format(parseISO(bl.createdAt), 'dd MMM yyyy', { locale: fr }) : 'N/A'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn("capitalize flex items-center w-fit", getStatusBadgeStyle(bl.status, 'badge'))}>
-                          <StatusIcon status={bl.status} />
-                          {bl.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
-                      <TableCell>{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
-                      <TableCell className={profit ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                        {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={profit ? 'default' : 'destructive'} className={profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{profitStatus}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/bls/${bl.id}`} passHref>
-                          <Button variant="ghost" size="sm">
-                            Voir Détails <ArrowRight className="ml-2 h-4 w-4" />
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>N° BL</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Créé par</TableHead>
+                    <TableHead>Date Création</TableHead>
+                    <TableHead>Statut BL</TableHead>
+                    <TableHead>Montant Alloué</TableHead>
+                    <TableHead>Dépenses Totales</TableHead>
+                    <TableHead>Solde</TableHead>
+                    <TableHead>Statut Financier</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredBLs.map((bl) => {
+                    const { totalExpenses, balance, profitStatus, profit } = getBlDetails(bl.id);
+                    return (
+                      <TableRow key={bl.id}>
+                        <TableCell className="font-medium whitespace-nowrap">{bl.blNumber}</TableCell>
+                        <TableCell className="whitespace-nowrap">{getClientName(bl.clientId)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{getUserName(bl.createdByUserId)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{bl.createdAt ? format(parseISO(bl.createdAt), 'dd MMM yyyy', { locale: fr }) : 'N/A'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("capitalize flex items-center w-fit", getStatusBadgeStyle(bl.status, 'badge'))}>
+                            <StatusIcon status={bl.status} />
+                            {bl.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{bl.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
+                        <TableCell className="whitespace-nowrap">{totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
+                        <TableCell className={cn("whitespace-nowrap font-semibold", profit ? 'text-green-600' : 'text-red-600')}>
+                          {balance.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={profit ? 'default' : 'destructive'} className={profit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }>{profitStatus}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          <Link href={`/bls/${bl.id}`} passHref>
+                            <Button variant="ghost" size="sm">
+                              Voir Détails <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

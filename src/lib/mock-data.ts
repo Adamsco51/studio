@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus, TruckStatus, Transport, TransportStatus } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus, TruckStatus, Transport, TransportStatus, SecretaryDocument, AccountingEntry } from './types';
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -26,9 +26,10 @@ import { formatISO, parseISO, addHours } from 'date-fns';
 
 
 export const MOCK_USERS: User[] = [
-  { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee' },
-  { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin' },
-  { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee' },
+  { id: 'user-1-mock', name: 'Alice Employee (Mock)', role: 'employee', jobTitle: 'Agent Opérationnel' },
+  { id: 'user-2-mock', name: 'Bob Admin (Mock)', role: 'admin', jobTitle: 'Manager' },
+  { id: 'user-3-mock', name: 'Charlie Collaborator (Mock)', role: 'employee', jobTitle: 'Secrétaire' },
+  { id: 'user-4-mock', name: 'Diana Accountant (Mock)', role: 'employee', jobTitle: 'Comptable' },
 ];
 
 
@@ -46,10 +47,18 @@ const chatMessagesCollectionRef = collection(db, "chatMessages");
 const todoItemsCollectionRef = collection(db, "todoItems");
 const auditLogSessionsCollectionRef = collection(db, "auditLogSessions");
 const companySettingsDocRef = doc(db, "companySettings", "main");
+const secretaryDocumentsCollectionRef = collection(db, "secretaryDocuments");
+const accountingEntriesCollectionRef = collection(db, "accountingEntries");
 
 
 // User Profile CRUD with Firestore
-export const createUserProfile = async (uid: string, email: string | null, displayName: string | null, role: 'admin' | 'employee' = 'employee'): Promise<void> => {
+export const createUserProfile = async (
+  uid: string,
+  email: string | null,
+  displayName: string | null,
+  role: 'admin' | 'employee' = 'employee',
+  jobTitle: UserProfile['jobTitle'] = 'Agent Opérationnel', // Default jobTitle
+): Promise<void> => {
   const userProfileDocRef = doc(db, "users", uid);
   try {
     await setDoc(userProfileDocRef, {
@@ -57,6 +66,7 @@ export const createUserProfile = async (uid: string, email: string | null, displ
       email,
       displayName: displayName || email,
       role,
+      jobTitle,
       createdAt: serverTimestamp(),
     }, { merge: true });
   } catch (e) {
@@ -76,6 +86,7 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
         email: data.email,
         displayName: data.displayName,
         role: data.role,
+        jobTitle: data.jobTitle || 'Agent Opérationnel', // Default if not set
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as UserProfile;
     } else {
@@ -102,6 +113,7 @@ export const getAllUserProfiles = async (): Promise<UserProfile[]> => {
         email: data.email,
         displayName: data.displayName,
         role: data.role,
+        jobTitle: data.jobTitle || 'Agent Opérationnel', // Default if not set
         createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
       } as UserProfile;
     });
@@ -116,13 +128,15 @@ export const getAllUserProfiles = async (): Promise<UserProfile[]> => {
 };
 
 
-export const updateUserProfileInFirestore = async (uid: string, data: Partial<Pick<UserProfile, 'displayName' | 'role' | 'email' >>): Promise<void> => {
+export const updateUserProfileInFirestore = async (uid: string, data: Partial<Pick<UserProfile, 'displayName' | 'role' | 'email' | 'jobTitle' >>): Promise<void> => {
   const userProfileDocRef = doc(db, "users", uid);
   try {
     const updateData: any = {};
     if (data.displayName !== undefined) updateData.displayName = data.displayName;
     if (data.role !== undefined) updateData.role = data.role;
     if (data.email !== undefined) updateData.email = data.email;
+    if (data.jobTitle !== undefined) updateData.jobTitle = data.jobTitle;
+
 
     if (Object.keys(updateData).length > 0) {
         await updateDoc(userProfileDocRef, updateData);
@@ -466,7 +480,6 @@ export const updateExpenseInFirestore = async (expenseId: string, updatedData: P
       if (typeof updatedData.date === 'string') {
         dataToUpdate.date = Timestamp.fromDate(parseISO(updatedData.date));
       } else {
-        // If it's already a Timestamp (though unlikely from form), keep as is
         dataToUpdate.date = updatedData.date;
       }
     }
@@ -1483,14 +1496,11 @@ export const deleteTodoItemFromFirestore = async (todoId: string): Promise<void>
 
 export const getEmployeeNameFromMock = (employeeId?: string): string => {
     if (!employeeId) return 'N/A';
+    // This function currently uses MOCK_USERS. In a real app, you'd fetch from UserProfiles or use user.displayName.
     const mockUser = MOCK_USERS.find(u => u.id === employeeId);
     if (mockUser) return mockUser.name;
 
-    // Basic check if it looks like a UID (common length for Firebase UIDs)
-    // This is a very rough heuristic.
     if (employeeId.length > 10 && !employeeId.startsWith('user-')) {
-        // For actual UIDs from Firebase Auth, we'd ideally fetch their profile.
-        // For now, show a generic placeholder.
         return `Utilisateur (${employeeId.substring(0,6)}...)`;
     }
     return 'Utilisateur Inconnu';
@@ -1513,7 +1523,6 @@ export const logSessionEvent = async (
     });
   } catch (e) {
     console.error("Error logging session event: ", e);
-    // Depending on severity, might not re-throw to avoid blocking login/logout
   }
 };
 
@@ -1549,7 +1558,6 @@ export const getCompanyProfileFromFirestore = async (): Promise<CompanyProfile |
     return null; // No profile set yet
   } catch (error: any) {
     if (error.code === 'permission-denied') {
-        // This error is now more specific in the context, so a general log here is okay.
         console.warn("Firestore permission denied while trying to fetch company profile (companySettings/main). This might be expected for non-admins if rules are restrictive.");
     } else {
         console.error("Error fetching company profile:", error);
@@ -1564,5 +1572,87 @@ export const updateCompanyProfileInFirestore = async (data: Partial<CompanyProfi
   } catch (error) {
     console.error("Error updating company profile:", error);
     throw error;
+  }
+};
+
+// Secretary Documents CRUD (Basic for now)
+export const addSecretaryDocumentToFirestore = async (docData: Omit<SecretaryDocument, 'id' | 'createdAt' | 'updatedAt'>): Promise<SecretaryDocument> => {
+  try {
+    const dataToSave = { ...docData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    const docRef = await addDoc(secretaryDocumentsCollectionRef, dataToSave);
+    const newDocSnap = await getDoc(docRef);
+    if (newDocSnap.exists()) {
+      const savedData = newDocSnap.data();
+      return {
+        id: newDocSnap.id,
+        ...savedData,
+        createdAt: (savedData.createdAt as Timestamp).toDate().toISOString(),
+        updatedAt: (savedData.updatedAt as Timestamp).toDate().toISOString(),
+      } as SecretaryDocument;
+    }
+    throw new Error("Failed to retrieve saved secretary document.");
+  } catch (e) {
+    console.error("Error adding secretary document: ", e);
+    throw e;
+  }
+};
+
+export const getSecretaryDocumentsFromFirestore = async (): Promise<SecretaryDocument[]> => {
+  try {
+    const q = query(secretaryDocumentsCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const docData = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...docData,
+        createdAt: (docData.createdAt as Timestamp).toDate().toISOString(),
+        updatedAt: docData.updatedAt ? (docData.updatedAt as Timestamp).toDate().toISOString() : undefined,
+      } as SecretaryDocument;
+    });
+  } catch (e) {
+    console.error("Error getting secretary documents: ", e);
+    return [];
+  }
+};
+
+// Accounting Entries CRUD (Basic for now)
+export const addAccountingEntryToFirestore = async (entryData: Omit<AccountingEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<AccountingEntry> => {
+  try {
+    const dataToSave = { ...entryData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    const docRef = await addDoc(accountingEntriesCollectionRef, dataToSave);
+    const newDocSnap = await getDoc(docRef);
+    if (newDocSnap.exists()) {
+      const savedData = newDocSnap.data();
+      return {
+        id: newDocSnap.id,
+        ...savedData,
+        createdAt: (savedData.createdAt as Timestamp).toDate().toISOString(),
+        updatedAt: (savedData.updatedAt as Timestamp).toDate().toISOString(),
+      } as AccountingEntry;
+    }
+    throw new Error("Failed to retrieve saved accounting entry.");
+  } catch (e) {
+    console.error("Error adding accounting entry: ", e);
+    throw e;
+  }
+};
+
+export const getAccountingEntriesFromFirestore = async (): Promise<AccountingEntry[]> => {
+  try {
+    const q = query(accountingEntriesCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const entryData = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...entryData,
+        createdAt: (entryData.createdAt as Timestamp).toDate().toISOString(),
+        updatedAt: entryData.updatedAt ? (entryData.updatedAt as Timestamp).toDate().toISOString() : undefined,
+      } as AccountingEntry;
+    });
+  } catch (e) {
+    console.error("Error getting accounting entries: ", e);
+    return [];
   }
 };

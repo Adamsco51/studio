@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Loader2, Users, UserCheck, ShieldCheck, Edit } from 'lucide-react';
+import { Loader2, Users, UserCheck, ShieldCheck, Edit, Briefcase } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,6 +28,14 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 
+const jobTitleOptions: UserProfile['jobTitle'][] = [
+  "Agent Opérationnel",
+  "Secrétaire",
+  "Comptable",
+  "Manager",
+  "Autre",
+];
+
 export default function AdminUsersPage() {
   const { user, isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -37,8 +45,9 @@ export default function AdminUsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [newRole, setNewRole] = useState<'admin' | 'employee' | undefined>(undefined);
+  const [newJobTitle, setNewJobTitle] = useState<UserProfile['jobTitle']>(undefined);
   const [newDisplayName, setNewDisplayName] = useState<string>('');
-  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -65,18 +74,19 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
-  const handleOpenEditRoleDialog = (userToEdit: UserProfile) => {
+  const handleOpenEditDialog = (userToEdit: UserProfile) => {
     setEditingUser(userToEdit);
     setNewRole(userToEdit.role);
+    setNewJobTitle(userToEdit.jobTitle || 'Agent Opérationnel');
     setNewDisplayName(userToEdit.displayName || '');
   };
 
   const handleUpdateUserInfo = async () => {
-    if (!editingUser || !newRole || newDisplayName.trim() === '') {
+    if (!editingUser || !newRole || !newJobTitle || newDisplayName.trim() === '') {
         toast({ title: "Erreur", description: "Veuillez vérifier les informations saisies.", variant: "destructive" });
         return;
     }
-    setIsUpdatingRole(true);
+    setIsUpdatingUser(true);
     try {
       const updates: Partial<UserProfile> = {};
       if (newDisplayName !== editingUser.displayName) {
@@ -85,6 +95,10 @@ export default function AdminUsersPage() {
       if (newRole !== editingUser.role) {
         updates.role = newRole;
       }
+      if (newJobTitle !== (editingUser.jobTitle || 'Agent Opérationnel')) {
+        updates.jobTitle = newJobTitle;
+      }
+
 
       if (Object.keys(updates).length === 0) {
         toast({ title: "Aucune Modification", description: "Aucune information n'a été modifiée." });
@@ -94,13 +108,13 @@ export default function AdminUsersPage() {
 
       await updateUserProfileInFirestore(editingUser.uid, updates);
       toast({ title: "Informations Mises à Jour", description: `Les informations de ${editingUser.displayName || editingUser.email} ont été mises à jour.` });
-      fetchUsers();
-      setEditingUser(null);
+      fetchUsers(); // Refresh the list
+      setEditingUser(null); // Close dialog
     } catch (error) {
       console.error("Failed to update user info:", error);
       toast({ title: "Erreur", description: "Impossible de mettre à jour les informations.", variant: "destructive" });
     } finally {
-      setIsUpdatingRole(false);
+      setIsUpdatingUser(false);
     }
   };
 
@@ -145,6 +159,7 @@ export default function AdminUsersPage() {
                   <TableHead>Nom d'Affichage</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Rôle</TableHead>
+                  <TableHead>Poste</TableHead>
                   <TableHead>Date de Création</TableHead>
                   <TableHead>UID</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -161,10 +176,15 @@ export default function AdminUsersPage() {
                         {profile.role === 'admin' ? 'Admin' : 'Employé'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                        <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                           <Briefcase className="h-3 w-3"/> {profile.jobTitle || 'Non défini'}
+                        </Badge>
+                    </TableCell>
                     <TableCell>{profile.createdAt ? format(parseISO(profile.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{profile.uid}</TableCell>
                     <TableCell className="text-right">
-                       <Button variant="outline" size="sm" onClick={() => handleOpenEditRoleDialog(profile)} disabled={isUpdatingRole}>
+                       <Button variant="outline" size="sm" onClick={() => handleOpenEditDialog(profile)} disabled={isUpdatingUser}>
                          <Edit className="mr-1 h-4 w-4" /> Modifier
                        </Button>
                     </TableCell>
@@ -182,7 +202,7 @@ export default function AdminUsersPage() {
             <DialogHeader>
               <DialogTitle>Modifier Utilisateur: {editingUser.displayName || editingUser.email || "Utilisateur sélectionné"}</DialogTitle>
               <DialogDescription>
-                Modifiez le nom d'affichage et/ou le rôle de cet utilisateur.
+                Modifiez le nom, le rôle et/ou le poste de cet utilisateur.
               </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-4">
@@ -197,12 +217,12 @@ export default function AdminUsersPage() {
                   value={newDisplayName}
                   onChange={(e) => setNewDisplayName(e.target.value)}
                   className="mt-1"
-                  disabled={isUpdatingRole}
+                  disabled={isUpdatingUser}
                 />
               </div>
               <div>
                 <Label htmlFor="userRole">Nouveau Rôle</Label>
-                <Select value={newRole} onValueChange={(value) => setNewRole(value as 'admin' | 'employee')} disabled={isUpdatingRole}>
+                <Select value={newRole} onValueChange={(value) => setNewRole(value as 'admin' | 'employee')} disabled={isUpdatingUser}>
                   <SelectTrigger id="userRole" className="mt-1">
                     <SelectValue placeholder="Sélectionner un rôle" />
                   </SelectTrigger>
@@ -212,19 +232,31 @@ export default function AdminUsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label htmlFor="userJobTitle">Nouveau Poste</Label>
+                <Select value={newJobTitle} onValueChange={(value) => setNewJobTitle(value as UserProfile['jobTitle'])} disabled={isUpdatingUser}>
+                  <SelectTrigger id="userJobTitle" className="mt-1">
+                    <SelectValue placeholder="Sélectionner un poste" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {jobTitleOptions.map(title => (
+                        <SelectItem key={title} value={title}>{title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
-              <DialogClose asChild><Button variant="outline" disabled={isUpdatingRole} onClick={() => setEditingUser(null)}>Annuler</Button></DialogClose>
+              <DialogClose asChild><Button variant="outline" disabled={isUpdatingUser} onClick={() => setEditingUser(null)}>Annuler</Button></DialogClose>
               <Button
                 onClick={handleUpdateUserInfo}
                 disabled={
-                  isUpdatingRole ||
-                  !newRole ||
-                  newDisplayName.trim() === '' ||
-                  (newRole === editingUser.role && newDisplayName === (editingUser.displayName || ''))
+                  isUpdatingUser ||
+                  !newRole || !newJobTitle || newDisplayName.trim() === '' ||
+                  (newRole === editingUser.role && newJobTitle === (editingUser.jobTitle || 'Agent Opérationnel') && newDisplayName === (editingUser.displayName || ''))
                 }
               >
-                {isUpdatingRole && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isUpdatingUser && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Sauvegarder
               </Button>
             </DialogFooter>

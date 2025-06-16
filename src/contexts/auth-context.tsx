@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUserType | null) => {
       if (firebaseUser) {
         let userRole: 'admin' | 'employee' = 'employee'; // Default role
+        let userJobTitle: UserProfile['jobTitle'] = 'Agent Opérationnel'; // Default job title
         let userProfile = await getUserProfile(firebaseUser.uid);
 
         // Ensure admin user has admin role in Firestore
@@ -32,23 +33,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!userProfile || userProfile.role !== 'admin') {
             // Create or update profile for designated admin
             try {
-              await createUserProfile(firebaseUser.uid, firebaseUser.email, firebaseUser.displayName, 'admin');
+              await createUserProfile(firebaseUser.uid, firebaseUser.email, firebaseUser.displayName, 'admin', 'Manager');
               userProfile = await getUserProfile(firebaseUser.uid); // Re-fetch to get the latest profile
             } catch (error) {
               console.error("Error ensuring admin profile:", error);
-              // Fallback or error handling if admin profile creation fails
             }
           }
         }
         
         if (userProfile) {
           userRole = userProfile.role;
+          userJobTitle = userProfile.jobTitle || 'Agent Opérationnel';
         } else if (firebaseUser.uid !== process.env.NEXT_PUBLIC_ADMIN_UID) {
           // If profile doesn't exist and not the designated admin, create one with default 'employee' role
           try {
-            await createUserProfile(firebaseUser.uid, firebaseUser.email, firebaseUser.displayName, 'employee');
+            await createUserProfile(firebaseUser.uid, firebaseUser.email, firebaseUser.displayName, 'employee', 'Agent Opérationnel');
             userProfile = await getUserProfile(firebaseUser.uid); // Re-fetch
-            if(userProfile) userRole = userProfile.role;
+            if(userProfile) {
+                userRole = userProfile.role;
+                userJobTitle = userProfile.jobTitle || 'Agent Opérationnel';
+            }
           } catch (error) {
             console.error("Error creating default user profile:", error);
           }
@@ -60,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: firebaseUser.email,
           displayName: firebaseUser.displayName || userProfile?.displayName || firebaseUser.email || "Utilisateur",
           role: userRole,
+          jobTitle: userJobTitle,
         };
         setUser(appUser);
         setIsAdmin(userRole === 'admin');

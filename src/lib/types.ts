@@ -65,6 +65,7 @@ export interface User {
   id: string;
   name: string;
   role: 'employee' | 'admin';
+  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | string; // Added jobTitle
 }
 
 export interface AuthUser {
@@ -72,6 +73,7 @@ export interface AuthUser {
   email: string | null;
   displayName: string | null;
   role?: 'admin' | 'employee';
+  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | string; // Added jobTitle
 }
 
 export interface UserProfile {
@@ -79,6 +81,7 @@ export interface UserProfile {
   email: string | null; // Email field is important here
   displayName: string | null;
   role: 'admin' | 'employee';
+  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | string; // Added jobTitle
   createdAt: string;
 }
 
@@ -131,7 +134,6 @@ export interface Transport {
   actualArrivalDate?: string | null; // ISO Date string
   status: TransportStatus;
   notes?: string | null;
-  // costs?: Array<{ description: string; amount: number; currency: string }>; // For future enhancement
   totalCost?: number; // Simplified cost for now
   createdAt: string; // ISO Date string
   createdByUserId: string;
@@ -195,5 +197,33 @@ export interface CompanyProfile {
   companyAddress?: string;
   companyEmail?: string;
   companyPhone?: string;
-  // companyLogoUrl?: string; // For future use
+}
+
+// Types for Secretary and Accounting sections (basic for now)
+export interface SecretaryDocument {
+  id: string;
+  title: string;
+  content: string; // Could be HTML from Quill
+  documentType: 'letter' | 'memo' | 'report' | 'other';
+  recipientEmail?: string;
+  createdAt: string; // ISO Date string
+  createdByUserId: string;
+  updatedAt?: string; // ISO Date string
+}
+
+export interface AccountingEntry {
+  id: string;
+  entryType: 'invoice' | 'receipt' | 'debit_note' | 'credit_note' | 'quote';
+  referenceNumber: string;
+  relatedBlId?: string;
+  relatedClientId?: string;
+  amount: number;
+  currency: string; // e.g., XOF, USD
+  entryDate: string; // ISO Date string
+  dueDate?: string; // ISO Date string
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  notes?: string;
+  createdAt: string; // ISO Date string
+  createdByUserId: string;
+  updatedAt?: string; // ISO Date string
 }
