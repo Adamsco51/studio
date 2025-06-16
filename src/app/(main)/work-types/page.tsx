@@ -60,6 +60,7 @@ export default function WorkTypesPage() {
   const [showPinDialog, setShowPinDialog] = useState(false);
   const [pinEntry, setPinEntry] = useState('');
   const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
+  const [pinActionType, setPinActionType] = useState<'edit' | 'delete' | null>(null);
 
   const fetchWorkTypes = useCallback(async () => {
     if (!user) {
@@ -93,7 +94,7 @@ export default function WorkTypesPage() {
   const handleEditWorkTypeAction = async (workType: WorkType) => {
     if (!user) return;
     setWorkTypeTargetedForAction(workType);
-    setCurrentActionType('edit');
+    setCurrentActionType('edit'); // For the reason dialog if needed
 
     if (isAdmin || workType.createdByUserId === user.uid) {
       router.push(`/work-types/${workType.id}/edit`);
@@ -103,6 +104,7 @@ export default function WorkTypesPage() {
         const pinRequest = await getPinIssuedRequestForEntity('workType', workType.id, 'edit');
         if (pinRequest) {
           setActivePinRequest(pinRequest);
+          setPinActionType('edit'); // Set pinActionType here
           setShowPinDialog(true);
         } else {
           setActionReason('');
@@ -119,16 +121,17 @@ export default function WorkTypesPage() {
   const handleDeleteWorkTypeAction = async (workType: WorkType) => {
     if (!user) return;
     setWorkTypeTargetedForAction(workType);
-    setCurrentActionType('delete');
+    setCurrentActionType('delete'); // For the reason dialog if needed
 
     if (isAdmin || workType.createdByUserId === user.uid) {
-        setShowReasonDialog(true); // Admin or owner confirms deletion directly (dialog reused for confirmation)
+        setShowReasonDialog(true); 
     } else {
         setIsProcessingAction(true);
         try {
             const pinRequest = await getPinIssuedRequestForEntity('workType', workType.id, 'delete');
             if (pinRequest) {
                 setActivePinRequest(pinRequest);
+                setPinActionType('delete'); // Set pinActionType here
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
@@ -153,7 +156,7 @@ export default function WorkTypesPage() {
     }
     if (activePinRequest.pinExpiresAt && new Date() > parseISO(activePinRequest.pinExpiresAt)) {
         toast({ title: "Erreur", description: "Le PIN a expiré.", variant: "destructive" });
-        setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null);
+        setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setPinActionType(null);
         return;
     }
 
@@ -165,14 +168,14 @@ export default function WorkTypesPage() {
             router.push(`/work-types/${workTypeTargetedForAction.id}/edit`);
         } else if (pinActionType === 'delete') {
             await deleteWorkTypeFromFirestore(workTypeTargetedForAction.id);
-            fetchWorkTypes(); // Refresh list
+            fetchWorkTypes(); 
             toast({ title: "Type de Travail Supprimé", description: `"${workTypeTargetedForAction.name}" a été supprimé via PIN.` });
         }
     } catch (error) {
         console.error(`Erreur lors de l'action ${pinActionType} avec PIN:`, error);
         toast({ title: "Erreur", description: `Échec de l'action ${pinActionType} avec PIN.`, variant: "destructive" });
     } finally {
-        setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null);
+        setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setPinActionType(null);
         setIsProcessingAction(false);
     }
   };
@@ -180,12 +183,12 @@ export default function WorkTypesPage() {
   const handleReasonDialogSubmit = async () => {
     if (!workTypeTargetedForAction || !currentActionType || !user) return;
 
-    if (isAdmin || workTypeTargetedForAction.createdByUserId === user.uid) { // Direct delete for admin or owner
+    if (isAdmin || workTypeTargetedForAction.createdByUserId === user.uid) { 
         if (currentActionType === 'delete') {
             setIsProcessingAction(true);
             try {
                 await deleteWorkTypeFromFirestore(workTypeTargetedForAction.id);
-                fetchWorkTypes(); // Refresh list
+                fetchWorkTypes(); 
                 toast({ title: "Type de Travail Supprimé", description: `"${workTypeTargetedForAction.name}" a été supprimé.` });
             } catch (error) {
                 toast({ title: "Erreur de Suppression", variant: "destructive" });
@@ -193,7 +196,7 @@ export default function WorkTypesPage() {
                 setIsProcessingAction(false);
             }
         }
-    } else { // Submit approval request
+    } else { 
         if (!actionReason.trim()) {
             toast({ title: "Raison Requise", description: "Veuillez fournir une raison pour votre demande.", variant: "destructive" });
             return;
@@ -356,7 +359,7 @@ export default function WorkTypesPage() {
 
        {/* PIN Entry Dialog */}
        <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
-        if (!isOpen) { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null); }
+        if (!isOpen) { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null); setPinActionType(null); }
         setShowPinDialog(isOpen);
       }}>
         <DialogContent className="sm:max-w-md">
@@ -384,7 +387,7 @@ export default function WorkTypesPage() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-                <Button variant="outline" disabled={isProcessingAction} onClick={() => { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null);}}>Annuler</Button>
+                <Button variant="outline" disabled={isProcessingAction} onClick={() => { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null); setPinActionType(null);}}>Annuler</Button>
             </DialogClose>
             <Button onClick={handlePinSubmit} disabled={isProcessingAction || pinEntry.length !== 6}>
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -396,3 +399,4 @@ export default function WorkTypesPage() {
     </>
   );
 }
+
