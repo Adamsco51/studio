@@ -154,65 +154,67 @@ export default function MyRequestsPage() {
               <p className="mt-2">Aucune demande à afficher.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Entité</TableHead>
-                  <TableHead>Action Demandée</TableHead>
-                  <TableHead>Raison</TableHead>
-                  <TableHead>Date Demande</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Notes Admin</TableHead>
-                  <TableHead>Date Traitement</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.map((req) => {
-                  const entityLink = getEntityLink(req);
-                  const isPinValid = req.pinCode && req.pinExpiresAt && new Date() < parseISO(req.pinExpiresAt);
-                  return (
-                    <TableRow key={req.id}>
-                      <TableCell>
-                          <div>{getEntityTypeText(req.entityType)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {entityLink ? (
-                                <Link href={entityLink} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" title="Voir l'entité">
-                                    {req.entityDescription || req.entityId}
-                                </Link>
-                            ) : (
-                                req.entityDescription || req.entityId
-                            )}
-                          </div>
-                      </TableCell>
-                      <TableCell>{getActionText(req.actionType)}</TableCell>
-                      <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
-                      <TableCell>{req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
-                           {req.status === 'pending' && <Clock className="mr-1 h-3 w-3" />}
-                           {req.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
-                           {req.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
-                           {req.status === 'completed' && <CheckCircle className="mr-1 h-3 w-3 text-green-500" />}
-                           {req.status === 'pin_issued' && <KeyRound className="mr-1 h-3 w-3" />}
-                          {getStatusText(req.status)}
-                        </Badge>
-                        {req.status === 'pin_issued' && req.pinCode && (
-                          <p className={`text-xs ${isPinValid ? 'text-green-600' : 'text-red-500 line-through'} italic`}>
-                            PIN: {req.pinCode} {req.pinExpiresAt && isPinValid ? `(Expire le ${format(parseISO(req.pinExpiresAt), 'dd/MM HH:mm', { locale: fr })})` : '(Expiré)'}
-                          </p>
-                        )}
-                      </TableCell>
-                       <TableCell className="max-w-xs truncate text-xs text-muted-foreground italic" title={req.adminNotes}>
-                        {req.adminNotes || '-'}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {req.processedAt ? format(parseISO(req.processedAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : '-'}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Entité</TableHead>
+                    <TableHead>Action Demandée</TableHead>
+                    <TableHead>Raison</TableHead>
+                    <TableHead>Date Demande</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead>Notes Admin</TableHead>
+                    <TableHead>Date Traitement</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {requests.map((req) => {
+                    const entityLink = getEntityLink(req);
+                    const isPinValid = req.pinCode && req.pinExpiresAt && new Date() < parseISO(req.pinExpiresAt);
+                    return (
+                      <TableRow key={req.id}>
+                        <TableCell>
+                            <div>{getEntityTypeText(req.entityType)}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {entityLink ? (
+                                  <Link href={entityLink} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" title="Voir l'entité">
+                                      {req.entityDescription || req.entityId}
+                                  </Link>
+                              ) : (
+                                  req.entityDescription || req.entityId
+                              )}
+                            </div>
+                        </TableCell>
+                        <TableCell>{getActionText(req.actionType)}</TableCell>
+                        <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
+                        <TableCell>{req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
+                             {req.status === 'pending' && <Clock className="mr-1 h-3 w-3" />}
+                             {req.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
+                             {req.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
+                             {req.status === 'completed' && <CheckCircle className="mr-1 h-3 w-3 text-green-500" />}
+                             {req.status === 'pin_issued' && <KeyRound className="mr-1 h-3 w-3" />}
+                            {getStatusText(req.status)}
+                          </Badge>
+                          {req.status === 'pin_issued' && req.pinCode && (
+                            <p className={`text-xs ${isPinValid ? 'text-green-600' : 'text-red-500 line-through'} italic`}>
+                              PIN: {req.pinCode} {req.pinExpiresAt && isPinValid ? `(Expire le ${format(parseISO(req.pinExpiresAt), 'dd/MM HH:mm', { locale: fr })})` : '(Expiré)'}
+                            </p>
+                          )}
+                        </TableCell>
+                         <TableCell className="max-w-xs truncate text-xs text-muted-foreground italic" title={req.adminNotes}>
+                          {req.adminNotes || '-'}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {req.processedAt ? format(parseISO(req.processedAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : '-'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

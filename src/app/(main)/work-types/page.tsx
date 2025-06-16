@@ -334,36 +334,38 @@ export default function WorkTypesPage() {
                 )}
             </div>
           ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Date Création</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredWorkTypes.map((wt) => (
-                <TableRow key={wt.id}>
-                  <TableCell className="font-medium">{wt.name}</TableCell>
-                  <TableCell>{wt.description || 'N/A'}</TableCell>
-                  <TableCell>{wt.createdAt ? format(parseISO(wt.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
-                  <TableCell className="text-right space-x-1">
-                    <Button variant="outline" size="sm" onClick={() => handleEditWorkTypeAction(wt)}
-                        disabled={isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id}>
-                        {(isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Edit className="mr-1 h-4 w-4" />} Modifier
-                    </Button>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nom</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Date Création</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredWorkTypes.map((wt) => (
+                    <TableRow key={wt.id}>
+                      <TableCell className="font-medium">{wt.name}</TableCell>
+                      <TableCell>{wt.description || 'N/A'}</TableCell>
+                      <TableCell>{wt.createdAt ? format(parseISO(wt.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                      <TableCell className="text-right space-x-1">
+                        <Button variant="outline" size="sm" onClick={() => handleEditWorkTypeAction(wt)}
+                            disabled={isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id}>
+                            {(isProcessingAction && pinActionType === 'edit' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Edit className="mr-1 h-4 w-4" />} Modifier
+                        </Button>
 
-                    <Button variant="destructive" size="sm" onClick={() => handleDeleteWorkTypeAction(wt)}
-                        disabled={isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id}>
-                        {(isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Trash2 className="mr-1 h-4 w-4" />} Supprimer
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteWorkTypeAction(wt)}
+                            disabled={isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id}>
+                            {(isProcessingAction && pinActionType === 'delete' && workTypeTargetedForAction?.id === wt.id) ? <Loader2 className="mr-1 h-4 w-4 animate-spin"/> : <Trash2 className="mr-1 h-4 w-4" />} Supprimer
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

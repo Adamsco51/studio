@@ -83,31 +83,33 @@ export default function SessionAuditLogPage() {
               <p className="mt-2">Aucun événement à afficher.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Utilisateur</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Date et Heure</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {auditEvents.map((event) => (
-                  <TableRow key={event.id}>
-                    <TableCell className="font-medium">{event.userDisplayName || 'N/A'}</TableCell>
-                    <TableCell>{event.userEmail || 'N/A'}</TableCell>
-                    <TableCell>
-                      <span className={`flex items-center gap-1 ${event.action === 'login' ? 'text-green-600' : 'text-red-600'}`}>
-                        {event.action === 'login' ? <LogIn className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
-                        {event.action === 'login' ? 'Connexion' : 'Déconnexion'}
-                      </span>
-                    </TableCell>
-                    <TableCell>{event.timestamp ? format(parseISO(event.timestamp), 'dd MMM yyyy, HH:mm:ss', { locale: fr }) : 'N/A'}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Utilisateur</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Date et Heure</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {auditEvents.map((event) => (
+                    <TableRow key={event.id}>
+                      <TableCell className="font-medium">{event.userDisplayName || 'N/A'}</TableCell>
+                      <TableCell>{event.userEmail || 'N/A'}</TableCell>
+                      <TableCell>
+                        <span className={`flex items-center gap-1 ${event.action === 'login' ? 'text-green-600' : 'text-red-600'}`}>
+                          {event.action === 'login' ? <LogIn className="h-4 w-4" /> : <LogOut className="h-4 w-4" />}
+                          {event.action === 'login' ? 'Connexion' : 'Déconnexion'}
+                        </span>
+                      </TableCell>
+                      <TableCell>{event.timestamp ? format(parseISO(event.timestamp), 'dd MMM yyyy, HH:mm:ss', { locale: fr }) : 'N/A'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -200,79 +200,81 @@ export default function TransportsPage() {
                 )}
             </div>
           ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>N° Transport</TableHead>
-                <TableHead>BL</TableHead>
-                <TableHead>Camion</TableHead>
-                <TableHead>Chauffeur</TableHead>
-                <TableHead>Origine - Destination</TableHead>
-                <TableHead>Départ Prévu</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredTransports.map((transport) => (
-                <TableRow key={transport.id}>
-                  <TableCell className="font-medium">{transport.transportNumber}</TableCell>
-                  <TableCell>
-                    <Link href={`/bls/${transport.blId}`} className="text-primary hover:underline">
-                        BL associé
-                    </Link>
-                  </TableCell>
-                  <TableCell>{transport.truckRegistrationNumber || <span className="text-muted-foreground italic">N/A</span>}</TableCell>
-                  <TableCell>{transport.driverName || <span className="text-muted-foreground italic">N/A</span>}</TableCell>
-                  <TableCell>{transport.origin} <Route className="inline h-4 w-4 mx-1 text-muted-foreground" /> {transport.destination}</TableCell>
-                  <TableCell>{format(parseISO(transport.plannedDepartureDate), 'dd MMM yyyy', { locale: fr })}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(transport.status) as any} className="capitalize flex items-center w-fit">
-                      {getStatusIcon(transport.status)}
-                      {getStatusText(transport.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-1">
-                     {/* <Link href={`/transports/${transport.id}`} passHref>
-                        <Button variant="ghost" size="icon" title="Voir Détails" disabled={isDeleting}>
-                            <Eye className="h-4 w-4" />
-                        </Button>
-                    </Link> */}
-                    <Link href={`/transports/${transport.id}/edit`} passHref>
-                      <Button variant="outline" size="sm" disabled={isDeleting}>
-                        <Edit className="mr-1 h-4 w-4" /> Modifier
-                      </Button>
-                    </Link>
-                    {isAdmin && (
-                       <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button variant="destructive" size="sm" onClick={() => setTransportToDelete(transport)} disabled={isDeleting && transportToDelete?.id === transport.id}>
-                                {(isDeleting && transportToDelete?.id === transport.id) && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-                                <Trash2 className="mr-1 h-4 w-4" /> Supprimer
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>N° Transport</TableHead>
+                    <TableHead>BL</TableHead>
+                    <TableHead>Camion</TableHead>
+                    <TableHead>Chauffeur</TableHead>
+                    <TableHead>Origine - Destination</TableHead>
+                    <TableHead>Départ Prévu</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTransports.map((transport) => (
+                    <TableRow key={transport.id}>
+                      <TableCell className="font-medium">{transport.transportNumber}</TableCell>
+                      <TableCell>
+                        <Link href={`/bls/${transport.blId}`} className="text-primary hover:underline">
+                            BL associé
+                        </Link>
+                      </TableCell>
+                      <TableCell>{transport.truckRegistrationNumber || <span className="text-muted-foreground italic">N/A</span>}</TableCell>
+                      <TableCell>{transport.driverName || <span className="text-muted-foreground italic">N/A</span>}</TableCell>
+                      <TableCell>{transport.origin} <Route className="inline h-4 w-4 mx-1 text-muted-foreground" /> {transport.destination}</TableCell>
+                      <TableCell>{format(parseISO(transport.plannedDepartureDate), 'dd MMM yyyy', { locale: fr })}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(transport.status) as any} className="capitalize flex items-center w-fit">
+                          {getStatusIcon(transport.status)}
+                          {getStatusText(transport.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right space-x-1">
+                         {/* <Link href={`/transports/${transport.id}`} passHref>
+                            <Button variant="ghost" size="icon" title="Voir Détails" disabled={isDeleting}>
+                                <Eye className="h-4 w-4" />
                             </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Êtes-vous sûr de vouloir supprimer le transport {transportToDelete?.transportNumber}? Cette action est irréversible.
-                            </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setTransportToDelete(null)} disabled={isDeleting}>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDeleteTransport} disabled={isDeleting}>
-                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Confirmer
-                            </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                        </AlertDialog>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                        </Link> */}
+                        <Link href={`/transports/${transport.id}/edit`} passHref>
+                          <Button variant="outline" size="sm" disabled={isDeleting}>
+                            <Edit className="mr-1 h-4 w-4" /> Modifier
+                          </Button>
+                        </Link>
+                        {isAdmin && (
+                           <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                               <Button variant="destructive" size="sm" onClick={() => setTransportToDelete(transport)} disabled={isDeleting && transportToDelete?.id === transport.id}>
+                                    {(isDeleting && transportToDelete?.id === transport.id) && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                                    <Trash2 className="mr-1 h-4 w-4" /> Supprimer
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Êtes-vous sûr de vouloir supprimer le transport {transportToDelete?.transportNumber}? Cette action est irréversible.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setTransportToDelete(null)} disabled={isDeleting}>Annuler</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeleteTransport} disabled={isDeleting}>
+                                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Confirmer
+                                </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

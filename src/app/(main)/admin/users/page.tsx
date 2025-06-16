@@ -153,45 +153,47 @@ export default function AdminUsersPage() {
               <p className="mt-2">Il n'y a aucun utilisateur à afficher.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nom d'Affichage</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Rôle</TableHead>
-                  <TableHead>Poste</TableHead>
-                  <TableHead>Date de Création</TableHead>
-                  <TableHead>UID</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {usersList.map((profile) => (
-                  <TableRow key={profile.uid}>
-                    <TableCell className="font-medium">{profile.displayName || 'N/A'}</TableCell>
-                    <TableCell>{profile.email || 'N/A'}</TableCell>
-                    <TableCell>
-                      <Badge variant={profile.role === 'admin' ? 'destructive' : 'secondary'}>
-                        {profile.role === 'admin' ? <ShieldCheck className="mr-1 h-3 w-3" /> : <UserCheck className="mr-1 h-3 w-3" />}
-                        {profile.role === 'admin' ? 'Admin' : 'Employé'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                        <Badge variant="outline" className="flex items-center gap-1 w-fit">
-                           <Briefcase className="h-3 w-3"/> {profile.jobTitle || 'Non défini'}
-                        </Badge>
-                    </TableCell>
-                    <TableCell>{profile.createdAt ? format(parseISO(profile.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{profile.uid}</TableCell>
-                    <TableCell className="text-right">
-                       <Button variant="outline" size="sm" onClick={() => handleOpenEditDialog(profile)} disabled={isUpdatingUser}>
-                         <Edit className="mr-1 h-4 w-4" /> Modifier
-                       </Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nom d'Affichage</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Rôle</TableHead>
+                    <TableHead>Poste</TableHead>
+                    <TableHead>Date de Création</TableHead>
+                    <TableHead>UID</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {usersList.map((profile) => (
+                    <TableRow key={profile.uid}>
+                      <TableCell className="font-medium">{profile.displayName || 'N/A'}</TableCell>
+                      <TableCell>{profile.email || 'N/A'}</TableCell>
+                      <TableCell>
+                        <Badge variant={profile.role === 'admin' ? 'destructive' : 'secondary'}>
+                          {profile.role === 'admin' ? <ShieldCheck className="mr-1 h-3 w-3" /> : <UserCheck className="mr-1 h-3 w-3" />}
+                          {profile.role === 'admin' ? 'Admin' : 'Employé'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                          <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                             <Briefcase className="h-3 w-3"/> {profile.jobTitle || 'Non défini'}
+                          </Badge>
+                      </TableCell>
+                      <TableCell>{profile.createdAt ? format(parseISO(profile.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{profile.uid}</TableCell>
+                      <TableCell className="text-right">
+                         <Button variant="outline" size="sm" onClick={() => handleOpenEditDialog(profile)} disabled={isUpdatingUser}>
+                           <Edit className="mr-1 h-4 w-4" /> Modifier
+                         </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

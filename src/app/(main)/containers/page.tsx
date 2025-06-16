@@ -282,45 +282,47 @@ export default function ContainersPage() {
               )}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>N° Conteneur</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>N° Plomb</TableHead>
-                  <TableHead>N° BL</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Créé le</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredContainers.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.containerNumber}</TableCell>
-                    <TableCell>{c.type}</TableCell>
-                    <TableCell>{c.sealNumber || '-'}</TableCell>
-                    <TableCell>
-                      {c.blNumber && c.blId ? (
-                        <Link href={`/bls/${c.blId}`} className="text-primary hover:underline flex items-center gap-1">
-                          <FileText className="h-3 w-3"/> {c.blNumber}
-                        </Link>
-                      ) : <span className="text-muted-foreground italic">N/A</span>}
-                    </TableCell>
-                    <TableCell><Badge variant="secondary">{c.status}</Badge></TableCell>
-                    <TableCell>{formatDateForDisplay(c.createdAt)}</TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button variant="outline" size="sm" onClick={() => handleEditContainerAction(c)} disabled={isProcessingAction}>
-                         <Edit className="mr-1 h-3 w-3"/> Modifier
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteContainerAction(c)} disabled={isProcessingAction}>
-                         <Trash2 className="mr-1 h-3 w-3"/> Supprimer
-                      </Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>N° Conteneur</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>N° Plomb</TableHead>
+                    <TableHead>N° BL</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead>Créé le</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredContainers.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.containerNumber}</TableCell>
+                      <TableCell>{c.type}</TableCell>
+                      <TableCell>{c.sealNumber || '-'}</TableCell>
+                      <TableCell>
+                        {c.blNumber && c.blId ? (
+                          <Link href={`/bls/${c.blId}`} className="text-primary hover:underline flex items-center gap-1">
+                            <FileText className="h-3 w-3"/> {c.blNumber}
+                          </Link>
+                        ) : <span className="text-muted-foreground italic">N/A</span>}
+                      </TableCell>
+                      <TableCell><Badge variant="secondary">{c.status}</Badge></TableCell>
+                      <TableCell>{formatDateForDisplay(c.createdAt)}</TableCell>
+                      <TableCell className="text-right space-x-1">
+                        <Button variant="outline" size="sm" onClick={() => handleEditContainerAction(c)} disabled={isProcessingAction}>
+                           <Edit className="mr-1 h-3 w-3"/> Modifier
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteContainerAction(c)} disabled={isProcessingAction}>
+                           <Trash2 className="mr-1 h-3 w-3"/> Supprimer
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

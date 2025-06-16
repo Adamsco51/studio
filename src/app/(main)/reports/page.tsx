@@ -253,32 +253,34 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             {selectedReportType === "profitability_bl" && reportResults.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>N° BL</TableHead>
-                    <TableHead>Client</TableHead> 
-                    <TableHead>Date Création</TableHead>
-                    <TableHead className="text-right">Montant Alloué</TableHead>
-                    <TableHead className="text-right">Dépenses Totales</TableHead>
-                    <TableHead className="text-right">Bénéfice / Perte</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {reportResults.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{item.blNumber}</TableCell>
-                      <TableCell>{item.clientName}</TableCell> 
-                      <TableCell>{item.createdAt ? format(parseISO(item.createdAt), 'dd MMM yyyy', { locale: fr }) : 'N/A'}</TableCell>
-                      <TableCell className="text-right">{item.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
-                      <TableCell className="text-right">{item.totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
-                      <TableCell className={`text-right font-semibold ${item.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {item.profit.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>N° BL</TableHead>
+                      <TableHead>Client</TableHead> 
+                      <TableHead>Date Création</TableHead>
+                      <TableHead className="text-right">Montant Alloué</TableHead>
+                      <TableHead className="text-right">Dépenses Totales</TableHead>
+                      <TableHead className="text-right">Bénéfice / Perte</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {reportResults.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{item.blNumber}</TableCell>
+                        <TableCell>{item.clientName}</TableCell> 
+                        <TableCell>{item.createdAt ? format(parseISO(item.createdAt), 'dd MMM yyyy', { locale: fr }) : 'N/A'}</TableCell>
+                        <TableCell className="text-right">{item.allocatedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
+                        <TableCell className="text-right">{item.totalExpenses.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
+                        <TableCell className={`text-right font-semibold ${item.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {item.profit.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
             {selectedReportType !== "profitability_bl" && (
                  <p className="text-muted-foreground">Ce type de rapport n'est pas encore affiché ici.</p>

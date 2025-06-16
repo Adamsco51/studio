@@ -486,64 +486,66 @@ export default function ExpensesPage() {
                 )}
             </div>
          ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Libellé</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>N° BL</TableHead>
-                <TableHead>Client</TableHead>
-                <TableHead>Employé</TableHead>
-                <TableHead className="text-right">Montant</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredExpenses.map((exp) => (
-                <TableRow key={exp.id}>
-                  <TableCell className="font-medium">{exp.label}</TableCell>
-                  <TableCell>{exp.date ? format(parseISO(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
-                  <TableCell>
-                    {exp.blNumber && exp.blId ? (
-                      <Link href={`/bls/${exp.blId}`} className="text-primary hover:underline flex items-center gap-1">
-                        <FileText className="h-4 w-4" /> {exp.blNumber}
-                      </Link>
-                    ) : 'N/A'}
-                  </TableCell>
-                  <TableCell>{exp.clientName || 'N/A'}</TableCell>
-                  <TableCell className="flex items-center gap-1 pt-4">
-                    <UserIconLucide className="h-4 w-4 text-muted-foreground" /> {exp.employeeName || 'N/A'}
-                  </TableCell>
-                  <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end space-x-1">
-                      {exp.blId && (
-                        <Link href={`/bls/${exp.blId}`} passHref>
-                          <Button variant="ghost" size="sm" title="Voir BL" disabled={isProcessingAction}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      )}
-                      <Button variant="ghost" size="sm" title="Modifier Dépense" onClick={() => handleEditExpenseAction(exp)} 
-                        disabled={isProcessingAction && pinActionType === 'edit' && expenseTargetedForAction?.id === exp.id}>
-                        {(isProcessingAction && pinActionType === 'edit' && expenseTargetedForAction?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin"/> : <Edit className="h-4 w-4" />}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive"
-                        title="Supprimer Dépense"
-                        onClick={() => handleDeleteExpenseAction(exp)}
-                        disabled={isProcessingAction && pinActionType === 'delete' && expenseTargetedForAction?.id === exp.id}
-                      >
-                        {(isProcessingAction && pinActionType === 'delete' && expenseTargetedForAction?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Libellé</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>N° BL</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Employé</TableHead>
+                  <TableHead className="text-right">Montant</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredExpenses.map((exp) => (
+                  <TableRow key={exp.id}>
+                    <TableCell className="font-medium">{exp.label}</TableCell>
+                    <TableCell>{exp.date ? format(parseISO(exp.date), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                    <TableCell>
+                      {exp.blNumber && exp.blId ? (
+                        <Link href={`/bls/${exp.blId}`} className="text-primary hover:underline flex items-center gap-1">
+                          <FileText className="h-4 w-4" /> {exp.blNumber}
+                        </Link>
+                      ) : 'N/A'}
+                    </TableCell>
+                    <TableCell>{exp.clientName || 'N/A'}</TableCell>
+                    <TableCell className="flex items-center gap-1 pt-4">
+                      <UserIconLucide className="h-4 w-4 text-muted-foreground" /> {exp.employeeName || 'N/A'}
+                    </TableCell>
+                    <TableCell className="text-right">{exp.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end space-x-1">
+                        {exp.blId && (
+                          <Link href={`/bls/${exp.blId}`} passHref>
+                            <Button variant="ghost" size="sm" title="Voir BL" disabled={isProcessingAction}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        )}
+                        <Button variant="ghost" size="sm" title="Modifier Dépense" onClick={() => handleEditExpenseAction(exp)} 
+                          disabled={isProcessingAction && pinActionType === 'edit' && expenseTargetedForAction?.id === exp.id}>
+                          {(isProcessingAction && pinActionType === 'edit' && expenseTargetedForAction?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin"/> : <Edit className="h-4 w-4" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-destructive"
+                          title="Supprimer Dépense"
+                          onClick={() => handleDeleteExpenseAction(exp)}
+                          disabled={isProcessingAction && pinActionType === 'delete' && expenseTargetedForAction?.id === exp.id}
+                        >
+                          {(isProcessingAction && pinActionType === 'delete' && expenseTargetedForAction?.id === exp.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
          )}
         </CardContent>
       </Card>

@@ -184,69 +184,71 @@ export default function TrucksPage() {
                 )}
             </div>
           ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Immatriculation</TableHead>
-                <TableHead>Modèle</TableHead>
-                <TableHead>Chauffeur Actuel</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredTrucks.map((truck) => (
-                <TableRow key={truck.id}>
-                  <TableCell className="font-medium">{truck.registrationNumber}</TableCell>
-                  <TableCell>{truck.model || 'N/A'}</TableCell>
-                  <TableCell>
-                    {truck.currentDriverName ? (
-                        <span className="flex items-center gap-1">
-                            <User className="h-4 w-4 text-muted-foreground"/> {truck.currentDriverName}
-                        </span>
-                    ) : <span className="text-muted-foreground italic">Non assigné</span>}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(truck.status) as any} className="capitalize">
-                      {getStatusText(truck.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-1">
-                    <Link href={`/trucks/${truck.id}/edit`} passHref>
-                      <Button variant="outline" size="sm" disabled={isDeleting}>
-                        <Edit className="mr-1 h-4 w-4" /> Modifier
-                      </Button>
-                    </Link>
-                    {isAdmin && (
-                       <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button variant="destructive" size="sm" onClick={() => setTruckToDelete(truck)} disabled={isDeleting && truckToDelete?.id === truck.id}>
-                                {(isDeleting && truckToDelete?.id === truck.id) && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-                                <Trash2 className="mr-1 h-4 w-4" /> Supprimer
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Êtes-vous sûr de vouloir supprimer le camion {truckToDelete?.registrationNumber}? Cette action est irréversible et désassignera tout chauffeur lié.
-                            </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setTruckToDelete(null)} disabled={isDeleting}>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDeleteTruck} disabled={isDeleting}>
-                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Confirmer
-                            </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                        </AlertDialog>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Immatriculation</TableHead>
+                    <TableHead>Modèle</TableHead>
+                    <TableHead>Chauffeur Actuel</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTrucks.map((truck) => (
+                    <TableRow key={truck.id}>
+                      <TableCell className="font-medium">{truck.registrationNumber}</TableCell>
+                      <TableCell>{truck.model || 'N/A'}</TableCell>
+                      <TableCell>
+                        {truck.currentDriverName ? (
+                            <span className="flex items-center gap-1">
+                                <User className="h-4 w-4 text-muted-foreground"/> {truck.currentDriverName}
+                            </span>
+                        ) : <span className="text-muted-foreground italic">Non assigné</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(truck.status) as any} className="capitalize">
+                          {getStatusText(truck.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right space-x-1">
+                        <Link href={`/trucks/${truck.id}/edit`} passHref>
+                          <Button variant="outline" size="sm" disabled={isDeleting}>
+                            <Edit className="mr-1 h-4 w-4" /> Modifier
+                          </Button>
+                        </Link>
+                        {isAdmin && (
+                           <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                               <Button variant="destructive" size="sm" onClick={() => setTruckToDelete(truck)} disabled={isDeleting && truckToDelete?.id === truck.id}>
+                                    {(isDeleting && truckToDelete?.id === truck.id) && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                                    <Trash2 className="mr-1 h-4 w-4" /> Supprimer
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Êtes-vous sûr de vouloir supprimer le camion {truckToDelete?.registrationNumber}? Cette action est irréversible et désassignera tout chauffeur lié.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setTruckToDelete(null)} disabled={isDeleting}>Annuler</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeleteTruck} disabled={isDeleting}>
+                                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Confirmer
+                                </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

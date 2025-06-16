@@ -253,35 +253,37 @@ export default function SecretaryDocumentsPage() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Titre</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Créé le</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {documents.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell className="font-medium">{doc.title}</TableCell>
-                    <TableCell><Badge variant="outline">{doc.documentType}</Badge></TableCell>
-                    <TableCell><Badge variant="secondary">{doc.status}</Badge></TableCell>
-                    <TableCell>{format(parseISO(doc.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button variant="outline" size="sm" onClick={() => handleEditAction(doc)} disabled={isProcessingAction}>
-                         <Edit className="mr-1 h-3 w-3"/> Modifier
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteAction(doc)} disabled={isProcessingAction}>
-                         <Trash2 className="mr-1 h-3 w-3"/> Supprimer
-                      </Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Titre</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead>Créé le</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {documents.map((doc) => (
+                    <TableRow key={doc.id}>
+                      <TableCell className="font-medium">{doc.title}</TableCell>
+                      <TableCell><Badge variant="outline">{doc.documentType}</Badge></TableCell>
+                      <TableCell><Badge variant="secondary">{doc.status}</Badge></TableCell>
+                      <TableCell>{format(parseISO(doc.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                      <TableCell className="text-right space-x-1">
+                        <Button variant="outline" size="sm" onClick={() => handleEditAction(doc)} disabled={isProcessingAction}>
+                           <Edit className="mr-1 h-3 w-3"/> Modifier
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteAction(doc)} disabled={isProcessingAction}>
+                           <Trash2 className="mr-1 h-3 w-3"/> Supprimer
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
           <div className="mt-6 text-center py-6 border-t border-dashed">
               <Construction className="mx-auto h-12 w-12 text-muted-foreground opacity-70" />

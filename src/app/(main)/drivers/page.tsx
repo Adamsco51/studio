@@ -184,71 +184,73 @@ export default function DriversPage() {
                 )}
             </div>
           ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>N° Permis</TableHead>
-                <TableHead>Téléphone</TableHead>
-                <TableHead>Camion Actuel</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredDrivers.map((driver) => (
-                <TableRow key={driver.id}>
-                  <TableCell className="font-medium">{driver.name}</TableCell>
-                  <TableCell>{driver.licenseNumber}</TableCell>
-                  <TableCell>{driver.phone}</TableCell>
-                  <TableCell>
-                    {driver.currentTruckReg ? (
-                        <span className="flex items-center gap-1">
-                            <Truck className="h-4 w-4 text-muted-foreground"/> {driver.currentTruckReg}
-                        </span>
-                    ) : <span className="text-muted-foreground italic">Non assigné</span>}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(driver.status) as any} className="capitalize">
-                      {getStatusText(driver.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-1">
-                    <Link href={`/drivers/${driver.id}/edit`} passHref>
-                      <Button variant="outline" size="sm" disabled={isDeleting}>
-                        <Edit className="mr-1 h-4 w-4" /> Modifier
-                      </Button>
-                    </Link>
-                    {isAdmin && (
-                       <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button variant="destructive" size="sm" onClick={() => setDriverToDelete(driver)} disabled={isDeleting && driverToDelete?.id === driver.id}>
-                                {(isDeleting && driverToDelete?.id === driver.id) && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-                                <Trash2 className="mr-1 h-4 w-4" /> Supprimer
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Êtes-vous sûr de vouloir supprimer le chauffeur {driverToDelete?.name}? Cette action est irréversible et désassignera tout camion lié.
-                            </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setDriverToDelete(null)} disabled={isDeleting}>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDeleteDriver} disabled={isDeleting}>
-                                {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Confirmer
-                            </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                        </AlertDialog>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nom</TableHead>
+                    <TableHead>N° Permis</TableHead>
+                    <TableHead>Téléphone</TableHead>
+                    <TableHead>Camion Actuel</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredDrivers.map((driver) => (
+                    <TableRow key={driver.id}>
+                      <TableCell className="font-medium">{driver.name}</TableCell>
+                      <TableCell>{driver.licenseNumber}</TableCell>
+                      <TableCell>{driver.phone}</TableCell>
+                      <TableCell>
+                        {driver.currentTruckReg ? (
+                            <span className="flex items-center gap-1">
+                                <Truck className="h-4 w-4 text-muted-foreground"/> {driver.currentTruckReg}
+                            </span>
+                        ) : <span className="text-muted-foreground italic">Non assigné</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(driver.status) as any} className="capitalize">
+                          {getStatusText(driver.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right space-x-1">
+                        <Link href={`/drivers/${driver.id}/edit`} passHref>
+                          <Button variant="outline" size="sm" disabled={isDeleting}>
+                            <Edit className="mr-1 h-4 w-4" /> Modifier
+                          </Button>
+                        </Link>
+                        {isAdmin && (
+                           <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                               <Button variant="destructive" size="sm" onClick={() => setDriverToDelete(driver)} disabled={isDeleting && driverToDelete?.id === driver.id}>
+                                    {(isDeleting && driverToDelete?.id === driver.id) && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                                    <Trash2 className="mr-1 h-4 w-4" /> Supprimer
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Êtes-vous sûr de vouloir supprimer le chauffeur {driverToDelete?.name}? Cette action est irréversible et désassignera tout camion lié.
+                                </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setDriverToDelete(null)} disabled={isDeleting}>Annuler</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeleteDriver} disabled={isDeleting}>
+                                    {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Confirmer
+                                </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

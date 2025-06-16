@@ -324,74 +324,76 @@ export default function AdminApprovalsPage() {
               <p className="mt-2">Il n'y a aucune demande à traiter pour le moment.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Demandeur</TableHead>
-                  <TableHead>Entité</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Raison</TableHead>
-                  <TableHead>Date Demande</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.map((req) => {
-                  const entityLink = getEntityLink(req);
-                  return (
-                    <TableRow key={req.id}>
-                      <TableCell>{req.requestedByUserName || req.requestedByUserId}</TableCell>
-                      <TableCell>
-                          <div>{getEntityTypeText(req.entityType)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {entityLink ? (
-                                <Link href={entityLink} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" title="Voir l'entité">
-                                    {req.entityDescription || req.entityId}
-                                </Link>
-                            ) : (
-                                req.entityDescription || req.entityId
-                            )}
-                          </div>
-                      </TableCell>
-                      <TableCell>{getActionText(req.actionType)}</TableCell>
-                      <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
-                      <TableCell>{req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
-                           {req.status === 'pending' && <HelpCircle className="mr-1 h-3 w-3" />}
-                           {req.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
-                           {req.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
-                           {req.status === 'completed' && <CheckCircle className="mr-1 h-3 w-3 text-green-500" />}
-                           {req.status === 'pin_issued' && <KeyRound className="mr-1 h-3 w-3" />}
-                          {getStatusText(req.status)}
-                        </Badge>
-                        {req.status === 'pin_issued' && req.pinCode && (
-                          <p className="text-xs text-muted-foreground italic">PIN: {req.pinCode}</p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {req.status === 'pending' && (
-                          <div className="space-x-2">
-                            <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'approve')}>
-                              <CheckCircle className="mr-1 h-4 w-4 text-green-500" /> Approuver
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'reject')}>
-                              <XCircle className="mr-1 h-4 w-4 text-red-500" /> Rejeter
-                            </Button>
-                          </div>
-                        )}
-                        {req.status !== 'pending' && req.adminNotes && (
-                           <p className="text-xs text-muted-foreground italic text-left" title={`Notes Admin: ${req.adminNotes}${req.processedByUserId ? ` (par ${req.processedByUserId.substring(0,6)}...)` : ''}`}>
-                             Traité {req.processedAt ? format(parseISO(req.processedAt), 'dd/MM/yy HH:mm', { locale: fr }) : ''}
-                           </p>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Demandeur</TableHead>
+                    <TableHead>Entité</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Raison</TableHead>
+                    <TableHead>Date Demande</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {requests.map((req) => {
+                    const entityLink = getEntityLink(req);
+                    return (
+                      <TableRow key={req.id}>
+                        <TableCell>{req.requestedByUserName || req.requestedByUserId}</TableCell>
+                        <TableCell>
+                            <div>{getEntityTypeText(req.entityType)}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {entityLink ? (
+                                  <Link href={entityLink} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer" title="Voir l'entité">
+                                      {req.entityDescription || req.entityId}
+                                  </Link>
+                              ) : (
+                                  req.entityDescription || req.entityId
+                              )}
+                            </div>
+                        </TableCell>
+                        <TableCell>{getActionText(req.actionType)}</TableCell>
+                        <TableCell className="max-w-xs truncate" title={req.reason}>{req.reason}</TableCell>
+                        <TableCell>{req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : 'N/A'}</TableCell>
+                        <TableCell>
+                          <Badge variant={getStatusVariant(req.status) as any} className="capitalize">
+                             {req.status === 'pending' && <HelpCircle className="mr-1 h-3 w-3" />}
+                             {req.status === 'approved' && <CheckCircle className="mr-1 h-3 w-3" />}
+                             {req.status === 'rejected' && <XCircle className="mr-1 h-3 w-3" />}
+                             {req.status === 'completed' && <CheckCircle className="mr-1 h-3 w-3 text-green-500" />}
+                             {req.status === 'pin_issued' && <KeyRound className="mr-1 h-3 w-3" />}
+                            {getStatusText(req.status)}
+                          </Badge>
+                          {req.status === 'pin_issued' && req.pinCode && (
+                            <p className="text-xs text-muted-foreground italic">PIN: {req.pinCode}</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {req.status === 'pending' && (
+                            <div className="space-x-2">
+                              <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'approve')}>
+                                <CheckCircle className="mr-1 h-4 w-4 text-green-500" /> Approuver
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => handleOpenConfirmationDialog(req, 'reject')}>
+                                <XCircle className="mr-1 h-4 w-4 text-red-500" /> Rejeter
+                              </Button>
+                            </div>
+                          )}
+                          {req.status !== 'pending' && req.adminNotes && (
+                             <p className="text-xs text-muted-foreground italic text-left" title={`Notes Admin: ${req.adminNotes}${req.processedByUserId ? ` (par ${req.processedByUserId.substring(0,6)}...)` : ''}`}>
+                               Traité {req.processedAt ? format(parseISO(req.processedAt), 'dd/MM/yy HH:mm', { locale: fr }) : ''}
+                             </p>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

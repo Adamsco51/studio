@@ -92,36 +92,38 @@ export default function AccountingInvoicesPage() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Réf.</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Date Émission</TableHead>
-                  <TableHead>Client/BL</TableHead>
-                  <TableHead className="text-right">Montant Total</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="font-medium">{entry.referenceNumber}</TableCell>
-                    <TableCell><Badge variant="outline">{entry.entryType}</Badge></TableCell>
-                    <TableCell>{format(parseISO(entry.issueDate), 'dd MMM yyyy', { locale: fr })}</TableCell>
-                    <TableCell>
-                        {entry.relatedClientId || entry.relatedBlId || <span className="text-muted-foreground italic">N/A</span>}
-                    </TableCell>
-                    <TableCell className="text-right">{entry.totalAmount.toLocaleString('fr-FR', { style: 'currency', currency: entry.currency })}</TableCell>
-                    <TableCell><Badge variant="secondary">{entry.status}</Badge></TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" disabled>Voir</Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Réf.</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Date Émission</TableHead>
+                    <TableHead>Client/BL</TableHead>
+                    <TableHead className="text-right">Montant Total</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {entries.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="font-medium">{entry.referenceNumber}</TableCell>
+                      <TableCell><Badge variant="outline">{entry.entryType}</Badge></TableCell>
+                      <TableCell>{format(parseISO(entry.issueDate), 'dd MMM yyyy', { locale: fr })}</TableCell>
+                      <TableCell>
+                          {entry.relatedClientId || entry.relatedBlId || <span className="text-muted-foreground italic">N/A</span>}
+                      </TableCell>
+                      <TableCell className="text-right">{entry.totalAmount.toLocaleString('fr-FR', { style: 'currency', currency: entry.currency })}</TableCell>
+                      <TableCell><Badge variant="secondary">{entry.status}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" disabled>Voir</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
           <div className="mt-6 text-center py-6 border-t border-dashed">
               <Construction className="mx-auto h-12 w-12 text-muted-foreground opacity-70" />
