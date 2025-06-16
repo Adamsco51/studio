@@ -73,15 +73,24 @@ export interface AuthUser {
   email: string | null;
   displayName: string | null;
   role?: 'admin' | 'employee';
-  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | string; // Added jobTitle
+  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | 'Autre';
 }
+
+export type UserProfileJobTitle = 'Agent Opérationnel' | 'Secrétaire' | 'Comptable' | 'Manager' | 'Autre';
+export const USER_PROFILE_JOB_TITLES: UserProfileJobTitle[] = [
+  'Agent Opérationnel',
+  'Secrétaire',
+  'Comptable',
+  'Manager',
+  'Autre',
+];
 
 export interface UserProfile {
   uid: string;
   email: string | null; // Email field is important here
   displayName: string | null;
   role: 'admin' | 'employee';
-  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | 'Autre'; // Refined jobTitle options
+  jobTitle?: UserProfileJobTitle;
   createdAt: string;
 }
 

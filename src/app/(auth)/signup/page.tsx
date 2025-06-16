@@ -9,15 +9,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus } from 'lucide-react';
 import { createUserProfile } from '@/lib/mock-data'; // Import function to create user profile
+import type { UserProfileJobTitle } from '@/lib/types';
+import { USER_PROFILE_JOB_TITLES } from '@/lib/types';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [jobTitle, setJobTitle] = useState<UserProfileJobTitle>('Agent Opérationnel'); // Default job title
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -38,7 +42,7 @@ export default function SignupPage() {
       
       // Create user profile document in Firestore
       if (firebaseUser) {
-        await createUserProfile(firebaseUser.uid, firebaseUser.email, displayName, 'employee'); // Default role 'employee'
+        await createUserProfile(firebaseUser.uid, firebaseUser.email, displayName, 'employee', jobTitle);
       }
 
       toast({ title: 'Inscription Réussie', description: 'Votre compte a été créé. Redirection vers le tableau de bord...' });
@@ -99,6 +103,25 @@ export default function SignupPage() {
               required
               disabled={loading}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="jobTitle">Poste</Label>
+            <Select
+              value={jobTitle}
+              onValueChange={(value) => setJobTitle(value as UserProfileJobTitle)}
+              disabled={loading}
+            >
+              <SelectTrigger id="jobTitle">
+                <SelectValue placeholder="Sélectionner un poste" />
+              </SelectTrigger>
+              <SelectContent>
+                {USER_PROFILE_JOB_TITLES.map((title) => (
+                  <SelectItem key={title} value={title}>
+                    {title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading}>
