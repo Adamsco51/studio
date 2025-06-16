@@ -81,7 +81,7 @@ export interface UserProfile {
   email: string | null; // Email field is important here
   displayName: string | null;
   role: 'admin' | 'employee';
-  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | string; // Added jobTitle
+  jobTitle?: 'Secrétaire' | 'Comptable' | 'Agent Opérationnel' | 'Manager' | 'Autre'; // Refined jobTitle options
   createdAt: string;
 }
 
@@ -200,8 +200,12 @@ export interface CompanyProfile {
 }
 
 // Types for Secretary and Accounting sections
-export type SecretaryDocumentType = 'letter' | 'memo' | 'report' | 'contract' | 'other';
-export type SecretaryDocumentStatus = 'draft' | 'pending_review' | 'approved' | 'sent' | 'archived';
+export type SecretaryDocumentType = 'lettre' | 'note_interne' | 'rapport' | 'contrat' | 'presentation' | 'autre';
+export const SECRETARY_DOCUMENT_TYPES: SecretaryDocumentType[] = ['lettre', 'note_interne', 'rapport', 'contrat', 'presentation', 'autre'];
+
+export type SecretaryDocumentStatus = 'brouillon' | 'en_revision' | 'approuve' | 'envoye' | 'archive';
+export const SECRETARY_DOCUMENT_STATUSES: SecretaryDocumentStatus[] = ['brouillon', 'en_revision', 'approuve', 'envoye', 'archive'];
+
 
 export interface SecretaryDocument {
   id: string;
@@ -218,8 +222,12 @@ export interface SecretaryDocument {
   updatedAt?: string; // ISO Date string
 }
 
-export type AccountingEntryType = 'invoice' | 'receipt' | 'debit_note' | 'credit_note' | 'quote' | 'purchase_order' | 'expense_report';
-export type AccountingEntryStatus = 'draft' | 'pending' | 'approved' | 'sent' | 'paid' | 'partially_paid' | 'overdue' | 'voided' | 'cancelled';
+export type AccountingEntryType = 'facture_client' | 'facture_fournisseur' | 'avoir_client' | 'avoir_fournisseur' | 'devis' | 'bon_de_commande' | 'note_de_frais' | 'paiement_recu' | 'paiement_effectue';
+export const ACCOUNTING_ENTRY_TYPES: AccountingEntryType[] = ['facture_client', 'facture_fournisseur', 'avoir_client', 'avoir_fournisseur', 'devis', 'bon_de_commande', 'note_de_frais', 'paiement_recu', 'paiement_effectue'];
+
+export type AccountingEntryStatus = 'brouillon' | 'en_attente' | 'approuvee' | 'envoyee' | 'payee' | 'partiellement_payee' | 'en_retard' | 'annulee';
+export const ACCOUNTING_ENTRY_STATUSES: AccountingEntryStatus[] = ['brouillon', 'en_attente', 'approuvee', 'envoyee', 'payee', 'partiellement_payee', 'en_retard', 'annulee'];
+
 
 export interface AccountingEntry {
   id: string;
@@ -240,3 +248,4 @@ export interface AccountingEntry {
   createdByUserId: string;
   updatedAt?: string; // ISO Date string
 }
+
