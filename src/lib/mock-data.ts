@@ -1578,7 +1578,7 @@ export const updateCompanyProfileInFirestore = async (data: Partial<CompanyProfi
 
 // Secretary Documents CRUD
 export const addSecretaryDocumentToFirestore = async (
-  docData: Omit<SecretaryDocument, 'id' | 'createdAt' | 'updatedAt'>
+  docData: Omit<SecretaryDocument, 'id' | 'createdAt' | 'updatedAt'> & { createdByUserName?: string }
 ): Promise<SecretaryDocument> => {
   try {
     const dataToSave: any = {
@@ -1588,6 +1588,7 @@ export const addSecretaryDocumentToFirestore = async (
       recipientEmail: docData.recipientEmail || null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      createdByUserName: docData.createdByUserName || 'Utilisateur Inconnu',
     };
     const docRef = await addDoc(secretaryDocumentsCollectionRef, dataToSave);
     const newDocSnap = await getDoc(docRef);
@@ -1609,7 +1610,7 @@ export const addSecretaryDocumentToFirestore = async (
 
 export const getSecretaryDocumentsFromFirestore = async (): Promise<SecretaryDocument[]> => {
   try {
-    const q = query(secretaryDocumentsCollectionRef, orderBy("createdAt", "desc"));
+    const q = query(secretaryDocumentsCollectionRef, orderBy("updatedAt", "desc"));
     const data = await getDocs(q);
     return data.docs.map(docSnap => {
       const docData = docSnap.data();
@@ -1617,7 +1618,7 @@ export const getSecretaryDocumentsFromFirestore = async (): Promise<SecretaryDoc
         id: docSnap.id,
         ...docData,
         createdAt: (docData.createdAt as Timestamp).toDate().toISOString(),
-        updatedAt: docData.updatedAt ? (docData.updatedAt as Timestamp).toDate().toISOString() : undefined,
+        updatedAt: docData.updatedAt ? (docData.updatedAt as Timestamp).toDate().toISOString() : (docData.createdAt as Timestamp).toDate().toISOString(),
       } as SecretaryDocument;
     });
   } catch (e: any) {
@@ -1636,7 +1637,7 @@ export const getSecretaryDocumentByIdFromFirestore = async (documentId: string):
                 id: docSnap.id,
                 ...data,
                 createdAt: (data.createdAt as Timestamp).toDate().toISOString(),
-                updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : undefined,
+                updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : (data.createdAt as Timestamp).toDate().toISOString(),
             } as SecretaryDocument;
         }
         return null;
@@ -1648,12 +1649,11 @@ export const getSecretaryDocumentByIdFromFirestore = async (documentId: string):
 
 export const updateSecretaryDocumentInFirestore = async (
   documentId: string,
-  updatedData: Partial<Omit<SecretaryDocument, 'id' | 'createdAt' | 'createdByUserId'>>
+  updatedData: Partial<Omit<SecretaryDocument, 'id' | 'createdAt' | 'createdByUserId' | 'createdByUserName'>>
 ): Promise<void> => {
   const docRef = doc(db, "secretaryDocuments", documentId);
   try {
     const dataToUpdate: any = { ...updatedData, updatedAt: serverTimestamp() };
-    // Handle optional fields that might be set to null
     if ('relatedClientId' in updatedData) dataToUpdate.relatedClientId = updatedData.relatedClientId || null;
     if ('relatedBlId' in updatedData) dataToUpdate.relatedBlId = updatedData.relatedBlId || null;
     if ('recipientEmail' in updatedData) dataToUpdate.recipientEmail = updatedData.recipientEmail || null;
@@ -1678,7 +1678,7 @@ export const deleteSecretaryDocumentFromFirestore = async (documentId: string): 
 
 // Accounting Entries CRUD
 export const addAccountingEntryToFirestore = async (
-  entryData: Omit<AccountingEntry, 'id' | 'createdAt' | 'updatedAt'>
+  entryData: Omit<AccountingEntry, 'id' | 'createdAt' | 'updatedAt'> & { createdByUserName?: string }
 ): Promise<AccountingEntry> => {
   try {
     const dataToSave: any = {
@@ -1692,6 +1692,7 @@ export const addAccountingEntryToFirestore = async (
       dueDate: entryData.dueDate ? Timestamp.fromDate(parseISO(entryData.dueDate)) : null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      createdByUserName: entryData.createdByUserName || 'Utilisateur Inconnu',
     };
     const docRef = await addDoc(accountingEntriesCollectionRef, dataToSave);
     const newDocSnap = await getDoc(docRef);
@@ -1715,7 +1716,7 @@ export const addAccountingEntryToFirestore = async (
 
 export const getAccountingEntriesFromFirestore = async (): Promise<AccountingEntry[]> => {
   try {
-    const q = query(accountingEntriesCollectionRef, orderBy("issueDate", "desc"));
+    const q = query(accountingEntriesCollectionRef, orderBy("updatedAt", "desc"));
     const data = await getDocs(q);
     return data.docs.map(docSnap => {
       const entryData = docSnap.data();
@@ -1725,7 +1726,7 @@ export const getAccountingEntriesFromFirestore = async (): Promise<AccountingEnt
         issueDate: (entryData.issueDate as Timestamp).toDate().toISOString(),
         dueDate: entryData.dueDate ? (entryData.dueDate as Timestamp).toDate().toISOString() : undefined,
         createdAt: (entryData.createdAt as Timestamp).toDate().toISOString(),
-        updatedAt: entryData.updatedAt ? (entryData.updatedAt as Timestamp).toDate().toISOString() : undefined,
+        updatedAt: entryData.updatedAt ? (entryData.updatedAt as Timestamp).toDate().toISOString() : (entryData.createdAt as Timestamp).toDate().toISOString(),
       } as AccountingEntry;
     });
   } catch (e: any) {
@@ -1746,7 +1747,7 @@ export const getAccountingEntryByIdFromFirestore = async (entryId: string): Prom
                 issueDate: (data.issueDate as Timestamp).toDate().toISOString(),
                 dueDate: data.dueDate ? (data.dueDate as Timestamp).toDate().toISOString() : undefined,
                 createdAt: (data.createdAt as Timestamp).toDate().toISOString(),
-                updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : undefined,
+                updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : (data.createdAt as Timestamp).toDate().toISOString(),
             } as AccountingEntry;
         }
         return null;
@@ -1758,7 +1759,7 @@ export const getAccountingEntryByIdFromFirestore = async (entryId: string): Prom
 
 export const updateAccountingEntryInFirestore = async (
   entryId: string,
-  updatedData: Partial<Omit<AccountingEntry, 'id' | 'createdAt' | 'createdByUserId'>>
+  updatedData: Partial<Omit<AccountingEntry, 'id' | 'createdAt' | 'createdByUserId' | 'createdByUserName'>>
 ): Promise<void> => {
   const docRef = doc(db, "accountingEntries", entryId);
   try {

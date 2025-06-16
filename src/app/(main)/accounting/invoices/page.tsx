@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileDigit, PlusCircle, Construction, Loader2, AlertTriangle, Edit, Trash2, KeyRound } from 'lucide-react';
+import { FileDigit, PlusCircle, Construction, Loader2, AlertTriangle, Edit, Trash2, KeyRound, UserCircle2, CalendarDays } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
@@ -73,7 +73,7 @@ export default function AccountingInvoicesPage() {
         setIsLoading(true);
         try {
             const fetchedEntries = await getAccountingEntriesFromFirestore();
-            setEntries(fetchedEntries.sort((a,b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()));
+            setEntries(fetchedEntries); // Already sorted by updatedAt in mock-data
         } catch (error) {
             console.error("Failed to fetch accounting entries:", error);
             toast({ title: "Erreur", description: "Impossible de charger les écritures comptables.", variant: "destructive" });
@@ -108,7 +108,7 @@ export default function AccountingInvoicesPage() {
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
-                setShowReasonDialog(true); // To request approval
+                setShowReasonDialog(true); 
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -248,7 +248,7 @@ export default function AccountingInvoicesPage() {
         <CardHeader>
           <CardTitle>Écritures Comptables Récentes</CardTitle>
            <CardDescription>
-            {isLoading ? "Chargement..." : `${entries.length} écriture(s) trouvée(s).`}
+            {isLoading ? "Chargement..." : `${entries.length} écriture(s) trouvée(s). Trié par dernière modification.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -278,6 +278,8 @@ export default function AccountingInvoicesPage() {
                     <TableHead>Client/BL</TableHead>
                     <TableHead className="text-right">Montant Total</TableHead>
                     <TableHead>Statut</TableHead>
+                    <TableHead>Créé par</TableHead>
+                    <TableHead>Modifié le</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -292,6 +294,17 @@ export default function AccountingInvoicesPage() {
                       </TableCell>
                       <TableCell className="text-right">{entry.totalAmount.toLocaleString('fr-FR', { style: 'currency', currency: entry.currency })}</TableCell>
                       <TableCell><Badge variant="secondary">{entry.status}</Badge></TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                           <UserCircle2 className="h-3.5 w-3.5"/> {entry.createdByUserName || 'N/A'}
+                        </div>
+                         <div className="text-xs text-muted-foreground/80 mt-0.5 flex items-center gap-1">
+                           <CalendarDays className="h-3 w-3"/> {format(parseISO(entry.createdAt), 'dd MMM yy', { locale: fr })}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {entry.updatedAt ? format(parseISO(entry.updatedAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : '-'}
+                      </TableCell>
                       <TableCell className="text-right space-x-1">
                         <Button variant="outline" size="sm" onClick={() => handleEditAction(entry)} disabled={isProcessingAction}>
                            <Edit className="mr-1 h-3 w-3"/> Modifier

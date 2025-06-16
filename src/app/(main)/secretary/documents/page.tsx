@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileArchive, PlusCircle, Construction, Loader2, AlertTriangle, Edit, Trash2, KeyRound } from 'lucide-react';
+import { FileArchive, PlusCircle, Construction, Loader2, AlertTriangle, Edit, Trash2, KeyRound, UserCircle2, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { 
@@ -74,7 +74,7 @@ export default function SecretaryDocumentsPage() {
         setIsLoading(true);
         try {
             const fetchedDocs = await getSecretaryDocumentsFromFirestore();
-            setDocuments(fetchedDocs.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+            setDocuments(fetchedDocs); // Already sorted by updatedAt in mock-data
         } catch (error) {
             console.error("Failed to fetch secretary documents:", error);
             toast({ title: "Erreur", description: "Impossible de charger les documents.", variant: "destructive" });
@@ -100,7 +100,7 @@ export default function SecretaryDocumentsPage() {
 
     if (canEditDirectly) {
         router.push(`/secretary/documents/${doc.id}/edit`);
-    } else {
+    } else { // Non-admin, non-secretary/manager attempting to edit
         setIsProcessingAction(true);
         try {
             const pinRequest = await getPinIssuedRequestForEntity('secretaryDocument', doc.id, 'edit');
@@ -109,7 +109,7 @@ export default function SecretaryDocumentsPage() {
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
-                setShowReasonDialog(true); // To request approval
+                setShowReasonDialog(true); // To request approval if no PIN or they don't own it
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -128,9 +128,8 @@ export default function SecretaryDocumentsPage() {
     const canDeleteDirectly = isAdmin || user.jobTitle === 'Secrétaire' || user.jobTitle === 'Manager';
 
     if (canDeleteDirectly) {
-        setShowReasonDialog(true); // This dialog will lead to direct delete confirmation
-    } else {
-        // For users without job title and not admin, check for PIN first.
+        setShowReasonDialog(true); // This dialog will lead to direct delete confirmation for authorized roles
+    } else { // Non-admin, non-secretary/manager attempting to delete
         setIsProcessingAction(true);
         try {
             const pinRequest = await getPinIssuedRequestForEntity('secretaryDocument', doc.id, 'delete');
@@ -139,7 +138,7 @@ export default function SecretaryDocumentsPage() {
                 setShowPinDialog(true);
             } else {
                 setActionReason('');
-                setShowReasonDialog(true); // To request approval
+                setShowReasonDialog(true); // To request approval if no PIN
             }
         } catch (error) {
             toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
@@ -195,7 +194,6 @@ export default function SecretaryDocumentsPage() {
             setIsProcessingAction(false);
         }
     } else { 
-        // Submit approval request (for edit by non-job-title/non-admin, or delete by non-job-title/non-admin)
         if (!actionReason.trim()) {
             toast({ title: "Raison Requise", description: "Veuillez fournir une raison pour votre demande.", variant: "destructive" });
             return;
@@ -208,7 +206,7 @@ export default function SecretaryDocumentsPage() {
                 entityType: 'secretaryDocument',
                 entityId: docTargetedForAction.id,
                 entityDescription: `Document: ${docTargetedForAction.title}`,
-                actionType: currentActionType, // 'edit' or 'delete'
+                actionType: currentActionType,
                 reason: actionReason,
             });
             toast({ title: "Demande Envoyée", description: "Votre demande a été soumise pour approbation." });
@@ -222,7 +220,7 @@ export default function SecretaryDocumentsPage() {
   };
 
 
-  if (authLoading || (!user && !isLoading)) { // Adjusted loading condition
+  if (authLoading || (!user && !isLoading)) { 
     return (
         <div className="flex h-screen items-center justify-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -252,7 +250,7 @@ export default function SecretaryDocumentsPage() {
         <CardHeader>
           <CardTitle>Liste des Documents</CardTitle>
           <CardDescription>
-            {isLoading ? "Chargement..." : `${documents.length} document(s) trouvé(s).`}
+            {isLoading ? "Chargement..." : `${documents.length} document(s) trouvé(s). Trier par dernière modification.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -279,7 +277,8 @@ export default function SecretaryDocumentsPage() {
                     <TableHead>Titre</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Statut</TableHead>
-                    <TableHead>Créé le</TableHead>
+                    <TableHead>Créé par</TableHead>
+                    <TableHead>Modifié le</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -289,7 +288,17 @@ export default function SecretaryDocumentsPage() {
                       <TableCell className="font-medium">{doc.title}</TableCell>
                       <TableCell><Badge variant="outline">{doc.documentType}</Badge></TableCell>
                       <TableCell><Badge variant="secondary">{doc.status}</Badge></TableCell>
-                      <TableCell>{format(parseISO(doc.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                           <UserCircle2 className="h-3.5 w-3.5"/> {doc.createdByUserName || 'N/A'}
+                        </div>
+                         <div className="text-xs text-muted-foreground/80 mt-0.5 flex items-center gap-1">
+                           <CalendarDays className="h-3 w-3"/> {format(parseISO(doc.createdAt), 'dd MMM yy', { locale: fr })}
+                        </div>
+                      </TableCell>
+                       <TableCell className="text-sm">
+                        {doc.updatedAt ? format(parseISO(doc.updatedAt), 'dd MMM yyyy, HH:mm', { locale: fr }) : '-'}
+                      </TableCell>
                       <TableCell className="text-right space-x-1">
                         <Button variant="outline" size="sm" onClick={() => handleEditAction(doc)} disabled={isProcessingAction}>
                            <Edit className="mr-1 h-3 w-3"/> Modifier
@@ -340,9 +349,9 @@ export default function SecretaryDocumentsPage() {
             <Button onClick={handleReasonDialogSubmit} 
                 variant={currentActionType === 'delete' && (isAdmin || user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager') ? "destructive" : "default"} 
                 disabled={isProcessingAction || (
-                    !(isAdmin || user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager') && // If not admin/job title for direct action
-                    currentActionType !== 'delete' && // And not a direct delete confirmation
-                    !actionReason.trim() // Then reason is required
+                    !(isAdmin || user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager') && 
+                    currentActionType !== 'delete' && 
+                    !actionReason.trim() 
                 )}>
               {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Confirmer

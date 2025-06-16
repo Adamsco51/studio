@@ -229,6 +229,7 @@ export interface SecretaryDocument {
   recipientEmail?: string | null; // For sending
   createdAt: string; // ISO Date string
   createdByUserId: string;
+  createdByUserName?: string; // Denormalized creator's name
   updatedAt?: string; // ISO Date string
 }
 
@@ -243,10 +244,10 @@ export interface AccountingEntry {
   id: string;
   entryType: AccountingEntryType;
   referenceNumber: string; // e.g., INV-2024-001
-  relatedBlId?: string;
-  relatedClientId?: string;
+  relatedBlId?: string | null; // Ensure it can be null
+  relatedClientId?: string | null; // Ensure it can be null
   issueDate: string; // ISO Date string
-  dueDate?: string; // ISO Date string
+  dueDate?: string | null; // ISO Date string, can be null
   amount: number;
   currency: string; // e.g., XOF, USD
   taxAmount?: number;
@@ -256,6 +257,6 @@ export interface AccountingEntry {
   notes?: string;
   createdAt: string; // ISO Date string
   createdByUserId: string;
+  createdByUserName?: string; // Denormalized creator's name
   updatedAt?: string; // ISO Date string
 }
-
