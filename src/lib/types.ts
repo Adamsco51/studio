@@ -38,6 +38,7 @@ export interface BillOfLading {
 export interface Container {
   id: string;
   blId: string; // Foreign key to BillOfLading
+  blNumber?: string; // Denormalized for display
   containerNumber: string;
   type: string; // e.g., '20ft Dry', '40ft HC', 'Reefer'
   sealNumber?: string;

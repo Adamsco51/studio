@@ -1,162 +1,124 @@
 
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Function to check if the user is an admin
-    function isAdmin(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
+
+    // Helper function to check if a user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // User profiles:
-    // - Authenticated users can read their own profile
-    // - Admins can read any profile
-    // - Users can create their own profile upon signup (handled by AuthProvider logic with backend calls if needed)
-    // - Users can update their own displayName/email (via backend calls that verify ownership)
-    // - Admins can update any user's role/displayName
+    // Helper function to check if a user is an admin
+    // Assumes admin UIDs are stored in an environment variable or directly in rules (less secure for direct UIDs)
+    // For a more robust solution, consider a custom claim or an 'admins' collection.
+    function isAdmin() {
+      // Replace 'YOUR_ADMIN_UID_HERE' with the actual admin user's UID
+      // It's better to manage this via custom claims or a dedicated admin collection for multiple admins.
+      // return isAuthenticated() && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+      // For now, let's assume an 'admin' role is stored in the user's profile document
+       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Helper function to check if the user is the owner of the document
+    function isOwner(docData) {
+      return isAuthenticated() && request.auth.uid == docData.createdByUserId;
+    }
+    
     match /users/{userId} {
-      allow read: if request.auth.uid == userId || isAdmin(request.auth.uid);
-      allow create: if request.auth.uid == userId; // Or allow all authenticated for initial profile creation
-      allow update: if request.auth.uid == userId || isAdmin(request.auth.uid);
-      // Deletion of user profiles is typically not allowed directly from client, managed by admin processes
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId; // User can create their own profile
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin()); // User can update their own, admin can update any
+      allow delete: if isAdmin(); // Only admins can delete user profiles
     }
 
-    // Company Settings:
-    // - All authenticated users can read (for appName etc.)
-    // - Only admins can write
-    match /companySettings/main {
-      allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid);
-    }
-
-    // Clients:
-    // - Authenticated users can read all clients
-    // - Users can create clients (request.auth.uid == resource.data.createdByUserId implies ownership on create)
-    // - Users can update clients they created OR if they are admin
-    // - Admins can delete clients (deletion might trigger approval for non-admins)
     match /clients/{clientId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth.uid == request.resource.data.createdByUserId;
-      allow update: if request.auth.uid == resource.data.createdByUserId || isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid); // Or if request is part of an approved deletion flow
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (isOwner(resource.data) || isAdmin());
+      allow delete: if isAuthenticated() && (isOwner(resource.data) || isAdmin());
     }
 
-    // Bills of Lading (BLs):
-    // - Authenticated users can read all BLs
-    // - Users can create BLs
-    // - Users can update BLs they created OR if they are admin
-    // - Admins can delete BLs
     match /billsOfLading/{blId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth.uid == request.resource.data.createdByUserId;
-      allow update: if request.auth.uid == resource.data.createdByUserId || isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (isOwner(resource.data) || isAdmin());
+      allow delete: if isAuthenticated() && (isOwner(resource.data) || isAdmin());
     }
 
-    // Expenses:
-    // - Authenticated users can read all expenses
-    // - Users can create expenses
-    // - Users can update expenses they created OR if they are admin
-    // - Admins can delete expenses
     match /expenses/{expenseId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth.uid == request.resource.data.employeeId;
-      allow update: if request.auth.uid == resource.data.employeeId || isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (isOwner(get(/databases/$(database)/documents/billsOfLading/$(request.resource.data.blId)).data) || isAdmin());
+      allow delete: if isAuthenticated() && (isOwner(get(/databases/$(database)/documents/billsOfLading/$(resource.data.blId)).data) || isAdmin());
     }
 
-    // Work Types:
-    // - Authenticated users can read all work types
-    // - Users can create work types
-    // - Users can update work types they created OR if they are admin
-    // - Admins can delete work types
     match /workTypes/{workTypeId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth.uid == request.resource.data.createdByUserId;
-      allow update: if request.auth.uid == resource.data.createdByUserId || isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && isAdmin(); // Or isOwner(resource.data) if createdByUserId is added
+      allow delete: if isAuthenticated() && isAdmin(); // Or isOwner(resource.data)
     }
 
-    // Containers:
-    // - Authenticated users can read all containers
-    // - Users can create containers (linked to a BL they can access/create)
-    // - Users can update containers they created OR if they are admin
-    // - Admins can delete containers
     match /containers/{containerId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth.uid == request.resource.data.createdByUserId;
-      allow update: if request.auth.uid == resource.data.createdByUserId || isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // User who created the BL can add containers
+      allow update: if isAuthenticated() && (isOwner(get(/databases/$(database)/documents/billsOfLading/$(request.resource.data.blId)).data) || isAdmin());
+      allow delete: if isAuthenticated() && (isOwner(get(/databases/$(database)/documents/billsOfLading/$(resource.data.blId)).data) || isAdmin());
     }
 
-    // Trucks:
-    // - Authenticated users can read all trucks
-    // - Users can create trucks (if they have a role that permits fleet management, e.g., admin)
-    // - Users can update trucks they created OR if they are admin
-    // - Admins can delete trucks
     match /trucks/{truckId} {
-      allow read: if request.auth != null;
-      allow create: if isAdmin(request.auth.uid); // Or a specific role, for now admin only
-      allow update: if isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Typically admins or designated logistics managers
+      allow update: if isAuthenticated() && isAdmin(); // Or based on roles
+      allow delete: if isAuthenticated() && isAdmin();
     }
 
-    // Drivers:
-    // - Authenticated users can read all drivers
-    // - Users can create drivers (if admin)
-    // - Users can update drivers they created OR if they are admin
-    // - Admins can delete drivers
     match /drivers/{driverId} {
-      allow read: if request.auth != null;
-      allow create: if isAdmin(request.auth.uid); // Or a specific role, for now admin only
-      allow update: if isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated(); // Typically admins or designated logistics managers
+      allow update: if isAuthenticated() && isAdmin(); // Or based on roles
+      allow delete: if isAuthenticated() && isAdmin();
     }
-
-    // Transports:
-    // - Authenticated users can read all transports
-    // - Users can create transports
-    // - Users can update transports they created OR if they are admin
-    // - Admins can delete transports
+    
     match /transports/{transportId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth.uid == request.resource.data.createdByUserId;
-      allow update: if request.auth.uid == resource.data.createdByUserId || isAdmin(request.auth.uid);
-      allow delete: if isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (isOwner(resource.data) || isAdmin());
+      allow delete: if isAuthenticated() && (isOwner(resource.data) || isAdmin());
     }
 
-    // Approval Requests:
-    // - Users can create requests for themselves
-    // - Users can read their own requests
-    // - Admins can read all requests and update any request
     match /approvalRequests/{requestId} {
-      allow read: if request.auth.uid == resource.data.requestedByUserId || isAdmin(request.auth.uid);
-      allow create: if request.auth.uid == request.resource.data.requestedByUserId;
-      allow update: if isAdmin(request.auth.uid); // Only admins can process/update status
-      // Deletion of approval requests is typically not allowed from client
+      allow read: if isAuthenticated(); // Users can read their own or admins can read all
+      allow create: if isAuthenticated(); // Any authenticated user can create a request
+      allow update: if isAdmin(); // Only admins can update (approve/reject) requests
+      allow delete: if isAdmin(); // Only admins can delete requests
     }
 
-    // Chat Messages:
-    // - Authenticated users can read all messages (for group chat)
-    // - Authenticated users can create messages
     match /chatMessages/{messageId} {
-      allow read, write: if request.auth != null; // Simplistic rule, refine if needed
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if false; // Messages are typically immutable
+      allow delete: if isAdmin(); // Admins might be able to delete messages
     }
 
-    // Todo Items:
-    // - Authenticated users can read all todos (shared list)
-    // - Authenticated users can create todos
-    // - Users can update/delete todos they created OR if they are assigned to it OR if admin
     match /todoItems/{todoId} {
-      allow read, write: if request.auth != null; // Simplistic, refine for ownership/assignment
-      // allow update, delete: if request.auth.uid == resource.data.createdByUserId || request.auth.uid == resource.data.assignedToUserId || isAdmin(request.auth.uid);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated(); // Allow user to update (e.g., complete, reassign if allowed)
+      allow delete: if isAuthenticated() && (isOwner(resource.data) || isAdmin());
+    }
+    
+    match /auditLogSessions/{logId} {
+        allow read: if isAdmin(); // Only admins can read audit logs
+        allow create: if true; // System or server-side should write these
+        allow update: if false;
+        allow delete: if isAdmin(); // Admins might clean up old logs
     }
 
-    // Audit Log (Sessions):
-    // - Only backend/admin can write (via trusted server/functions)
-    // - Only admins can read
-    match /auditLogSessions/{logId} {
-      allow read: if isAdmin(request.auth.uid);
-      allow write: if false; // Client should not write directly
+    match /companySettings/main {
+        allow read: if isAuthenticated(); // All authenticated users can read company settings
+        allow write: if isAdmin(); // Only admins can write/update company settings
     }
   }
 }

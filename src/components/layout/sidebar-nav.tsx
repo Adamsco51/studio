@@ -3,31 +3,47 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History, Truck as TruckIcon, UserCog, Route } from 'lucide-react'; // Added UserCog for Drivers, Route for Transports
+import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History, Truck as TruckIcon, UserCog, Route, Box as ContainerIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarMenuBadge,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/auth-context';
 import { useEffect, useState } from 'react';
 import { getApprovalRequestsFromFirestore } from '@/lib/mock-data';
 import type { ApprovalRequest } from '@/lib/types';
 
-const navItems = [
+const mainOpsNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clients', label: 'Clients', icon: UsersIconLucide },
-  { href: '/bls', label: 'Bills of Lading', icon: FileText },
+  { href: '/bls', label: 'Connaissements', icon: FileText },
+  { href: '/transports', label: 'Transports', icon: Route },
+  { href: '/containers', label: 'Conteneurs', icon: ContainerIcon },
   { href: '/expenses', label: 'Dépenses', icon: DollarSign },
+];
+
+const configNavItems = [
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
   { href: '/trucks', label: 'Camions', icon: TruckIcon },
   { href: '/drivers', label: 'Chauffeurs', icon: UserCog },
-  { href: '/transports', label: 'Transports', icon: Route },
-  { href: '/chat', label: 'Messagerie', icon: MessageSquare },
-  { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered },
-  { href: '/reports', label: 'Rapports', icon: Package },
+];
+
+const communicationNavItems = [
+    { href: '/chat', label: 'Messagerie', icon: MessageSquare },
+];
+
+const userSpecificNavItems = [
+    { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered },
+];
+
+const toolsNavItems = [
+    { href: '/reports', label: 'Rapports', icon: Package },
 ];
 
 const adminNavItems = [
@@ -53,50 +69,92 @@ export function SidebarNav() {
         }
       };
       fetchPendingApprovals();
+      const interval = setInterval(fetchPendingApprovals, 60000); // Refresh every minute
+      return () => clearInterval(interval);
     } else {
       setPendingApprovalsCount(0);
     }
   }, [isAdmin, user]);
 
-  const visibleNavItems = user && isAdmin ? navItems.filter(item => item.href !== '/my-requests') : navItems;
+  const renderNavItems = (items: typeof mainOpsNavItems, isPartOfAdmin?: boolean) => {
+    if (!user) return null;
+    if (isPartOfAdmin && !isAdmin) return null;
 
-  return (
-    <SidebarMenu>
-      {visibleNavItems.map((item) => (
+    return items.map((item) => {
+      if (item.href === '/my-requests' && isAdmin) return null; // Hide 'Mes Demandes' for admins
+
+      const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+      const badgeCount = (item as any).badgeKey === 'pendingApprovals' ? pendingApprovalsCount : 0;
+
+      return (
         <SidebarMenuItem key={item.href}>
           <Link href={item.href} passHref legacyBehavior>
             <SidebarMenuButton
               variant="default"
               size="default"
-              isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+              isActive={isActive}
               tooltip={{ children: item.label, side: "right", align: "center" }}
               className="justify-start"
             >
               <item.icon className="h-5 w-5" />
               <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-            </SidebarMenuButton>
-          </Link>
-        </SidebarMenuItem>
-      ))}
-      {isAdmin && adminNavItems.map((item) => (
-         <SidebarMenuItem key={item.href}>
-          <Link href={item.href} passHref legacyBehavior>
-            <SidebarMenuButton
-              variant="default"
-              size="default"
-              isActive={pathname === item.href || pathname.startsWith(item.href)}
-              tooltip={{ children: item.label, side: "right", align: "center" }}
-              className="justify-start"
-            >
-              <item.icon className="h-5 w-5" />
-              <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-              {item.badgeKey === 'pendingApprovals' && pendingApprovalsCount > 0 && (
-                <SidebarMenuBadge>{pendingApprovalsCount}</SidebarMenuBadge>
+              {badgeCount > 0 && (
+                <SidebarMenuBadge>{badgeCount}</SidebarMenuBadge>
               )}
             </SidebarMenuButton>
           </Link>
         </SidebarMenuItem>
-      ))}
+      );
+    });
+  };
+
+  return (
+    <SidebarMenu>
+      <SidebarGroup>
+        <SidebarGroupLabel>Opérations</SidebarGroupLabel>
+        {renderNavItems(mainOpsNavItems)}
+      </SidebarGroup>
+      
+      <SidebarSeparator />
+      
+      <SidebarGroup>
+        <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+        {renderNavItems(configNavItems)}
+      </SidebarGroup>
+
+      <SidebarSeparator />
+
+      <SidebarGroup>
+        <SidebarGroupLabel>Communication</SidebarGroupLabel>
+        {renderNavItems(communicationNavItems)}
+      </SidebarGroup>
+      
+      <SidebarSeparator />
+
+      <SidebarGroup>
+        <SidebarGroupLabel>Outils</SidebarGroupLabel>
+        {renderNavItems(toolsNavItems)}
+      </SidebarGroup>
+
+      {!isAdmin && user && (
+        <>
+          <SidebarSeparator />
+          <SidebarGroup>
+            <SidebarGroupLabel>Personnel</SidebarGroupLabel>
+            {renderNavItems(userSpecificNavItems)}
+          </SidebarGroup>
+        </>
+      )}
+
+      {isAdmin && (
+        <>
+          <SidebarSeparator />
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-destructive">Administration</SidebarGroupLabel>
+            {renderNavItems(adminNavItems, true)}
+          </SidebarGroup>
+        </>
+      )}
     </SidebarMenu>
   );
 }

@@ -610,6 +610,76 @@ export const addContainerToFirestore = async (
   }
 };
 
+export const getContainersFromFirestore = async (): Promise<Container[]> => {
+  try {
+    const q = query(containersCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
+    const containersWithBlNumber = await Promise.all(data.docs.map(async (docSnap) => {
+      const containerData = docSnap.data() as Omit<Container, 'blNumber'>;
+      let blNumber: string | undefined = undefined;
+      if (containerData.blId) {
+        const bl = await getBLByIdFromFirestore(containerData.blId);
+        blNumber = bl?.blNumber;
+      }
+      return {
+        ...containerData,
+        id: docSnap.id,
+        blNumber: blNumber,
+        createdAt: containerData.createdAt instanceof Timestamp ? containerData.createdAt.toDate().toISOString() : new Date().toISOString(),
+        shippingDate: containerData.shippingDate ? (containerData.shippingDate as unknown as Timestamp).toDate().toISOString() : undefined,
+        dischargeDate: containerData.dischargeDate ? (containerData.dischargeDate as unknown as Timestamp).toDate().toISOString() : undefined,
+        truckLoadingDate: containerData.truckLoadingDate ? (containerData.truckLoadingDate as unknown as Timestamp).toDate().toISOString() : undefined,
+        destinationArrivalDate: containerData.destinationArrivalDate ? (containerData.destinationArrivalDate as unknown as Timestamp).toDate().toISOString() : undefined,
+      } as Container;
+    }));
+    return containersWithBlNumber;
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch containers. Check rules.", e);
+    } else {
+      console.error("Error getting documents (containers): ", e);
+    }
+    return [];
+  }
+};
+
+
+export const getContainerByIdFromFirestore = async (containerId: string): Promise<Container | null> => {
+  try {
+    const containerDocRef = doc(db, "containers", containerId);
+    const containerSnap = await getDoc(containerDocRef);
+    if (containerSnap.exists()) {
+      const data = containerSnap.data();
+      let blNumber: string | undefined = undefined;
+      if (data.blId) {
+        const bl = await getBLByIdFromFirestore(data.blId);
+        blNumber = bl?.blNumber;
+      }
+      return {
+        ...data,
+        id: containerSnap.id,
+        blNumber: blNumber,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
+        shippingDate: data.shippingDate instanceof Timestamp ? data.shippingDate.toDate().toISOString() : undefined,
+        dischargeDate: data.dischargeDate instanceof Timestamp ? data.dischargeDate.toDate().toISOString() : undefined,
+        truckLoadingDate: data.truckLoadingDate instanceof Timestamp ? data.truckLoadingDate.toDate().toISOString() : undefined,
+        destinationArrivalDate: data.destinationArrivalDate instanceof Timestamp ? data.destinationArrivalDate.toDate().toISOString() : undefined,
+      } as Container;
+    } else {
+      console.log("No such document for container ID:", containerId);
+      return null;
+    }
+  } catch (e: any) {
+     if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch container ${containerId}. Check rules.`, e);
+    } else {
+      console.error(`Error getting document (container ${containerId}): `, e);
+    }
+    return null;
+  }
+};
+
+
 export const getContainersByBlIdFromFirestore = async (blId: string): Promise<Container[]> => {
   const q = query(containersCollectionRef, where("blId", "==", blId), orderBy("createdAt", "desc"));
   try {

@@ -21,10 +21,10 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-import type { Container } from "@/lib/types";
+import type { Container, BillOfLading } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
-import { addContainerToFirestore, updateContainerInFirestore } from "@/lib/mock-data";
-import { useState, useEffect } from "react";
+import { addContainerToFirestore, updateContainerInFirestore, getBLsFromFirestore } from "@/lib/mock-data";
+import { useState, useEffect, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,7 @@ const containerTypeOptions = [
     "20ft Standard Dry", "40ft Standard Dry", "40ft High Cube (HC)", "20ft Reefer", "40ft Reefer", "20ft Open Top", "40ft Open Top", "20ft Flat Rack", "40ft Flat Rack", "Tank Container", "Other"
 ];
 
-const containerFormSchema = z.object({
+const containerFormSchemaBase = z.object({
   containerNumber: z.string().min(5, { message: "Le numéro de conteneur doit être valide (ex: MSCU1234567)." }),
   type: z.string({ required_error: "Veuillez sélectionner un type de conteneur." }),
   sealNumber: z.string().optional(),
@@ -49,26 +49,44 @@ const containerFormSchema = z.object({
   notes: z.string().optional(),
 });
 
+const containerFormSchema = z.discriminatedUnion("isBlProvided", [
+  containerFormSchemaBase.extend({
+    isBlProvided: z.literal(true),
+    blId: z.string(), // blId is directly provided
+  }),
+  containerFormSchemaBase.extend({
+    isBlProvided: z.literal(false),
+    blId: z.string({ required_error: "Veuillez sélectionner un Connaissement (BL)." }), // blId must be selected
+  }),
+]);
+
+
 type ContainerFormValues = z.infer<typeof containerFormSchema>;
 
 interface ContainerFormProps {
   initialData?: Container | null;
-  blId: string; // Always required
+  blId?: string; // Optional: if provided, form is for this specific BL
+  availableBls?: BillOfLading[]; // Optional: if adding standalone, pass available BLs
   onContainerSaved: (container: Container) => void;
   setDialogOpen?: (open: boolean) => void;
 }
 
 export function ContainerForm({
   initialData,
-  blId,
+  blId: providedBlId,
+  availableBls: passedAvailableBls,
   onContainerSaved,
   setDialogOpen,
 }: ContainerFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [internalAvailableBls, setInternalAvailableBls] = useState<BillOfLading[]>(passedAvailableBls || []);
+  const [isLoadingBls, setIsLoadingBls] = useState(!passedAvailableBls && !initialData && !providedBlId);
+
 
   const isEditing = !!initialData;
+  const isBlContextProvided = !!providedBlId || isEditing;
 
   const formatDateForInput = (dateString?: string | null) => {
     if (!dateString) return undefined;
@@ -83,36 +101,77 @@ export function ContainerForm({
     resolver: zodResolver(containerFormSchema),
     defaultValues: initialData
       ? {
+          isBlProvided: true,
+          blId: initialData.blId,
           ...initialData,
           shippingDate: formatDateForInput(initialData.shippingDate),
           dischargeDate: formatDateForInput(initialData.dischargeDate),
           truckLoadingDate: formatDateForInput(initialData.truckLoadingDate),
           destinationArrivalDate: formatDateForInput(initialData.destinationArrivalDate),
         }
-      : {
-          containerNumber: "",
-          type: "",
-          sealNumber: "",
-          status: "At Origin Port",
-          shippingDate: null,
-          dischargeDate: null,
-          truckLoadingDate: null,
-          destinationArrivalDate: null,
-          notes: "",
-        },
+      : providedBlId
+        ? {
+            isBlProvided: true,
+            blId: providedBlId,
+            containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+            shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
+          }
+        : { // Adding standalone, blId will come from select
+            isBlProvided: false,
+            blId: "", // Requires selection
+            containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+            shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
+          },
   });
+  
+  const fetchBlsForSelect = useCallback(async () => {
+    if (!passedAvailableBls && !isBlContextProvided) {
+      setIsLoadingBls(true);
+      try {
+        const fetchedBls = await getBLsFromFirestore();
+        setInternalAvailableBls(fetchedBls.filter(bl => bl.status === 'en cours'));
+      } catch (error) {
+        console.error("Failed to fetch BLs for container form:", error);
+        toast({ title: "Erreur", description: "Impossible de charger la liste des BLs.", variant: "destructive" });
+      } finally {
+        setIsLoadingBls(false);
+      }
+    }
+  }, [passedAvailableBls, isBlContextProvided, toast]);
 
   useEffect(() => {
+    fetchBlsForSelect();
+  }, [fetchBlsForSelect]);
+
+  useEffect(() => {
+    // Reset form when initialData or providedBlId changes
     if (initialData) {
       form.reset({
+        isBlProvided: true,
+        blId: initialData.blId,
         ...initialData,
         shippingDate: formatDateForInput(initialData.shippingDate),
         dischargeDate: formatDateForInput(initialData.dischargeDate),
         truckLoadingDate: formatDateForInput(initialData.truckLoadingDate),
         destinationArrivalDate: formatDateForInput(initialData.destinationArrivalDate),
       });
+    } else if (providedBlId) {
+      form.reset({
+        isBlProvided: true,
+        blId: providedBlId,
+        containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+        shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
+      });
+    } else {
+       form.reset({
+        isBlProvided: false,
+        blId: "", // Reset blId for standalone add to force selection
+        containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+        shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: "",
+      });
     }
-  }, [initialData, form]);
+  }, [initialData, providedBlId, form]);
+
 
   async function onSubmit(data: ContainerFormValues) {
     if (!user) {
@@ -121,8 +180,16 @@ export function ContainerForm({
     }
     setIsSubmitting(true);
 
+    const finalBlId = data.isBlProvided ? data.blId : data.blId; // data.blId is always populated by schema logic
+
+    if (!finalBlId) {
+        toast({ title: "Erreur", description: "Connaissement (BL) non spécifié.", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+    }
+
     const containerPayloadBase = {
-      blId: blId,
+      blId: finalBlId,
       containerNumber: data.containerNumber,
       type: data.type,
       sealNumber: data.sealNumber || "",
@@ -151,10 +218,13 @@ export function ContainerForm({
       if (setDialogOpen) {
         setDialogOpen(false);
       } else {
-         form.reset( {
-            containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+         form.reset(providedBlId ? {
+            isBlProvided: true, blId: providedBlId, containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
             shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: ""
-        });
+         } : {
+            isBlProvided: false, blId: "", containerNumber: "", type: "", sealNumber: "", status: "At Origin Port",
+            shippingDate: null, dischargeDate: null, truckLoadingDate: null, destinationArrivalDate: null, notes: ""
+         });
       }
     } catch (error) {
       console.error("Failed to save container:", error);
@@ -168,7 +238,7 @@ export function ContainerForm({
     }
   }
 
-  const renderDateField = (name: keyof ContainerFormValues, label: string) => (
+  const renderDateField = (name: keyof Pick<ContainerFormValues, "shippingDate" | "dischargeDate" | "truckLoadingDate" | "destinationArrivalDate">, label: string) => (
     <FormField
       control={form.control}
       name={name}
@@ -216,6 +286,46 @@ export function ContainerForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-1 max-h-[70vh] overflow-y-auto pr-2">
+        {!isBlContextProvided && (
+             <FormField
+                control={form.control}
+                name="blId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Connaissement (BL) Associé</FormLabel>
+                    <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isSubmitting || isLoadingBls || internalAvailableBls.length === 0}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={isLoadingBls ? "Chargement des BLs..." : (internalAvailableBls.length === 0 ? "Aucun BL actif disponible" : "Sélectionnez un BL")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {internalAvailableBls.map((bl) => (
+                          <SelectItem key={bl.id} value={bl.id}>
+                            {bl.blNumber} - {bl.status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+            />
+        )}
+        {isBlContextProvided && form.getValues("blId") && (
+             <FormItem>
+                <FormLabel>N° BL Associé</FormLabel>
+                <Input 
+                    value={internalAvailableBls.find(bl => bl.id === (initialData?.blId || providedBlId))?.blNumber || 'Chargement...'} 
+                    disabled 
+                />
+             </FormItem>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
@@ -316,8 +426,8 @@ export function ContainerForm({
           )}
         />
         <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmitting || isLoadingBls}>
+            {isSubmitting || isLoadingBls && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isEditing ? "Sauvegarder Modifications" : "Ajouter Conteneur"}
             </Button>
         </div>

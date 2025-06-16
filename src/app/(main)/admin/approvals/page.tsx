@@ -17,7 +17,7 @@ import {
     deleteContainerFromFirestore,
     deleteTruckFromFirestore,
     deleteDriverFromFirestore,
-    deleteTransportFromFirestore, // Added
+    deleteTransportFromFirestore, 
 } from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
@@ -80,7 +80,7 @@ const getEntityTypeText = (entityType: ApprovalRequest['entityType']) => {
         case 'container': return 'Conteneur';
         case 'truck': return 'Camion';
         case 'driver': return 'Chauffeur';
-        case 'transport': return 'Transport'; // Added
+        case 'transport': return 'Transport';
         default: return entityType;
     }
 };
@@ -184,15 +184,23 @@ export default function AdminApprovalsPage() {
           } else if (selectedRequest.entityType === 'driver') {
             await deleteDriverFromFirestore(selectedRequest.entityId);
             entityDeleted = true;
-          } else if (selectedRequest.entityType === 'transport') { // Added
+          } else if (selectedRequest.entityType === 'transport') { 
             await deleteTransportFromFirestore(selectedRequest.entityId);
             entityDeleted = true;
           } else if (selectedRequest.entityType === 'container') {
             let blIdForContainer: string | undefined;
             if (selectedRequest.entityDescription?.includes('(BL N°')) {
                 const match = selectedRequest.entityDescription.match(/\(BL N°\s*([a-zA-Z0-9-]+)\)/);
+                if (match && match[1]) {
+                    const bl = await getBLByIdFromFirestore(match[1]); // Ensure getBLByIdFromFirestore exists
+                    if(bl) blIdForContainer = bl.id;
+                }
+            }
+            if (!blIdForContainer && selectedRequest.entityDescription?.includes('BL ID:')) { // Fallback if BL Number not found, check for direct ID
+                const match = selectedRequest.entityDescription.match(/BL ID:\s*([a-zA-Z0-9-]+)/);
                 if (match && match[1]) blIdForContainer = match[1];
             }
+
             if (blIdForContainer) {
                 await deleteContainerFromFirestore(selectedRequest.entityId, blIdForContainer);
                 entityDeleted = true;
@@ -238,17 +246,28 @@ export default function AdminApprovalsPage() {
         return `/trucks/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'driver':
         return `/drivers/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
-      case 'transport': // Added
+      case 'transport': 
         return `/transports/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
-      case 'expense':
       case 'container':
+        if (request.actionType === 'edit') {
+          return `/containers/${request.entityId}/edit`;
+        }
+        // For delete, link to the BL page, as container might not exist anymore
+        if (request.entityDescription?.includes("BL N°")) {
+          const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
+          if (blMatch && blMatch[1]) {
+            return `/bls/${blMatch[1]}`;
+          }
+        }
+        return `/containers`; // Fallback to container list
+      case 'expense':
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
             return `/bls/${blMatch[1]}`; 
           }
         }
-        return null; 
+        return `/expenses`;
       default:
         return null;
     }
