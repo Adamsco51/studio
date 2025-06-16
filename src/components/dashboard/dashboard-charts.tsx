@@ -33,7 +33,7 @@ export default function DashboardCharts({
     <>
       {/* BL Status Pie Chart */}
       {blStatusChartData && blStatusChartData.length > 0 ? (
-        <Card className="shadow-lg">
+        <Card className="shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PieChartIcon className="h-6 w-6 text-purple-500" />
@@ -41,8 +41,8 @@ export default function DashboardCharts({
             </CardTitle>
             <CardDescription>Visualisation du nombre de BLs par statut.</CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
-            <ChartContainer config={blStatusChartConfig} className="mx-auto aspect-square max-h-[250px]">
+          <CardContent className="pt-0 flex-grow flex items-center justify-center">
+            <ChartContainer config={blStatusChartConfig} className="mx-auto aspect-square max-h-[250px] w-full">
               <RechartsPrimitive.PieChart>
                 <ChartTooltip
                   cursor={false}
@@ -78,7 +78,7 @@ export default function DashboardCharts({
           </CardContent>
         </Card>
       ) : (
-        <Card className="shadow-lg">
+        <Card className="shadow-lg flex flex-col">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <PieChartIcon className="h-6 w-6 text-purple-500" />
@@ -86,7 +86,7 @@ export default function DashboardCharts({
                 </CardTitle>
                 <CardDescription>Aucune donnée de statut de BL à afficher.</CardDescription>
             </CardHeader>
-            <CardContent className="flex items-center justify-center min-h-[250px] aspect-square">
+            <CardContent className="flex-grow flex items-center justify-center min-h-[250px] aspect-square">
                 <p className="text-muted-foreground">Pas de données pour le graphique.</p>
             </CardContent>
         </Card>
@@ -94,7 +94,7 @@ export default function DashboardCharts({
 
       {/* Monthly Expenses Line Chart */}
       {monthlyExpensesChartData && monthlyExpensesChartData.length > 0 ? (
-        <Card className="shadow-lg">
+        <Card className="shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-6 w-6 text-red-500" />
@@ -102,7 +102,7 @@ export default function DashboardCharts({
             </CardTitle>
             <CardDescription>Total des dépenses enregistrées par mois.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-grow flex items-center justify-center">
             <ChartContainer config={monthlyExpensesChartConfig} className="h-[250px] w-full">
               <RechartsPrimitive.LineChart
                 accessibilityLayer
@@ -154,7 +154,7 @@ export default function DashboardCharts({
           </CardContent>
         </Card>
       ) : (
-         <Card className="shadow-lg">
+         <Card className="shadow-lg flex flex-col">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Activity className="h-6 w-6 text-red-500" />
@@ -162,7 +162,7 @@ export default function DashboardCharts({
                 </CardTitle>
                 <CardDescription>Aucune donnée de dépense à afficher.</CardDescription>
             </CardHeader>
-            <CardContent className="flex items-center justify-center min-h-[250px]">
+            <CardContent className="flex-grow flex items-center justify-center min-h-[250px]">
                 <p className="text-muted-foreground">Pas de données pour le graphique.</p>
             </CardContent>
         </Card>

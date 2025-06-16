@@ -151,21 +151,21 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader title="Tableau de Bord" description="Vue d'ensemble de vos opérations et performances." />
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
         {stats.map((stat) => (
-          <Card key={stat.title} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <Card key={stat.title} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
               <stat.icon className={`h-5 w-5 ${stat.color}`} />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-grow">
               <div className={`text-2xl font-bold ${stat.color}`}>{typeof stat.value === 'number' && stat.title !== 'Rentabilité Globale' && stat.title !== 'Total Dépenses' ? stat.value : stat.value}</div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2"> 
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2 items-stretch"> 
         <DashboardCharts 
           blStatusChartData={blStatusChartData} 
           blStatusChartConfig={blStatusChartConfig} 
@@ -174,8 +174,8 @@ export default function DashboardPage() {
         />
       </div>
       
-      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="shadow-lg">
+      <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+        <Card className="shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ListChecks className="h-6 w-6 text-primary" />
@@ -183,7 +183,7 @@ export default function DashboardPage() {
             </CardTitle>
             <CardDescription>Rentabilité des connaissements enregistrés.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 flex-grow">
             <div className="flex justify-between items-center p-3 bg-secondary/30 rounded-md">
               <div className="flex items-center">
                 <Sigma className="h-5 w-5 mr-2 text-muted-foreground" />
@@ -205,15 +205,15 @@ export default function DashboardPage() {
               </div>
               <Badge variant="secondary" className="bg-red-100 text-red-700">{lossMakingBls}</Badge>
             </div>
-             <div className="pt-2">
-                <Link href="/bls" passHref>
-                    <Button variant="outline" className="w-full">Voir tous les BLs</Button>
-                </Link>
-            </div>
           </CardContent>
+           <CardFooter className="pt-2">
+              <Link href="/bls" passHref className="w-full">
+                  <Button variant="outline" className="w-full">Voir tous les BLs</Button>
+              </Link>
+          </CardFooter>
         </Card>
 
-        <Card className="shadow-lg">
+        <Card className="shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-6 w-6 text-accent" />
@@ -221,7 +221,7 @@ export default function DashboardPage() {
             </CardTitle>
              <CardDescription>Clients avec des opérations en cours.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-grow">
             {clientsWithOpenBLs.length > 0 ? (
               <ul className="space-y-2">
                 {clientsWithOpenBLs.slice(0, 5).map(client => ( 
@@ -237,12 +237,12 @@ export default function DashboardPage() {
             ) : (
               <p className="text-sm text-muted-foreground text-center py-4">Aucun client avec des BLs "en cours" actuellement.</p>
             )}
-            <div className="pt-4">
-                <Link href="/clients" passHref>
-                    <Button variant="outline" className="w-full">Voir tous les clients</Button>
-                </Link>
-            </div>
           </CardContent>
+          <CardFooter className="pt-4">
+              <Link href="/clients" passHref className="w-full">
+                  <Button variant="outline" className="w-full">Voir tous les clients</Button>
+              </Link>
+          </CardFooter>
         </Card>
         
         <RecentChatCard />

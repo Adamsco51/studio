@@ -16,10 +16,10 @@ interface ChartsLoaderProps {
 }
 
 const DashboardCharts = dynamic(() => import('@/components/dashboard/dashboard-charts'), {
-  ssr: false, // Keep ssr:false for recharts if it was specifically needed
-  loading: () => ( // This loading state is for the dynamic import itself.
+  ssr: false, 
+  loading: () => ( 
     <>
-      <Card className="shadow-lg">
+      <Card className="shadow-lg flex flex-col">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
@@ -27,11 +27,11 @@ const DashboardCharts = dynamic(() => import('@/components/dashboard/dashboard-c
           </CardTitle>
           <CardDescription>Statuts de BL.</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-center min-h-[250px] aspect-square">
+        <CardContent className="flex-grow flex items-center justify-center min-h-[250px] aspect-square">
           <p className="text-muted-foreground">Chargement...</p>
         </CardContent>
       </Card>
-      <Card className="shadow-lg">
+      <Card className="shadow-lg flex flex-col">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Loader2 className="h-6 w-6 animate-spin text-red-500" />
@@ -39,7 +39,7 @@ const DashboardCharts = dynamic(() => import('@/components/dashboard/dashboard-c
           </CardTitle>
           <CardDescription>Dépenses mensuelles.</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-center min-h-[250px]">
+        <CardContent className="flex-grow flex items-center justify-center min-h-[250px]">
           <p className="text-muted-foreground">Chargement...</p>
         </CardContent>
       </Card>
@@ -52,13 +52,13 @@ export default function ChartsLoader({
   blStatusChartConfig,
   monthlyExpensesChartData,
   monthlyExpensesChartConfig,
-  isLoading, // Destructure isLoading
+  isLoading, 
 }: ChartsLoaderProps) {
-  // If parent component (DashboardPage) is loading data, show a more generic loading state for charts.
+  
   if (isLoading) {
     return (
       <>
-        <Card className="shadow-lg">
+        <Card className="shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PieChartIcon className="h-6 w-6 text-purple-500" />
@@ -66,11 +66,11 @@ export default function ChartsLoader({
             </CardTitle>
             <CardDescription>Chargement des données...</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center justify-center min-h-[250px] aspect-square">
+          <CardContent className="flex-grow flex items-center justify-center min-h-[250px] aspect-square">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
-        <Card className="shadow-lg">
+        <Card className="shadow-lg flex flex-col">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-6 w-6 text-red-500" />
@@ -78,7 +78,7 @@ export default function ChartsLoader({
             </CardTitle>
             <CardDescription>Chargement des données...</CardDescription>
           </CardHeader>
-          <CardContent className="flex items-center justify-center min-h-[250px]">
+          <CardContent className="flex-grow flex items-center justify-center min-h-[250px]">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
@@ -86,8 +86,6 @@ export default function ChartsLoader({
     );
   }
 
-  // If data is loaded, render DashboardCharts.
-  // The dynamic import's own loading state handles the initial component load.
   return (
     <DashboardCharts 
       blStatusChartData={blStatusChartData} 
