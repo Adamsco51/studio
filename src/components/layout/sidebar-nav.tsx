@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History, Truck as TruckIcon } from 'lucide-react'; // Added TruckIcon and History
+import { LayoutDashboard, Users as UsersIconLucide, FileText, Settings as SettingsIcon, Package, DollarSign, Briefcase, MessageSquare, ShieldAlert, ListOrdered, Users, History, Truck as TruckIcon, UserCog } from 'lucide-react'; // Added UserCog for Drivers
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
@@ -22,8 +22,8 @@ const navItems = [
   { href: '/bls', label: 'Bills of Lading', icon: FileText },
   { href: '/expenses', label: 'Dépenses', icon: DollarSign },
   { href: '/work-types', label: 'Types de Travail', icon: Briefcase },
-  { href: '/trucks', label: 'Camions', icon: TruckIcon }, // Added Trucks
-  // { href: '/drivers', label: 'Chauffeurs', icon: UsersIconLucide }, // Placeholder for Drivers
+  { href: '/trucks', label: 'Camions', icon: TruckIcon },
+  { href: '/drivers', label: 'Chauffeurs', icon: UserCog },
   { href: '/chat', label: 'Messagerie', icon: MessageSquare },
   { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered },
   { href: '/reports', label: 'Rapports', icon: Package },

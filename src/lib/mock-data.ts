@@ -1,5 +1,5 @@
 
-import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver } from './types';
+import type { Client, BillOfLading, Expense, User, WorkType, ChatMessage, TodoItem, UserProfile, ApprovalRequest, ApprovalRequestStatus, ApprovalRequestEntityType, ApprovalRequestActionType, SessionAuditEvent, CompanyProfile, Container, Truck, Driver, DriverStatus } from './types';
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -38,8 +38,8 @@ const blsCollectionRef = collection(db, "billsOfLading");
 const expensesCollectionRef = collection(db, "expenses");
 const workTypesCollectionRef = collection(db, "workTypes");
 const containersCollectionRef = collection(db, "containers");
-const trucksCollectionRef = collection(db, "trucks"); // New collection for Trucks
-// const driversCollectionRef = collection(db, "drivers"); // Will be used later
+const trucksCollectionRef = collection(db, "trucks");
+const driversCollectionRef = collection(db, "drivers");
 const approvalRequestsCollectionRef = collection(db, "approvalRequests");
 const chatMessagesCollectionRef = collection(db, "chatMessages");
 const todoItemsCollectionRef = collection(db, "todoItems");
@@ -678,6 +678,8 @@ export const addTruckToFirestore = async (truckData: Omit<Truck, 'id' | 'created
   try {
     const dataToSave: any = {
       ...truckData,
+      currentDriverId: truckData.currentDriverId || null,
+      currentDriverName: truckData.currentDriverName || null,
       createdAt: serverTimestamp(),
     };
     const docRef = await addDoc(trucksCollectionRef, dataToSave);
@@ -747,7 +749,10 @@ export const getTruckByIdFromFirestore = async (truckId: string): Promise<Truck 
 export const updateTruckInFirestore = async (truckId: string, updatedData: Partial<Omit<Truck, 'id' | 'createdAt' | 'createdByUserId'>>): Promise<void> => {
   const truckDoc = doc(db, "trucks", truckId);
   try {
-    await updateDoc(truckDoc, updatedData);
+    const dataToUpdate: any = { ...updatedData };
+    if (updatedData.currentDriverId === undefined) dataToUpdate.currentDriverId = null;
+    if (updatedData.currentDriverName === undefined) dataToUpdate.currentDriverName = null;
+    await updateDoc(truckDoc, dataToUpdate);
   } catch (e) {
     console.error("Error updating document (truck): ", e);
     throw e;
@@ -757,13 +762,136 @@ export const updateTruckInFirestore = async (truckId: string, updatedData: Parti
 export const deleteTruckFromFirestore = async (truckId: string): Promise<void> => {
   const truckDoc = doc(db, "trucks", truckId);
   try {
-    // Add logic here if truck deletion needs to affect other collections (e.g., unassign from driver)
+    // Future: If drivers can be assigned to trucks, unassign driver here.
+    // e.g., find driver assigned to this truck and update their currentTruckId to null.
+    const truckSnap = await getDoc(truckDoc);
+    if (truckSnap.exists()) {
+        const truckData = truckSnap.data() as Truck;
+        if (truckData.currentDriverId) {
+            const driverDocRef = doc(db, "drivers", truckData.currentDriverId);
+            await updateDoc(driverDocRef, {
+                currentTruckId: null,
+                currentTruckReg: null,
+                status: 'available' // Or other appropriate status
+            });
+        }
+    }
     await deleteDoc(truckDoc);
   } catch (e) {
     console.error("Error deleting document (truck): ", e);
     throw e;
   }
 };
+
+// Driver CRUD with Firestore
+export const addDriverToFirestore = async (driverData: Omit<Driver, 'id' | 'createdAt'> & { createdByUserId: string }): Promise<Driver> => {
+  try {
+    const dataToSave: any = {
+      ...driverData,
+      currentTruckId: driverData.currentTruckId || null,
+      currentTruckReg: driverData.currentTruckReg || null,
+      createdAt: serverTimestamp(),
+    };
+    const docRef = await addDoc(driversCollectionRef, dataToSave);
+    const newDocSnap = await getDoc(docRef);
+    if (newDocSnap.exists()) {
+      const savedData = newDocSnap.data();
+      return {
+        ...savedData,
+        id: newDocSnap.id,
+        createdAt: savedData.createdAt instanceof Timestamp ? savedData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as Driver;
+    }
+    throw new Error("Failed to retrieve saved driver data.");
+  } catch (e) {
+    console.error("Error adding document (driver): ", e);
+    throw e;
+  }
+};
+
+export const getDriversFromFirestore = async (): Promise<Driver[]> => {
+  try {
+    const q = query(driversCollectionRef, orderBy("createdAt", "desc"));
+    const data = await getDocs(q);
+    return data.docs.map(docSnap => {
+      const driverData = docSnap.data();
+      return {
+        ...driverData,
+        id: docSnap.id,
+        createdAt: driverData.createdAt instanceof Timestamp ? driverData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as Driver;
+    });
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error("Firestore permission denied while trying to fetch drivers. Check rules for 'drivers' collection.", e);
+    } else {
+      console.error("Error getting documents (drivers): ", e);
+    }
+    return [];
+  }
+};
+
+export const getDriverByIdFromFirestore = async (driverId: string): Promise<Driver | null> => {
+  try {
+    const driverDocRef = doc(db, "drivers", driverId);
+    const driverSnap = await getDoc(driverDocRef);
+    if (driverSnap.exists()) {
+      const driverData = driverSnap.data();
+      return {
+        ...driverData,
+        id: driverSnap.id,
+        createdAt: driverData.createdAt instanceof Timestamp ? driverData.createdAt.toDate().toISOString() : new Date().toISOString(),
+      } as Driver;
+    } else {
+      console.log("No such document for driver ID:", driverId);
+      return null;
+    }
+  } catch (e: any) {
+    if (e.code === 'permission-denied') {
+      console.error(`Firestore permission denied while trying to fetch driver with ID: ${driverId}. Check rules for 'drivers' collection.`, e);
+    } else {
+      console.error(`Error getting document (driver ${driverId}): `, e);
+    }
+    return null;
+  }
+};
+
+export const updateDriverInFirestore = async (driverId: string, updatedData: Partial<Omit<Driver, 'id' | 'createdAt' | 'createdByUserId'>>): Promise<void> => {
+  const driverDoc = doc(db, "drivers", driverId);
+  try {
+    const dataToUpdate: any = { ...updatedData };
+    if (updatedData.currentTruckId === undefined) dataToUpdate.currentTruckId = null;
+    if (updatedData.currentTruckReg === undefined) dataToUpdate.currentTruckReg = null;
+    await updateDoc(driverDoc, dataToUpdate);
+  } catch (e) {
+    console.error("Error updating document (driver): ", e);
+    throw e;
+  }
+};
+
+export const deleteDriverFromFirestore = async (driverId: string): Promise<void> => {
+  const driverDocRef = doc(db, "drivers", driverId);
+  try {
+    // Unassign from any truck
+    const driverSnap = await getDoc(driverDocRef);
+    if (driverSnap.exists()) {
+        const driverData = driverSnap.data() as Driver;
+        if (driverData.currentTruckId) {
+            const truckDocRef = doc(db, "trucks", driverData.currentTruckId);
+            await updateDoc(truckDocRef, {
+                currentDriverId: null,
+                currentDriverName: null,
+                // Optionally update truck status if needed
+            });
+        }
+    }
+    await deleteDoc(driverDocRef);
+  } catch (e) {
+    console.error("Error deleting document (driver): ", e);
+    throw e;
+  }
+};
+
 
 // Approval Request Service
 export const addApprovalRequestToFirestore = async (

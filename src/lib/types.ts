@@ -104,8 +104,8 @@ export interface Driver {
   licenseNumber: string;
   phone: string;
   status: DriverStatus;
-  currentTruckId?: string | null;
-  currentTruckReg?: string | null; // Denormalized for display
+  currentTruckId?: string | null; // ID of the truck the driver is currently assigned to
+  currentTruckReg?: string | null; // Registration number of the current truck (denormalized)
   notes?: string;
   createdAt: string; // ISO Date string
   createdByUserId?: string;

@@ -14,7 +14,9 @@ import {
     deleteClientFromFirestore,
     deleteExpenseFromFirestore,
     deleteWorkTypeFromFirestore,
-    deleteContainerFromFirestore, // Added for container deletion
+    deleteContainerFromFirestore,
+    deleteTruckFromFirestore,
+    deleteDriverFromFirestore,
 } from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
@@ -74,7 +76,9 @@ const getEntityTypeText = (entityType: ApprovalRequest['entityType']) => {
         case 'client': return 'Client';
         case 'workType': return 'Type de Travail';
         case 'expense': return 'Dépense';
-        case 'container': return 'Conteneur'; // Added
+        case 'container': return 'Conteneur';
+        case 'truck': return 'Camion';
+        case 'driver': return 'Chauffeur';
         default: return entityType;
     }
 };
@@ -172,9 +176,13 @@ export default function AdminApprovalsPage() {
           } else if (selectedRequest.entityType === 'workType') {
             await deleteWorkTypeFromFirestore(selectedRequest.entityId);
             entityDeleted = true;
+          } else if (selectedRequest.entityType === 'truck') {
+            await deleteTruckFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
+          } else if (selectedRequest.entityType === 'driver') {
+            await deleteDriverFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
           } else if (selectedRequest.entityType === 'container') {
-            // For container, we need the blId if it's part of the description, or find it
-            // This part might need refinement if blId isn't easily available
             let blIdForContainer: string | undefined;
             if (selectedRequest.entityDescription?.includes('(BL N°')) {
                 const match = selectedRequest.entityDescription.match(/\(BL N°\s*([a-zA-Z0-9-]+)\)/);
@@ -188,7 +196,6 @@ export default function AdminApprovalsPage() {
                 toast({ title: "Attention", description: `Conteneur ${selectedRequest.entityId} approuvé pour suppression, mais BL ID non trouvé pour action automatique.`, variant: "default", duration: 7000 });
             }
           }
-
 
           if (entityDeleted) {
             toast({ title: "Action Effectuée", description: `${getEntityTypeText(selectedRequest.entityType)} (ID: ${selectedRequest.entityId}) a été supprimé(e) avec succès.` });
@@ -221,9 +228,13 @@ export default function AdminApprovalsPage() {
       case 'client':
         return `/clients/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'workType':
-        return `/work-types/${request.entityId}/edit`; 
+        return `/work-types/${request.entityId}/edit`;
+      case 'truck':
+        return `/trucks/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
+      case 'driver':
+        return `/drivers/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'expense':
-      case 'container': // Containers are also linked to a BL
+      case 'container':
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
