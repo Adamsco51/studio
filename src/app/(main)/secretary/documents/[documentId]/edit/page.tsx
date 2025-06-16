@@ -31,20 +31,26 @@ export default function EditSecretaryDocumentPage({ params: paramsPromise }: { p
       setIsLoading(false);
       return;
     }
-    const fetchDocument = async () => {
-      setIsLoading(true);
-      try {
-        const foundDoc = await getSecretaryDocumentByIdFromFirestore(documentId);
-        setDocument(foundDoc);
-      } catch (error) {
-        console.error("Failed to fetch secretary document for editing:", error);
-        setDocument(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchDocument();
-  }, [documentId, user]);
+    // Only fetch if user has appropriate role or is admin
+    if (isAdmin || user.jobTitle === 'Secrétaire' || user.jobTitle === 'Manager') {
+      const fetchDocument = async () => {
+        setIsLoading(true);
+        try {
+          const foundDoc = await getSecretaryDocumentByIdFromFirestore(documentId);
+          setDocument(foundDoc);
+        } catch (error) {
+          console.error("Failed to fetch secretary document for editing:", error);
+          setDocument(null);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchDocument();
+    } else {
+      setIsLoading(false);
+      setDocument(null); // Explicitly set to null if no access
+    }
+  }, [documentId, user, isAdmin]); // isAdmin and user.jobTitle included in dependency array
 
   if (isLoading || authLoading || document === undefined) {
     return (
@@ -63,7 +69,7 @@ export default function EditSecretaryDocumentPage({ params: paramsPromise }: { p
   if (!document) {
     return (
       <div className="text-center py-10">
-        <p className="text-xl text-muted-foreground">Document non trouvé.</p>
+        <p className="text-xl text-muted-foreground">Document non trouvé ou accès restreint.</p>
         <Link href="/secretary/documents" passHref>
           <Button variant="link" className="mt-4">
             <ArrowLeft className="mr-2 h-4 w-4" /> Retour à la liste

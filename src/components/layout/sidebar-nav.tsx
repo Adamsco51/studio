@@ -29,8 +29,9 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   badgeKey?: string;
-  requiredJobTitle?: UserProfile['jobTitle'][]; // For job-specific sections
-  adminOnly?: boolean; // New flag for admin-only sections
+  requiredJobTitles?: UserProfile['jobTitle'][]; // Array of job titles that can see this item
+  adminOnly?: boolean; 
+  nonAdminOnly?: boolean; // New flag for items visible only to non-admins
 }
 
 const mainOpsNavItems: NavItem[] = [
@@ -53,17 +54,15 @@ const communicationNavItems: NavItem[] = [
 ];
 
 const secretaryNavItems: NavItem[] = [
-    { href: '/secretary/documents', label: 'Gestion Documents', icon: FileArchive, requiredJobTitle: ['Secrétaire', 'Manager'] },
-    // Add more secretary-specific links here
+    { href: '/secretary/documents', label: 'Gestion Documents', icon: FileArchive, requiredJobTitles: ['Secrétaire', 'Manager'] },
 ];
 
 const accountingNavItems: NavItem[] = [
-    { href: '/accounting/invoices', label: 'Facturation', icon: FileDigit, requiredJobTitle: ['Comptable', 'Manager'] },
-    // Add more accounting-specific links here
+    { href: '/accounting/invoices', label: 'Facturation', icon: FileDigit, requiredJobTitles: ['Comptable', 'Manager'] },
 ];
 
 const userSpecificNavItems: NavItem[] = [
-    { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered },
+    { href: '/my-requests', label: 'Mes Demandes', icon: ListOrdered, nonAdminOnly: true },
 ];
 
 const toolsNavItems: NavItem[] = [
@@ -103,20 +102,15 @@ export function SidebarNav() {
   const renderNavItems = (items: NavItem[]) => {
     if (!user) return null;
 
-    return items.map((item) => {
-      // Skip admin-only items if user is not admin
-      if (item.adminOnly && !isAdmin) return null;
+    return items.filter(item => {
+      if (item.adminOnly && !isAdmin) return false;
+      if (item.nonAdminOnly && isAdmin) return false;
       
-      // Skip "Mes Demandes" for admins as they have the full "Approbations" view
-      if (item.href === '/my-requests' && isAdmin) return null; 
-
-      // Check job title requirement (admins see all job-specific sections by default unless item.adminOnly is false)
-      if (item.requiredJobTitle && !isAdmin) { 
-        if (!user.jobTitle || !item.requiredJobTitle.includes(user.jobTitle)) {
-          return null; // Hide if user doesn't have the required job title
-        }
+      if (item.requiredJobTitles && !isAdmin) { 
+        return user.jobTitle && item.requiredJobTitles.includes(user.jobTitle);
       }
-
+      return true;
+    }).map((item) => {
       const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
       const badgeCount = item.badgeKey === 'pendingApprovals' ? pendingApprovalsCount : 0;
 
@@ -141,6 +135,9 @@ export function SidebarNav() {
       );
     });
   };
+  
+  const secretaryItemsToRender = renderNavItems(secretaryNavItems);
+  const accountingItemsToRender = renderNavItems(accountingNavItems);
 
   return (
     <SidebarMenu>
@@ -163,24 +160,22 @@ export function SidebarNav() {
         {renderNavItems(communicationNavItems)}
       </SidebarGroup>
       
-      {/* Show Secretary section if user is Secretary, Manager, or Admin */}
-      {(user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager' || isAdmin) && (
+      {secretaryItemsToRender && secretaryItemsToRender.length > 0 && (
         <>
           <SidebarSeparator />
           <SidebarGroup>
             <SidebarGroupLabel className={cn( (isAdmin || user?.jobTitle === 'Manager') ? "text-sidebar-foreground/70" : "text-accent")}>Secrétariat</SidebarGroupLabel>
-            {renderNavItems(secretaryNavItems)}
+            {secretaryItemsToRender}
           </SidebarGroup>
         </>
       )}
 
-      {/* Show Accounting section if user is Accountant, Manager, or Admin */}
-      {(user?.jobTitle === 'Comptable' || user?.jobTitle === 'Manager' || isAdmin) && (
+      {accountingItemsToRender && accountingItemsToRender.length > 0 && (
         <>
           <SidebarSeparator />
           <SidebarGroup>
             <SidebarGroupLabel className={cn( (isAdmin || user?.jobTitle === 'Manager') ? "text-sidebar-foreground/70" : "text-accent")}>Comptabilité</SidebarGroupLabel>
-            {renderNavItems(accountingNavItems)}
+            {accountingItemsToRender}
           </SidebarGroup>
         </>
       )}
@@ -192,7 +187,7 @@ export function SidebarNav() {
         {renderNavItems(toolsNavItems)}
       </SidebarGroup>
 
-      {!isAdmin && user && (
+      {renderNavItems(userSpecificNavItems).length > 0 && (
         <>
           <SidebarSeparator />
           <SidebarGroup>

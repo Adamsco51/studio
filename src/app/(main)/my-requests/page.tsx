@@ -73,6 +73,7 @@ export default function MyRequestsPage() {
     if (!authLoading && !user) {
       router.push('/login');
     }
+    // Admins should be redirected to their full approval management page.
     if (!authLoading && user && isAdmin) {
       router.push('/admin/approvals');
     }
@@ -91,13 +92,21 @@ export default function MyRequestsPage() {
         setIsLoading(false);
       }
     } else if (!user && !authLoading) {
+        // If no user and not loading, also stop loading indicator
         setIsLoading(false); 
     }
-  }, [user, isAdmin, toast]); 
+  }, [user, isAdmin, toast]); // isAdmin dependency added
 
   useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]); 
+    // Only fetch if user exists and is not admin
+    if (user && !isAdmin) {
+        fetchRequests();
+    } else if (!user && !authLoading) {
+        setIsLoading(false); // Explicitly stop loading if no user
+    } else if (isAdmin && !authLoading) {
+        setIsLoading(false); // Admins don't need to load this page's data
+    }
+  }, [user, isAdmin, authLoading, fetchRequests]); // authLoading dependency added
 
   const getEntityLink = (request: ApprovalRequest) => {
     switch (request.entityType) {
@@ -106,8 +115,10 @@ export default function MyRequestsPage() {
       case 'client':
         return `/clients/${request.entityId}`;
       case 'workType': 
+        // For work types, viewing details might not be applicable, link to list or specific item if page exists
         return request.actionType === 'edit' ? `/work-types` : `/work-types`; 
       case 'expense': 
+         // If BL info is in description, try to link to the BL. Otherwise, to general expenses page.
          if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
@@ -116,6 +127,7 @@ export default function MyRequestsPage() {
         }
         return `/expenses`;
       case 'container':
+        // If BL info is in description, try to link to the BL. Otherwise, to general containers page.
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
@@ -128,11 +140,11 @@ export default function MyRequestsPage() {
       case 'driver':
         return `/drivers`;
       case 'transport':
-        return `/transports`;
+        return `/transports`; // Consider linking to transport detail page if it exists
       case 'secretaryDocument':
-        return `/secretary/documents`;
+        return `/secretary/documents`; // Link to the list page
       case 'accountingEntry':
-        return `/accounting/invoices`;
+        return `/accounting/invoices`; // Link to the list page
       default:
         return null;
     }
@@ -148,8 +160,8 @@ export default function MyRequestsPage() {
     );
   }
 
-  if (!user || isAdmin) { 
-    return null; 
+  if (!user || isAdmin) { // Admins are redirected, so this effectively covers non-admin users
+    return null; // Or a message like "Vous n'avez pas de demandes à afficher."
   }
 
   return (
