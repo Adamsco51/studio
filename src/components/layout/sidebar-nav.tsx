@@ -30,6 +30,7 @@ interface NavItem {
   icon: React.ElementType;
   badgeKey?: string;
   requiredJobTitle?: UserProfile['jobTitle'][]; // For job-specific sections
+  adminOnly?: boolean; // New flag for admin-only sections
 }
 
 const mainOpsNavItems: NavItem[] = [
@@ -70,9 +71,9 @@ const toolsNavItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
-    { href: '/admin/approvals', label: 'Approbations', icon: ShieldAlert, badgeKey: 'pendingApprovals' },
-    { href: '/admin/users', label: 'Utilisateurs', icon: Users },
-    { href: '/admin/audit-log/sessions', label: "Journal d'Audit", icon: History },
+    { href: '/admin/approvals', label: 'Approbations', icon: ShieldAlert, badgeKey: 'pendingApprovals', adminOnly: true },
+    { href: '/admin/users', label: 'Utilisateurs', icon: Users, adminOnly: true },
+    { href: '/admin/audit-log/sessions', label: "Journal d'Audit", icon: History, adminOnly: true },
 ];
 
 export function SidebarNav() {
@@ -99,15 +100,18 @@ export function SidebarNav() {
     }
   }, [isAdmin, user]);
 
-  const renderNavItems = (items: NavItem[], isPartOfAdmin?: boolean) => {
+  const renderNavItems = (items: NavItem[]) => {
     if (!user) return null;
-    if (isPartOfAdmin && !isAdmin) return null;
 
     return items.map((item) => {
-      if (item.href === '/my-requests' && isAdmin) return null; // Hide 'Mes Demandes' for admins
+      // Skip admin-only items if user is not admin
+      if (item.adminOnly && !isAdmin) return null;
+      
+      // Skip "Mes Demandes" for admins as they have the full "Approbations" view
+      if (item.href === '/my-requests' && isAdmin) return null; 
 
-      // Check job title requirement
-      if (item.requiredJobTitle && !isAdmin) { // Admins see all job-specific sections
+      // Check job title requirement (admins see all job-specific sections by default unless item.adminOnly is false)
+      if (item.requiredJobTitle && !isAdmin) { 
         if (!user.jobTitle || !item.requiredJobTitle.includes(user.jobTitle)) {
           return null; // Hide if user doesn't have the required job title
         }
@@ -159,6 +163,7 @@ export function SidebarNav() {
         {renderNavItems(communicationNavItems)}
       </SidebarGroup>
       
+      {/* Show Secretary section if user is Secretary, Manager, or Admin */}
       {(user?.jobTitle === 'Secrétaire' || user?.jobTitle === 'Manager' || isAdmin) && (
         <>
           <SidebarSeparator />
@@ -169,6 +174,7 @@ export function SidebarNav() {
         </>
       )}
 
+      {/* Show Accounting section if user is Accountant, Manager, or Admin */}
       {(user?.jobTitle === 'Comptable' || user?.jobTitle === 'Manager' || isAdmin) && (
         <>
           <SidebarSeparator />
@@ -201,10 +207,11 @@ export function SidebarNav() {
           <SidebarSeparator />
           <SidebarGroup>
             <SidebarGroupLabel className="text-destructive">Administration</SidebarGroupLabel>
-            {renderNavItems(adminNavItems, true)}
+            {renderNavItems(adminNavItems)}
           </SidebarGroup>
         </>
       )}
     </SidebarMenu>
   );
 }
+

@@ -1582,6 +1582,9 @@ export const addSecretaryDocumentToFirestore = async (
   try {
     const dataToSave: any = {
       ...docData,
+      relatedClientId: docData.relatedClientId || null,
+      relatedBlId: docData.relatedBlId || null,
+      recipientEmail: docData.recipientEmail || null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -1621,6 +1624,56 @@ export const getSecretaryDocumentsFromFirestore = async (): Promise<SecretaryDoc
     return [];
   }
 };
+
+export const getSecretaryDocumentByIdFromFirestore = async (documentId: string): Promise<SecretaryDocument | null> => {
+    const docRef = doc(db, "secretaryDocuments", documentId);
+    try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                ...data,
+                createdAt: (data.createdAt as Timestamp).toDate().toISOString(),
+                updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : undefined,
+            } as SecretaryDocument;
+        }
+        return null;
+    } catch (e) {
+        console.error(`Error fetching secretary document ${documentId}:`, e);
+        throw e;
+    }
+};
+
+export const updateSecretaryDocumentInFirestore = async (
+  documentId: string,
+  updatedData: Partial<Omit<SecretaryDocument, 'id' | 'createdAt' | 'createdByUserId'>>
+): Promise<void> => {
+  const docRef = doc(db, "secretaryDocuments", documentId);
+  try {
+    const dataToUpdate: any = { ...updatedData, updatedAt: serverTimestamp() };
+    // Handle optional fields that might be set to null
+    if ('relatedClientId' in updatedData) dataToUpdate.relatedClientId = updatedData.relatedClientId || null;
+    if ('relatedBlId' in updatedData) dataToUpdate.relatedBlId = updatedData.relatedBlId || null;
+    if ('recipientEmail' in updatedData) dataToUpdate.recipientEmail = updatedData.recipientEmail || null;
+
+    await updateDoc(docRef, dataToUpdate);
+  } catch (e) {
+    console.error(`Error updating secretary document ${documentId}:`, e);
+    throw e;
+  }
+};
+
+export const deleteSecretaryDocumentFromFirestore = async (documentId: string): Promise<void> => {
+  const docRef = doc(db, "secretaryDocuments", documentId);
+  try {
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error(`Error deleting secretary document ${documentId}:`, e);
+    throw e;
+  }
+};
+
 
 // Accounting Entries CRUD
 export const addAccountingEntryToFirestore = async (
@@ -1674,3 +1727,56 @@ export const getAccountingEntriesFromFirestore = async (): Promise<AccountingEnt
     return [];
   }
 };
+
+export const getAccountingEntryByIdFromFirestore = async (entryId: string): Promise<AccountingEntry | null> => {
+    const docRef = doc(db, "accountingEntries", entryId);
+    try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                ...data,
+                issueDate: (data.issueDate as Timestamp).toDate().toISOString(),
+                dueDate: data.dueDate ? (data.dueDate as Timestamp).toDate().toISOString() : undefined,
+                createdAt: (data.createdAt as Timestamp).toDate().toISOString(),
+                updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : undefined,
+            } as AccountingEntry;
+        }
+        return null;
+    } catch (e) {
+        console.error(`Error fetching accounting entry ${entryId}:`, e);
+        throw e;
+    }
+};
+
+export const updateAccountingEntryInFirestore = async (
+  entryId: string,
+  updatedData: Partial<Omit<AccountingEntry, 'id' | 'createdAt' | 'createdByUserId'>>
+): Promise<void> => {
+  const docRef = doc(db, "accountingEntries", entryId);
+  try {
+    const dataToUpdate: any = { ...updatedData, updatedAt: serverTimestamp() };
+     if ('issueDate' in updatedData && updatedData.issueDate) {
+      dataToUpdate.issueDate = Timestamp.fromDate(parseISO(updatedData.issueDate));
+    }
+    if ('dueDate' in updatedData) {
+      dataToUpdate.dueDate = updatedData.dueDate ? Timestamp.fromDate(parseISO(updatedData.dueDate)) : null;
+    }
+    await updateDoc(docRef, dataToUpdate);
+  } catch (e) {
+    console.error(`Error updating accounting entry ${entryId}:`, e);
+    throw e;
+  }
+};
+
+export const deleteAccountingEntryFromFirestore = async (entryId: string): Promise<void> => {
+  const docRef = doc(db, "accountingEntries", entryId);
+  try {
+    await deleteDoc(docRef);
+  } catch (e) {
+    console.error(`Error deleting accounting entry ${entryId}:`, e);
+    throw e;
+  }
+};
+

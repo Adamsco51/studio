@@ -223,9 +223,9 @@ export interface SecretaryDocument {
   content: string; // Could be HTML from Quill or Markdown
   status: SecretaryDocumentStatus;
   version: number;
-  relatedClientId?: string; // Optional link to a client
-  relatedBlId?: string;   // Optional link to a BL
-  recipientEmail?: string; // For sending
+  relatedClientId?: string | null; // Optional link to a client
+  relatedBlId?: string | null;   // Optional link to a BL
+  recipientEmail?: string | null; // For sending
   createdAt: string; // ISO Date string
   createdByUserId: string;
   updatedAt?: string; // ISO Date string

@@ -18,6 +18,9 @@ import {
     deleteTruckFromFirestore,
     deleteDriverFromFirestore,
     deleteTransportFromFirestore, 
+    deleteSecretaryDocumentFromFirestore,
+    deleteAccountingEntryFromFirestore,
+    getBLByIdFromFirestore,
 } from '@/lib/mock-data';
 import type { ApprovalRequest, ApprovalRequestStatus } from '@/lib/types';
 import { useAuth } from '@/contexts/auth-context';
@@ -81,6 +84,8 @@ const getEntityTypeText = (entityType: ApprovalRequest['entityType']) => {
         case 'truck': return 'Camion';
         case 'driver': return 'Chauffeur';
         case 'transport': return 'Transport';
+        case 'secretaryDocument': return 'Document (Sec.)';
+        case 'accountingEntry': return 'Écriture (Compta.)';
         default: return entityType;
     }
 };
@@ -187,16 +192,22 @@ export default function AdminApprovalsPage() {
           } else if (selectedRequest.entityType === 'transport') { 
             await deleteTransportFromFirestore(selectedRequest.entityId);
             entityDeleted = true;
+          } else if (selectedRequest.entityType === 'secretaryDocument') {
+            await deleteSecretaryDocumentFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
+          } else if (selectedRequest.entityType === 'accountingEntry') {
+            await deleteAccountingEntryFromFirestore(selectedRequest.entityId);
+            entityDeleted = true;
           } else if (selectedRequest.entityType === 'container') {
             let blIdForContainer: string | undefined;
             if (selectedRequest.entityDescription?.includes('(BL N°')) {
                 const match = selectedRequest.entityDescription.match(/\(BL N°\s*([a-zA-Z0-9-]+)\)/);
                 if (match && match[1]) {
-                    const bl = await getBLByIdFromFirestore(match[1]); // Ensure getBLByIdFromFirestore exists
+                    const bl = await getBLByIdFromFirestore(match[1]); 
                     if(bl) blIdForContainer = bl.id;
                 }
             }
-            if (!blIdForContainer && selectedRequest.entityDescription?.includes('BL ID:')) { // Fallback if BL Number not found, check for direct ID
+            if (!blIdForContainer && selectedRequest.entityDescription?.includes('BL ID:')) { 
                 const match = selectedRequest.entityDescription.match(/BL ID:\s*([a-zA-Z0-9-]+)/);
                 if (match && match[1]) blIdForContainer = match[1];
             }
@@ -248,18 +259,22 @@ export default function AdminApprovalsPage() {
         return `/drivers/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
       case 'transport': 
         return `/transports/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
+      case 'secretaryDocument':
+        return `/secretary/documents/${request.entityId}${request.actionType === 'edit' ? '/edit' : ''}`;
+      case 'accountingEntry':
+        // Assuming accounting entries might not have individual detail/edit pages yet
+        return `/accounting/invoices`; // Or a specific detail page if it exists
       case 'container':
         if (request.actionType === 'edit') {
           return `/containers/${request.entityId}/edit`;
         }
-        // For delete, link to the BL page, as container might not exist anymore
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
           if (blMatch && blMatch[1]) {
             return `/bls/${blMatch[1]}`;
           }
         }
-        return `/containers`; // Fallback to container list
+        return `/containers`;
       case 'expense':
         if (request.entityDescription?.includes("BL N°")) {
           const blMatch = request.entityDescription.match(/BL N°\s*([a-zA-Z0-9-]+)/);
@@ -459,3 +474,4 @@ export default function AdminApprovalsPage() {
     </>
   );
 }
+

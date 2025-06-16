@@ -2,20 +2,47 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileArchive, PlusCircle, Construction, Loader2, AlertTriangle } from 'lucide-react';
-import Link from 'next/link';
+import { FileArchive, PlusCircle, Construction, Loader2, AlertTriangle, Edit, Trash2, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { getSecretaryDocumentsFromFirestore } from '@/lib/mock-data';
-import type { SecretaryDocument } from '@/lib/types';
+import { 
+    getSecretaryDocumentsFromFirestore, 
+    deleteSecretaryDocumentFromFirestore,
+    addApprovalRequestToFirestore,
+    getPinIssuedRequestForEntity,
+    completeApprovalRequestWithPin,
+} from '@/lib/mock-data';
+import type { SecretaryDocument, ApprovalRequest } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function SecretaryDocumentsPage() {
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -23,6 +50,17 @@ export default function SecretaryDocumentsPage() {
   const { toast } = useToast();
   const [documents, setDocuments] = useState<SecretaryDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+
+  const [docTargetedForAction, setDocTargetedForAction] = useState<SecretaryDocument | null>(null);
+  const [actionReason, setActionReason] = useState('');
+  const [showReasonDialog, setShowReasonDialog] = useState(false);
+  const [currentActionType, setCurrentActionType] = useState<'edit' | 'delete' | null>(null);
+  
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pinEntry, setPinEntry] = useState('');
+  const [activePinRequest, setActivePinRequest] = useState<ApprovalRequest | null>(null);
+
 
   useEffect(() => {
     if (!authLoading && (!user || (!isAdmin && user.jobTitle !== 'Secrétaire' && user.jobTitle !== 'Manager'))) {
@@ -49,6 +87,127 @@ export default function SecretaryDocumentsPage() {
     fetchDocuments();
   }, [fetchDocuments]);
 
+  const handleEditAction = async (doc: SecretaryDocument) => {
+    if (!user) return;
+    setDocTargetedForAction(doc);
+    setCurrentActionType('edit');
+    if (isAdmin || doc.createdByUserId === user.uid) {
+        router.push(`/secretary/documents/${doc.id}/edit`);
+    } else {
+        setIsProcessingAction(true);
+        try {
+            const pinRequest = await getPinIssuedRequestForEntity('secretaryDocument', doc.id, 'edit');
+            if (pinRequest) {
+                setActivePinRequest(pinRequest);
+                setShowPinDialog(true);
+            } else {
+                setActionReason('');
+                setShowReasonDialog(true);
+            }
+        } catch (error) {
+            toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
+        } finally {
+            setIsProcessingAction(false);
+        }
+    }
+  };
+
+  const handleDeleteAction = async (doc: SecretaryDocument) => {
+    if (!user) return;
+    setDocTargetedForAction(doc);
+    setCurrentActionType('delete');
+    if (isAdmin || doc.createdByUserId === user.uid) {
+        setShowReasonDialog(true); // Admin or owner still confirms deletion (but no approval needed)
+    } else {
+        setIsProcessingAction(true);
+        try {
+            const pinRequest = await getPinIssuedRequestForEntity('secretaryDocument', doc.id, 'delete');
+            if (pinRequest) {
+                setActivePinRequest(pinRequest);
+                setShowPinDialog(true);
+            } else {
+                setActionReason('');
+                setShowReasonDialog(true);
+            }
+        } catch (error) {
+            toast({ title: "Erreur", description: "Impossible de vérifier les PINs existants.", variant: "destructive" });
+        } finally {
+            setIsProcessingAction(false);
+        }
+    }
+  };
+
+  const handlePinSubmit = async () => {
+    if (!pinEntry.trim() || !activePinRequest || !docTargetedForAction || !currentActionType) return;
+    if (pinEntry !== activePinRequest.pinCode) {
+      toast({ title: "PIN Incorrect", variant: "destructive" });
+      return;
+    }
+     if (activePinRequest.pinExpiresAt && new Date() > parseISO(activePinRequest.pinExpiresAt)) {
+      toast({ title: "PIN Expiré", variant: "destructive" });
+      setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null);
+      return;
+    }
+    setIsProcessingAction(true);
+    try {
+      await completeApprovalRequestWithPin(activePinRequest.id);
+      if (currentActionType === 'edit') {
+        router.push(`/secretary/documents/${docTargetedForAction.id}/edit`);
+      } else if (currentActionType === 'delete') {
+        await deleteSecretaryDocumentFromFirestore(docTargetedForAction.id);
+        fetchDocuments();
+        toast({ title: "Document Supprimé", description: `Le document "${docTargetedForAction.title}" a été supprimé.` });
+      }
+    } catch (error) {
+      toast({ title: "Erreur", description: "Échec de l'action avec PIN.", variant: "destructive" });
+    } finally {
+      setShowPinDialog(false); setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setIsProcessingAction(false);
+    }
+  };
+
+  const handleReasonDialogSubmit = async () => {
+    if (!docTargetedForAction || !currentActionType || !user) return;
+
+    if (isAdmin || docTargetedForAction.createdByUserId === user.uid) { // Direct delete for admin or owner
+        if (currentActionType === 'delete') {
+            setIsProcessingAction(true);
+            try {
+                await deleteSecretaryDocumentFromFirestore(docTargetedForAction.id);
+                fetchDocuments();
+                toast({ title: "Document Supprimé", description: `"${docTargetedForAction.title}" a été supprimé.` });
+            } catch (error) {
+                toast({ title: "Erreur de Suppression", variant: "destructive" });
+            } finally {
+                setIsProcessingAction(false);
+            }
+        }
+    } else { // Submit approval request
+        if (!actionReason.trim()) {
+            toast({ title: "Raison Requise", description: "Veuillez fournir une raison pour votre demande.", variant: "destructive" });
+            return;
+        }
+        setIsProcessingAction(true);
+        try {
+            await addApprovalRequestToFirestore({
+                requestedByUserId: user.uid,
+                requestedByUserName: user.displayName || user.email || "Utilisateur Inconnu",
+                entityType: 'secretaryDocument',
+                entityId: docTargetedForAction.id,
+                entityDescription: `Document: ${docTargetedForAction.title}`,
+                actionType: currentActionType,
+                reason: actionReason,
+            });
+            toast({ title: "Demande Envoyée", description: "Votre demande a été soumise pour approbation." });
+        } catch (error) {
+            toast({ title: "Erreur d'Envoi", description: "Impossible d'envoyer la demande.", variant: "destructive" });
+        } finally {
+            setIsProcessingAction(false);
+        }
+    }
+    setShowReasonDialog(false); setActionReason(''); setDocTargetedForAction(null); setCurrentActionType(null);
+  };
+
+
   if (authLoading || !user || (!isAdmin && user.jobTitle !== 'Secrétaire' && user.jobTitle !== 'Manager')) {
     return (
         <div className="flex h-screen items-center justify-center">
@@ -63,9 +222,11 @@ export default function SecretaryDocumentsPage() {
         title="Gestion des Documents (Secrétariat)"
         description="Créez, gérez et archivez les documents administratifs."
         actions={
-          <Button disabled>
-            <PlusCircle className="mr-2 h-4 w-4" /> Nouveau Document (Bientôt)
-          </Button>
+          <Link href="/secretary/documents/add" passHref>
+            <Button disabled={isProcessingAction}>
+              <PlusCircle className="mr-2 h-4 w-4" /> Nouveau Document
+            </Button>
+          </Link>
         }
       />
       <Card className="shadow-lg">
@@ -108,23 +269,83 @@ export default function SecretaryDocumentsPage() {
                     <TableCell className="font-medium">{doc.title}</TableCell>
                     <TableCell><Badge variant="outline">{doc.documentType}</Badge></TableCell>
                     <TableCell><Badge variant="secondary">{doc.status}</Badge></TableCell>
-                    <TableCell>{format(parseISO(doc.createdAt), 'dd MMM yyyy', { locale: fr })}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" disabled>Voir</Button>
+                    <TableCell>{format(parseISO(doc.createdAt), 'dd MMM yyyy, HH:mm', { locale: fr })}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      <Button variant="outline" size="sm" onClick={() => handleEditAction(doc)} disabled={isProcessingAction}>
+                         <Edit className="mr-1 h-3 w-3"/> Modifier
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => handleDeleteAction(doc)} disabled={isProcessingAction}>
+                         <Trash2 className="mr-1 h-3 w-3"/> Supprimer
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           )}
-           <div className="mt-6 text-center py-6 border-t border-dashed">
+          <div className="mt-6 text-center py-6 border-t border-dashed">
               <Construction className="mx-auto h-12 w-12 text-muted-foreground opacity-70" />
               <p className="mt-3 text-sm text-muted-foreground">
-                La création et la modification avancée de documents avec éditeur (Quill) et l'envoi par email seront bientôt disponibles.
+                L'intégration de l'éditeur de texte riche (Quill) et l'envoi par email seront bientôt disponibles.
               </p>
             </div>
         </CardContent>
       </Card>
+
+      {/* Reason/Confirmation Dialog */}
+      <Dialog open={showReasonDialog} onOpenChange={(isOpen) => {
+        if (!isOpen) { setDocTargetedForAction(null); setActionReason(''); setCurrentActionType(null); }
+        setShowReasonDialog(isOpen);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {currentActionType === 'delete' && (isAdmin || docTargetedForAction?.createdByUserId === user?.uid) 
+                ? `Confirmer la Suppression: "${docTargetedForAction?.title}"?` 
+                : `Demande de ${currentActionType === 'edit' ? 'Modification' : 'Suppression'}: ${docTargetedForAction?.title}`}
+            </AlertDialogTitle>
+            {currentActionType === 'delete' && (isAdmin || docTargetedForAction?.createdByUserId === user?.uid) ? (
+              <AlertDialogDescription>Cette action est irréversible.</AlertDialogDescription>
+            ) : (
+              <div className="space-y-2 py-2 text-left">
+                <Label htmlFor={`actionReason-${docTargetedForAction?.id}`}>Raison :</Label>
+                <Textarea id={`actionReason-${docTargetedForAction?.id}`} value={actionReason} onChange={(e) => setActionReason(e.target.value)} placeholder={`Raison de la ${currentActionType === 'edit' ? 'modification' : 'suppression'}...`} disabled={isProcessingAction} />
+                <p className="text-xs text-muted-foreground">Votre demande sera examinée.</p>
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction}>Annuler</Button></DialogClose>
+            <Button onClick={handleReasonDialogSubmit} variant={currentActionType === 'delete' && (isAdmin || docTargetedForAction?.createdByUserId === user?.uid) ? "destructive" : "default"} disabled={isProcessingAction || (currentActionType !== 'delete' && !(isAdmin || docTargetedForAction?.createdByUserId === user?.uid) && !actionReason.trim())}>
+              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Confirmer
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </Dialog>
+
+      {/* PIN Entry Dialog */}
+      <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
+        if (!isOpen) { setPinEntry(''); setActivePinRequest(null); setDocTargetedForAction(null); setCurrentActionType(null); }
+        setShowPinDialog(isOpen);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center"><KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN</DialogTitle>
+            <DialogDescription>Un PIN a été fourni pour {currentActionType === 'edit' ? 'modifier' : 'supprimer'} le document "{docTargetedForAction?.title}".</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <Label htmlFor="pinCodeSecDoc">Code PIN (6 chiffres)</Label>
+            <Input id="pinCodeSecDoc" type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={pinEntry} onChange={(e) => setPinEntry(e.target.value.replace(/\D/g, '').substring(0,6))} placeholder="123456" disabled={isProcessingAction} />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline" disabled={isProcessingAction}>Annuler</Button></DialogClose>
+            <Button onClick={handlePinSubmit} disabled={isProcessingAction || pinEntry.length !== 6}>
+              {isProcessingAction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Valider et {currentActionType === 'edit' ? 'Modifier' : 'Supprimer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
