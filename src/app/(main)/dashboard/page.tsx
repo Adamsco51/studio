@@ -1,12 +1,18 @@
 
 "use client"; 
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare, Loader2 } from 'lucide-react';
-import { getClientsFromFirestore, getBLsFromFirestore, getExpensesFromFirestore } from '@/lib/mock-data'; 
-import type { BillOfLading, Client, Expense } from '@/lib/types';
+import { Users, FileText, DollarSign, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown, ListChecks, ThumbsUp, ThumbsDown, Sigma, Activity, MessageSquare, Loader2, ListOrdered, ShieldAlert } from 'lucide-react';
+import { 
+    getClientsFromFirestore, 
+    getBLsFromFirestore, 
+    getExpensesFromFirestore,
+    getApprovalRequestsFromFirestore, // For admin pending approvals
+    getApprovalRequestsByUserIdFromFirestore // For user's pending requests
+} from '@/lib/mock-data'; 
+import type { BillOfLading, Client, Expense, ApprovalRequest } from '@/lib/types';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,38 +24,63 @@ import { RecentChatCard } from '@/components/dashboard/recent-chat-card';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function DashboardPage() { 
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [blsData, setBlsData] = useState<BillOfLading[]>([]);
   const [expensesData, setExpensesData] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [myPendingRequestsCount, setMyPendingRequestsCount] = useState(0);
+  const [adminPendingApprovalsCount, setAdminPendingApprovalsCount] = useState(0);
+  const [isLoadingCounters, setIsLoadingCounters] = useState(true);
 
-  useEffect(() => {
+
+  const fetchData = useCallback(async () => {
     if (!user) {
-      setIsLoading(false); // Stop loading if no user
+      setIsLoading(false);
+      setIsLoadingCounters(false);
       return; 
     }
 
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [fetchedClients, fetchedBls, fetchedExpenses] = await Promise.all([
-          getClientsFromFirestore(),
-          getBLsFromFirestore(),
-          getExpensesFromFirestore(),
-        ]);
-        setClients(fetchedClients);
-        setBlsData(fetchedBls);
-        setExpensesData(fetchedExpenses);
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-        // Optionally, set an error state and display an error message
-      } finally {
-        setIsLoading(false);
+    setIsLoading(true);
+    setIsLoadingCounters(true);
+
+    try {
+      const [fetchedClients, fetchedBls, fetchedExpenses] = await Promise.all([
+        getClientsFromFirestore(),
+        getBLsFromFirestore(),
+        getExpensesFromFirestore(),
+      ]);
+      setClients(fetchedClients);
+      setBlsData(fetchedBls);
+      setExpensesData(fetchedExpenses);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+
+    // Fetch request counts
+    try {
+      if (isAdmin) {
+        const pendingAdminRequests = await getApprovalRequestsFromFirestore('pending');
+        setAdminPendingApprovalsCount(pendingAdminRequests.length);
+      } else {
+        const userRequests = await getApprovalRequestsByUserIdFromFirestore(user.uid);
+        const pendingUserReqs = userRequests.filter(
+          req => req.status === 'pending' || req.status === 'pin_issued'
+        ).length;
+        setMyPendingRequestsCount(pendingUserReqs);
       }
-    };
+    } catch (error) {
+        console.error("Error fetching request counts for dashboard:", error);
+    } finally {
+        setIsLoadingCounters(false);
+    }
+  }, [user, isAdmin]);
+
+  useEffect(() => {
     fetchData();
-  }, [user]);
+  }, [fetchData]);
   
   const totalClients = clients.length;
   
@@ -76,12 +107,12 @@ export default function DashboardPage() {
   );
 
   const stats = [
-    { title: 'Rentabilité Globale', value: `${overallProfitability.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}`, icon: isOverallProfit ? TrendingUp : TrendingDown, color: isOverallProfit ? 'text-green-500' : 'text-red-500' },
-    { title: 'Total Dépenses', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}`, icon: DollarSign, color: 'text-red-500' },
-    { title: 'Total Clients', value: totalClients, icon: Users, color: 'text-primary' },
-    { title: 'BLs en Cours', value: blsByStatus['en cours'] || 0, icon: Clock, color: 'text-blue-500' },
-    { title: 'BLs Terminés', value: blsByStatus['terminé'] || 0, icon: CheckCircle, color: 'text-green-600' },
-    { title: 'BLs Inactifs', value: blsByStatus['inactif'] || 0, icon: AlertCircle, color: 'text-gray-500' },
+    { title: 'Rentabilité Globale', value: `${overallProfitability.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}`, icon: isOverallProfit ? TrendingUp : TrendingDown, color: isOverallProfit ? 'text-green-500' : 'text-red-500', link: "/reports" },
+    { title: 'Total Dépenses', value: `${totalExpensesGlobal.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}`, icon: DollarSign, color: 'text-red-500', link: "/expenses" },
+    { title: 'Total Clients', value: totalClients, icon: Users, color: 'text-primary', link: "/clients" },
+    { title: 'BLs en Cours', value: blsByStatus['en cours'] || 0, icon: Clock, color: 'text-blue-500', link: "/bls" },
+    { title: 'BLs Terminés', value: blsByStatus['terminé'] || 0, icon: CheckCircle, color: 'text-green-600', link: "/bls?status=terminé" }, // Example of potential future filtering
+    { title: 'BLs Inactifs', value: blsByStatus['inactif'] || 0, icon: AlertCircle, color: 'text-gray-500', link: "/bls?status=inactif" },
   ];
 
   const blProfitabilityStats = () => {
@@ -139,7 +170,7 @@ export default function DashboardPage() {
     month: { label: "Mois" },
   } satisfies ChartConfig;
 
-  if (isLoading) {
+  if (isLoading && isLoadingCounters) { // Keep main loading until both base data and counters are ready
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -153,16 +184,46 @@ export default function DashboardPage() {
       <PageHeader title="Tableau de Bord" description="Vue d'ensemble de vos opérations et performances." />
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
         {stats.map((stat) => (
-          <Card key={stat.title} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
-              <stat.icon className={`h-5 w-5 ${stat.color}`} />
-            </CardHeader>
-            <CardContent className="flex-grow">
-              <div className={`text-2xl font-bold ${stat.color}`}>{typeof stat.value === 'number' && stat.title !== 'Rentabilité Globale' && stat.title !== 'Total Dépenses' ? stat.value : stat.value}</div>
-            </CardContent>
-          </Card>
+          <Link href={stat.link || "/dashboard"} key={stat.title} className="flex">
+            <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col w-full">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
+                <stat.icon className={`h-5 w-5 ${stat.color}`} />
+              </CardHeader>
+              <CardContent className="flex-grow">
+                <div className={`text-2xl font-bold ${stat.color}`}>{typeof stat.value === 'number' && stat.title !== 'Rentabilité Globale' && stat.title !== 'Total Dépenses' ? stat.value : stat.value}</div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
+
+        {/* Dynamic Request/Approval Cards */}
+        {!isAdmin && (
+            <Link href="/my-requests" className="flex">
+                 <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col w-full">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Mes Demandes en Attente</CardTitle>
+                        <ListOrdered className="h-5 w-5 text-orange-500" />
+                    </CardHeader>
+                    <CardContent className="flex-grow">
+                        {isLoadingCounters ? <Loader2 className="h-6 w-6 animate-spin text-primary"/> : <div className="text-2xl font-bold text-orange-500">{myPendingRequestsCount}</div>}
+                    </CardContent>
+                </Card>
+            </Link>
+        )}
+        {isAdmin && (
+             <Link href="/admin/approvals" className="flex">
+                <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col w-full">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Approbations Requises</CardTitle>
+                        <ShieldAlert className="h-5 w-5 text-yellow-500" />
+                    </CardHeader>
+                    <CardContent className="flex-grow">
+                         {isLoadingCounters ? <Loader2 className="h-6 w-6 animate-spin text-primary"/> : <div className="text-2xl font-bold text-yellow-500">{adminPendingApprovalsCount}</div>}
+                    </CardContent>
+                </Card>
+            </Link>
+        )}
       </div>
 
       <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-2 items-stretch"> 
@@ -263,3 +324,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
