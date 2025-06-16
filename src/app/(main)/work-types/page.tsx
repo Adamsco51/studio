@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button'; // Added buttonVariants import
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
@@ -30,10 +30,10 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription as DialogDesc, // Alias to avoid conflict if needed
-  DialogFooter as DialogFoot,     // Alias
-  DialogHeader as DialogHead,     // Alias
-  DialogTitle as DialogTitl,      // Alias
+  DialogDescription as DialogDesc, 
+  DialogFooter as DialogFoot,     
+  DialogHeader as DialogHead,     
+  DialogTitle as DialogTitl,      
   DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from '@/components/ui/label';
@@ -43,6 +43,7 @@ import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '@/contexts/auth-context';
+import { cn } from '@/lib/utils'; // Added cn import
 
 export default function WorkTypesPage() {
   const { user, isAdmin } = useAuth();
@@ -326,7 +327,6 @@ export default function WorkTypesPage() {
         </CardContent>
       </Card>
 
-      {/* Reason/Confirmation Dialog - Now uses AlertDialog correctly */}
       <AlertDialog open={showReasonDialog} onOpenChange={(isOpen) => {
         if (!isOpen) { setWorkTypeTargetedForAction(null); setActionReason(''); setCurrentActionType(null); }
         setShowReasonDialog(isOpen);
@@ -360,17 +360,16 @@ export default function WorkTypesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-       {/* PIN Entry Dialog - Uses generic Dialog from ShadCN */}
        <Dialog open={showPinDialog} onOpenChange={(isOpen) => {
         if (!isOpen) { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null); setPinActionType(null); }
         setShowPinDialog(isOpen);
       }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHead> {/* Changed from DialogHeader to DialogHead to match aliased import */}
-            <DialogTitl className="flex items-center"> {/* Changed from DialogTitle to DialogTitl */}
+          <DialogHead> 
+            <DialogTitl className="flex items-center"> 
                 <KeyRound className="mr-2 h-5 w-5 text-primary" /> Saisir le PIN
             </DialogTitl>
-            <DialogDesc> {/* Changed from DialogDescription to DialogDesc */}
+            <DialogDesc> 
               Un PIN vous a été fourni par un administrateur pour {pinActionType === 'edit' ? 'modifier' : 'supprimer'} le type de travail "{workTypeTargetedForAction?.name || "sélectionné"}".
             </DialogDesc>
           </DialogHead>
@@ -388,7 +387,7 @@ export default function WorkTypesPage() {
               disabled={isProcessingAction}
             />
           </div>
-          <DialogFoot> {/* Changed from DialogFooter to DialogFoot */}
+          <DialogFoot> 
             <DialogClose asChild>
                 <Button variant="outline" disabled={isProcessingAction} onClick={() => { setPinEntry(''); setActivePinRequest(null); setWorkTypeTargetedForAction(null); setCurrentActionType(null); setPinActionType(null);}}>Annuler</Button>
             </DialogClose>
