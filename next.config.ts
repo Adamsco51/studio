@@ -1,7 +1,7 @@
 
 import type {NextConfig} from 'next';
 // @ts-ignore TODO: Add type definition for next-pwa
-import withPWA from 'next-pwa';
+import withPWA from '@ducanh2912/next-pwa';
 
 const nextConfigBase: NextConfig = {
   /* config options here */
